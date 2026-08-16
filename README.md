@@ -1,70 +1,23 @@
-# dsh-novel-writer — 小说写作助手插件（v0.7.0：全工具 UI 开关）
-
-[![npm version](https://img.shields.io/npm/v/dsh-novel-writer.svg?style=flat-square&color=blue)](https://www.npmjs.com/package/dsh-novel-writer)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)](LICENSE)
-[![GitHub stars](https://img.shields.io/github/stars/siweina/dsh-novel-writer.svg?style=flat-square&color=orange)](https://github.com/siweina/dsh-novel-writer/stargazers)
-[![GitHub release](https://img.shields.io/github/v/release/siweina/dsh-novel-writer.svg?style=flat-square)](https://github.com/siweina/dsh-novel-writer/releases)
-[![DSH plugin](https://img.shields.io/badge/DSH-plugin-4b8bbe.svg?style=flat-square)](https://github.com/deepseek-ai/deepseek-harness)
+# dsh-novel-writer — 小说写作助手插件（v0.8.0：记忆层）
 
 DSH（DeepSeek Harness）小说写作助手 bundle 插件。宿主端零第三方依赖（仅 Node 内置模块），
 浏览器端仅依赖 Web GUI 自带的 react。
-**v0.7.0 在 v0.6.0 基础上为全部 10 个工具增加独立 UI 开关（侧边栏「写作助手功能」面板统一管理）**：分析缓存与报告导出、风格自检、伏笔登记表、
+**v0.8.0 在 v0.7.0 基础上补全「记忆层」：四张设定表、章节摘要、连贯性审计、伏笔字段化与提及追踪、细节密度指标、统一数据目录、UI 路径可视化修复**：分析缓存与报告导出、风格自检、伏笔登记表、
 关键词三字组/疑似人名、情感词典去噪、祈使句与环境分类改进、局域网开关可选放行。
 
-## 工具清单（10 个，全部带独立 UI 开关）
+## 工具清单（13 个，全部带独立 UI 开关）
 
-| 工具 | 说明 |
-|---|---|
-| `novel_books` | 列出章节库全部作品 |
-| `novel_chapters` | 列出某作品章节清单 |
-| `novel_read` | 阅读某章正文（offset/limit 分段，编码自动探测） |
-| `novel_keywords` | 关键词：二字组 + **三字组** + **疑似人名** + 英文词 |
-| `novel_new_chapter` | 创建新章节文件 |
-| `novel_import` | 原稿件批量导入/自动分类（含**异名同书提示**） |
-| `novel_sentence_analysis` | 句式模式分析（九类/情感曲线/章节节奏/指纹，**带缓存与报告文件**） |
-| `novel_sentence_config` | 查看/修改句式分析开关 |
-| `novel_style_check` | **风格自检（v0.6.0 新增）**：章节 vs 全书指纹对比 + 偏差清单 |
-| `novel_plot` | **伏笔/剧情线登记表（v0.6.0 新增）**：list/add/update/done/delete |
+novel_books / novel_chapters / novel_read / novel_keywords / novel_new_chapter / novel_import / novel_sentence_analysis / novel_sentence_config / novel_style_check / novel_plot / **novel_settings（设定管理）** / **novel_summary（章节摘要）** / **novel_continuity_check（连贯性审计）**
 
-## v0.6.0 新增能力
+## v0.8.0 新增能力
 
-1. **分析缓存 + 报告导出**：novel_sentence_analysis 结果自动缓存到 `~/.dsh/dsh-novel-writer/cache/<书名>-<hash>.json`，
-   返回值带 `reportFile` / `cache`（hit/miss）字段；章节未改动时重复分析秒回，传 `fresh=true` 强制重算。
-2. **风格自检 novel_style_check**：任意章节 vs 全书其余章节 → 余弦相似度 + 句式/句长/情绪偏差清单 + 续写建议（写完新章自动查一次，防止文风漂移）。
-3. **伏笔登记表 novel_plot**：`novels 根目录/.novel-writer/<书名>.json` 持久化；续写前 list 查看未回收伏笔。
-4. **关键词升级**：新增三字组与疑似人名（"XX说/道/问"与"XX小姐/导师"模式），人名不再被拆成"露西+西亚"。
-5. **情感词典去噪**：单字词搭配排除（"叹气"不算"气"、"笑道"不算"笑"）、否定过滤（"不害怕"不计）、副词距离窗口化（"非常开心"才加权）。
-6. **分类改进**：祈使句支持"快睡吧，明天还要上班"式（命令动词开头+吧）；环境词表扩充（晚风/晨曦/森林/群山…）。
-7. **情感曲线粒度可调**：`curveSegments` 参数（1-50，默认 20）。
-8. **novel_import 异名同书提示**：scan 结果中组名包含/高重合时列出 `maybe` 字段，提示用 `book` 合并。
-9. **局域网开关可选放行**：config `allowLanState: true` 时，state 路由对同源局域网请求放行（默认仍仅 loopback）。
-
-## UI 开关（v0.7.0：10 个工具全开关）
-
-- **唯一开关位置：侧边栏「写作助手功能」面板**——总开关（enabled，控制句式分析/风格自检）+ 自动分析（autoAnalyze）+ **10 个工具各自独立开关**（全部默认开启）；
-- 关闭的工具，AI 调用时会收到明确提示；novel_sentence_config 可查/改全部开关（含 tools 字段）；
-- 设置 > 插件配置 卡片仅显示状态 + 「打开开关面板」跳转；
-- 持久化 `~/.dsh/dsh-novel-writer/state.json`；兼容 v0.4.0 的 novel-writer.json / config.stylePattern；
-- 默认开启；路由 `/api/dsh-novel-writer/state`（loopback 围栏，可选局域网放行）。
-
-## 安装
-
-```sh
-dsh plugin --profile web add D:/tools/dsh-novel-writer
-```
-
-或手动：放入 profile 的 node_modules + `dsh.profile.bundles` 加 `dsh-novel-writer`；重启 web 应用。
-
-## 配置
-
-```yaml
-- id: novel-writer
-  config:
-    root: 'D:/我的小说库'
-    sentenceAnalysis:
-      enabled: true
-      autoAnalyze: true
-    allowLanState: false   # true=局域网访问 GUI 时也允许保存开关
+- **novel_settings（四张表）**：人物卡/地点卡/道具清单/时间线，list/add/update/delete + scan 候选提取；
+- **novel_summary**：模型生成、插件存储的每章摘要（长书续写先读摘要）；
+- **novel_continuity_check**：对照设定表扫描全书 → 数字口径/人物缺场/别名/重复条目矛盾候选；
+- **novel_plot 字段化**：type/priority/relatedCharacters/locations/payoffCondition/mentionedIn/lastMentioned + scan 自动提及追踪；
+- **细节密度指标**：动作链密度/物件名词/感官词（千字归一）进 novel_sentence_analysis 与 novel_style_check；
+- **统一数据目录**：§BT§<书库根>/.novel-writer/§BT§ 下 plots/ settings/ summaries/ analysis/ audits/（伏笔旧位置自动迁移；分析缓存与关键词报告落盘到 analysis/）；
+- **UI 路径修复**：cordis 空字符串 root 回退 lastRoot、面板刷新按钮、打开/复制按钮不再禁用、显示 dataDir。
 
 ## v0.7.0 更新内容
 
