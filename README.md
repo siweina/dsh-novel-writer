@@ -1,132 +1,79 @@
-# 📚 dsh-novel-writer — 小说写作助手 / Novel Writing Assistant
+# dsh-novel-writer — 小说写作助手插件（v0.3.0）
 
-**中文** | [**English**](#english)
+DSH（DeepSeek Harness）小说写作助手 bundle 插件。宿主端零第三方依赖（仅 Node 内置模块），
+浏览器端仅依赖 Web GUI 自带的 react。为 AI 提供小说章节库管理、分析与续写辅助能力；
+v0.3.0 新增**句式模式分析**扩展与 **Web UI 开关**。
 
-一个零第三方依赖（仅 Node 内置模块）的 **DeepSeek Harness (DSH / Cordis) 插件**，为 AI 提供小说章节库管理、剧情分析与续写辅助的能力。
+## 功能
 
-A **zero-dependency** (Node built-ins only) **DeepSeek Harness (DSH / Cordis) plugin** that gives the AI novel-chapter-library management, plot analysis, and continuation-writing assistance.
+1. **章节库**：章节存于 `novels/<书名>/第N章.md`（或 `.txt`/`.markdown`），
+   插件提供 `novel_books` / `novel_chapters` / `novel_read` 让 AI 浏览并读取每一章内容。
+   章节文件名中的序号支持任意位置与多种写法，例如：
+   `第01章.md`、`01-标题.md`、`原稿件-单章-…第一章.txt`、`原稿件-单章-第25章 .txt`
+   （阿拉伯数字与中文数字"第一章/第十四章/第三十章"均可识别，自动按章号排序）。
+   文件编码自动探测：UTF-8（含/不含 BOM）、UTF-16 LE/BE（含 BOM 或启发式识别）、GBK/GB18030（无 BOM）。
+2. **分析**：`novel_keywords` 确定性提取全书/单章高频关键词（中文相邻二字词组 + 高频单字 + 英文词）。
+3. **句式模式分析（v0.3.0 新增）**：`novel_sentence_analysis` 对全书/单章输出——
+   - 句式分布：陈述 / 对话 / 心理 / 疑问 / 反问 / 感叹 / 祈使 / 省略留白（比例、句数、均长、例句）；
+   - 排列规律：句式转移、2/3 连句高频模板、段首/段尾句式、纯对话段/纯心理段/混合段统计；
+   - 句长节奏：均值/中位数、短句/长句占比；
+   - 主观情感：轻量情感词典（喜/怒/哀/惧/惊）+ 强度副词加权 → 主导情绪、情绪分布、情感曲线、主观性指数；
+   - 风格指纹：一维紧凑签名，方便 AI 快速比对与复刻作者的句式习惯。
+4. **UI 开关（v0.3.0 新增）**：Web GUI 侧边栏出现「句式分析」入口，面板内两个开关：
+   - **启用句式分析（enabled）**：控制 novel_sentence_analysis 是否可用；
+   - **自动分析（autoAnalyze）**：控制 AI 分析作品时是否主动附带句式报告。
+   开关实时写入宿主端 `~/.dsh/dsh-novel-writer/state.json`，与 `novel_sentence_config` 工具双向同步；
+   宿主端不可达时降级保存在浏览器 localStorage。
+5. **续写**：系统提示词规定续写工作流（先读后写、保持文风与伏笔一致），
+   `novel_new_chapter` 创建新章节文件。
 
----
+## 提供的工具
 
-## 功能 / Features
+| 工具 | 说明 |
+|---|---|
+| `novel_books` | 列出章节库全部作品（章节数、总字数） |
+| `novel_chapters` | 列出某作品章节清单（章号/标题/字数/行数/更新时间） |
+| `novel_read` | 阅读某章正文（行号 + 字数统计，offset/limit 分段） |
+| `novel_keywords` | 提取高频关键词（可单章或全书） |
+| `novel_new_chapter` | 创建新章节文件（自动取下一个章号） |
+| `novel_sentence_analysis` | **句式模式分析**（句式分布/排列规律/段落结构/句长/情感曲线/风格指纹） |
+| `novel_sentence_config` | 查看/修改句式分析开关（与 Web UI 开关同步） |
 
-### 🇨🇳 中文
-
-1. **章节库管理**：章节存放于 `novels/<书名>/第N章.md`（也支持 `.txt` / `.markdown`），
-   插件提供 `novel_books` / `novel_chapters` / `novel_read` 让你（AI）浏览库、列出章节并逐章阅读。
-2. **智能章号识别**：章节文件名中的序号支持**任意位置**与多种写法，
-   例如 `第01章.md`、`01-标题.md`、`原稿件-单章-…第一章.txt`，
-   阿拉伯数字与中文数字（第一章/第十四章/第三十章）均可识别，并自动按章号排序。
-3. **编码自动探测**：UTF-8（含/不含 BOM）、UTF-16 LE/BE（含 BOM 或启发式）、GBK/GB18030（无 BOM）均可直接读取，无需手动转码（如记事本另存的 Unicode 文本）。
-4. **关键词分析**：`novel_keywords` 确定性提取全书/单章高频关键词（中文相邻二字词组 + 高频单字 + 英文词），
-   配合系统提示词引导 AI 分析剧情脉络、写作手法、词汇偏好与意象母题。
-5. **续写辅助**：系统提示词规定续写工作流（先读后写、保持文风与伏笔一致），
-   `novel_new_chapter` 自动创建下一章文件。
-
-### 🇬🇧 English
-
-1. **Chapter-library management**: chapters live under `novels/<book>/第N章.md` (also `.txt` / `.markdown`).
-   `novel_books` / `novel_chapters` / `novel_read` let the AI browse, list, and read chapters.
-2. **Smart chapter numbering**: chapter numbers may appear **anywhere** in the filename and in many forms,
-   e.g. `第01章.md`, `01-title.md`, `raw-…Chapter-1.txt`. Both Arabic and **Chinese numerals**
-   (第一章 / 第十四章 / 第三十章) are recognized and chapters are sorted by number automatically.
-3. **Automatic encoding detection**: UTF-8 (with/without BOM), UTF-16 LE/BE (BOM or heuristic), and
-   GBK/GB18030 (no BOM) are decoded on the fly — no manual transcoding needed.
-4. **Keyword analysis**: `novel_keywords` deterministically extracts high-frequency words from a whole book
-   or one chapter (Chinese bigrams + characters + English words), guiding the AI to analyze plot,
-   writing style, vocabulary preferences, and imagery motifs.
-5. **Continuation writing**: a system prompt enforces the workflow (read first, then write; keep style and
-   foreshadowing consistent). `novel_new_chapter` creates the next chapter file automatically.
-
----
-
-## 提供的工具 / Provided Tools
-
-| Tool | 中文说明 | English |
-|------|----------|---------|
-| `novel_books` | 列出章节库全部作品（章节数、总字数） | List all books in the library (chapter count, total chars) |
-| `novel_chapters` | 列出某作品章节清单（章号/标题/字数/行数/更新时间） | List a book's chapters (number/title/chars/lines/updated) |
-| `novel_read` | 阅读某章正文（行号 + 字数统计，offset/limit 分段） | Read a chapter's body (line numbers + char count, paginated) |
-| `novel_keywords` | 提取高频关键词（可单章或全书） | Extract high-frequency keywords (chapter or whole book) |
-| `novel_new_chapter` | 创建新章节文件（自动取下一个章号） | Create a new chapter file (auto-next number) |
-
----
-
-## 安装 / Installation
-
-> 现代安装请优先参考 `INSTALL.md`，或使用 DSH CLI：
-
-> Preferred install via DSH CLI, see also `INSTALL.md`:
+## 安装（web profile）
 
 ```sh
-dsh plugin --profile web add D:/path/to/dsh-novel-writer
+dsh plugin --profile web add D:/tools/dsh-novel-writer-v0.3.0
 ```
 
-或手动等价操作：在 profile 的 `package.json` 的 `dsh.profile.bundles` 中加入 `dsh-novel-writer`，
-并在 profile `node_modules` 中链接本包（Windows 可建 junction：`mklink /J`）。安装后重启 web 应用生效。
+或手动等价操作：把本文件夹放入 profile 的 `node_modules`，并在 profile `package.json` 的
+`dsh.profile.bundles` 中加入 `dsh-novel-writer`。安装后**重启 web 应用**生效：
+宿主端注册新工具与 `/api/dsh-novel-writer/state` 路由，浏览器端挂载侧边栏「句式分析」开关。
 
-Or the manual equivalent: add `dsh-novel-writer` to the `dsh.profile.bundles` array in the profile's
-`package.json`, and link this package into the profile `node_modules` (on Windows, `mklink /J`).
-Restart the web app after installing.
+## 配置
 
-### （可选）安装技能 / (Optional) Install the Skill
-
-把 `skills/novel-writing` 整个文件夹复制到工作区 `.dsh/skills/` 下，新会话即出现 `novel-writing` 技能：
-
-Copy the whole `skills/novel-writing` folder into your workspace `.dsh/skills/`; a new session will surface the `novel-writing` skill:
-
-```
-<workspace>/.dsh/skills/novel-writing/SKILL.md
-```
-
----
-
-## 配置 / Configuration
-
-插件 `config` 支持 `root`：章节库根目录（默认取**会话工作区**，即 `novels/` 所在位置）。
-在 profile 的 `cordis.patch.yml` 中可覆盖：
-
-The plugin `config` supports `root`: the library root directory (defaults to the **session workspace** where `novels/` lives). Override it in the profile's `cordis.patch.yml`:
+插件 config 支持 `root`（章节库根目录）与 `sentenceAnalysis`（默认开关）：
 
 ```yaml
 - patch:
     - id: novel-writer
       config:
         root: 'D:/我的小说库'
+        sentenceAnalysis:
+          enabled: true      # 默认启用（UI 开关优先于此处）
+          autoAnalyze: true   # 默认自动附带句式分析
 ```
 
----
+## 版本记录
 
-## 章节库约定 / Library Convention
+### v0.3.0（本版本）
+- **新增**：句式模式分析（novel_sentence_analysis）：句式分布、排列规律、段落结构、句长节奏、情感曲线、风格指纹；
+- **新增**：Web UI 开关（侧边栏「句式分析」面板）：enabled / autoAnalyze，宿主端 state 文件持久化 + 浏览器降级；
+- **新增**：novel_sentence_config 工具，与 UI 开关双向同步；
+- **新增**：宿主端 `/api/dsh-novel-writer/state` 路由（loopback 围栏）；
+- 更新 SKILL.md / 系统提示词中的句式分析工作流。
 
-```
-<workspace or root>/novels/<书名>/
-├── 第01章.md          # 或 .txt / .markdown
-└── 原稿件-单章-…第一章.txt   # 序号在任意位置、中文数字均可识别
-```
+### v0.2.0
+- 修复章节序号提取（任意位置、中文数字）；新增 UTF-8/UTF-16/GBK 编码自动探测；通过 37 章全量压力测试。
 
-支持的命名与编码 / Supported naming & encoding:
-
-- 章号任意位置：`第01章.md`、`01-标题.md`、`原稿件-单章-…第一章.txt`、`原稿件-单章-第25章 .txt`
-- 阿拉伯数字 + 中文数字（第一章/第十四章/第三十章），自动按章号排序
-- 编码自动探测：UTF-8（含/不含 BOM）、UTF-16 LE/BE（含 BOM 或启发式）、GBK/GB18030（无 BOM）
-
----
-
-## 安全说明 / Security Notes
-
-- 仅使用 Node 内置模块，无第三方运行时依赖、无网络请求、无 shell 执行。
-- 所有文件读写均限定在章节库根目录下，并通过 `sanitizeSegment` 阻止路径穿越（拒绝 `.`/`..` 与 `\`/`/`）。
-- 读取设有上限（单次最多 400 行 / 2 万字符），保护模型上下文。
-
-- Uses only Node built-in modules: no third-party runtime deps, no network calls, no shell execution.
-- All file reads/writes are confined to the library root, with `sanitizeSegment` blocking path traversal (rejects `.`/`..` and `\`/`/`).
-- Reads are capped (400 lines / 20k chars per call) to protect the model's context window.
-
----
-
-<!-- ENGLISH -->
-
-## English
-
-`dsh-novel-writer` is a self-contained **DSH (Cordis) bundle plugin** for novel-writing assistance, with **no third-party dependencies** (Node built-ins only). See the sections above for features, tools, install, config, and security notes. MIT licensed.
+### v0.1.0
+- 章节库管理、novel_keywords、novel_new_chapter。
