@@ -1,7 +1,7 @@
 {
   "name": "dsh-novel-writer",
-  "version": "0.8.1",
-  "description": "小说写作助手插件（v0.8.1 记忆层）：四张设定表（人物/地点/道具/时间线）、章节摘要、连贯性审计、伏笔字段化+提及追踪、细节密度指标、统一数据目录（plots/settings/summaries/analysis/audits）、UI 路径可视化修复",
+  "version": "0.9.0",
+  "description": "小说写作助手插件（v0.9.0 世界观层）：novel_settings 第五张表「世界观/用语规范」（detect 自动判断文化基准 + 禁用词表 + 推荐替代 + 仪式规范）、continuity 用语风格扫描、续写提示词用语一致性检查",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
