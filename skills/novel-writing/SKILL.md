@@ -59,3 +59,16 @@
 
 - 用户放入章节文件的方式不限：自己复制、AI 用 `write`/`edit` 创建，或用 novel_import 批量导入。
 - 分析结果与续写正文都应使用中文呈现。
+
+## 世界观用语规范（v0.9.0 新增）
+
+- **文化基准自动判断**：§BT§novel_settings§BT§（category=worldview，action=detect）扫描全书，按中西词表命中自动判断文化基准（western/eastern/mixed/unknown）并给出证据与置信度；
+- **用语规范登记**：detect 后可用 §BT§novel_settings§BT§ add（category=worldview）登记：name（基准名）、basis（判断依据）、bannedWords（禁用词表）、recommended（替代词映射）、ritual（仪式规范，如"点烛不烧香"）；
+- **续写前检查**：动笔前先确认 worldview（detect 或人工指定），对照 bannedWords/recommended 用词；
+- **自动化审计**：§BT§novel_continuity_check§BT§ 会自动扫描禁用词命中，输出「用语冲突」候选（含建议替换词）；
+- **时代错置分类**（词表按此组织）：器物 / 称谓 / 计量 / 宗教仪式 / 市井风貌 / 服饰 / 食物 / 制度；
+- **参考资料**（写作时校对）：
+  - Medieval Wordbook（Madeleine Pelner Cosman）
+  - The Writer's Complete Fantasy Reference
+  - Fantasy Writers Phrase Book（Jackson Dean Chase）
+  - 凌力谈历史小说语言：错用一个现代词会破坏整个历史氛围
