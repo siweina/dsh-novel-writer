@@ -64,7 +64,9 @@
 
 - **文化基准自动判断**：§BT§novel_settings§BT§（category=worldview，action=detect）扫描全书，按中西词表命中自动判断文化基准（western/eastern/mixed/unknown）并给出证据与置信度；
 - **用语规范登记**：detect 后可用 §BT§novel_settings§BT§ add（category=worldview）登记：name（基准名）、basis（判断依据）、bannedWords（禁用词表）、recommended（替代词映射）、ritual（仪式规范，如"点烛不烧香"）；
-- **续写前检查**：动笔前先确认 worldview（detect 或人工指定），对照 bannedWords/recommended 用词；
+- **续写前检查**：动笔前先确认 worldview（detect 或人工指定），对照 bannedWords/recommended 用词，**并对照 speechStyle 检查说话方式**（称谓/客套/仪式/语气——不只管"词"，还管"怎么说话"）；
+- **语用级检查（v1.0.0）**：worldview 的 speechStyle 定义 title（称谓规范）/ honorBad（中式客套禁词）/ ritualBadPatterns（仪式通配，如"上X柱香"）/ tone（语气）；novel_continuity_check 会输出「语用冲突·客套 / 语用冲突·仪式 / 语用冲突·称谓」三类候选；
+- **示例**（欧式中世纪）：Miss+名（不用"XX小姐"）、不写"提点/承蒙/在下"、宗教点烛不烧香/不"上柱香"、对话口语化不文言；
 - **自动化审计**：§BT§novel_continuity_check§BT§ 会自动扫描禁用词命中，输出「用语冲突」候选（含建议替换词）；
 - **时代错置分类**（词表按此组织）：器物 / 称谓 / 计量 / 宗教仪式 / 市井风貌 / 服饰 / 食物 / 制度；
 - **参考资料**（写作时校对）：
