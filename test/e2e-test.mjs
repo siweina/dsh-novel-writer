@@ -89,6 +89,16 @@ const kw = await defs.novel_keywords.execute({ book: "测试", top: 20 }, exec);
 console.log("关键词:", kw.keywords.map((k) => k.word + "(" + k.kind + ")").join(" "));
 if (!kw.keywords.some((k) => k.kind === "name-candidate" && (k.word.includes("露西") || k.word.includes("琉璃")))) throw new Error("name candidate missing");
 
+// 4.5) v0.9.0 世界观：detect 判断 + add 登记 + continuity 用语扫描
+const det = await defs.novel_settings.execute({ book: "测试", action: "detect" }, exec);
+console.log("worldview detect:", det.culture, det.confidence, "| 证据:", (det.evidence?.western ?? []).slice(0, 2).join(" "));
+if (typeof det.culture !== "string") throw new Error("detect broken");
+await defs.novel_settings.execute({ book: "测试", category: "worldview", action: "add", name: "欧式中世纪", basis: "教堂/神甫/马车", bannedWords: ["上香", "老夫"], recommended: { "上香": "点烛" }, ritual: "点烛不烧香" }, exec);
+const wv = await defs.novel_settings.execute({ book: "测试", category: "worldview", action: "list" }, exec);
+if (!wv.worldview.some((e) => e.name === "欧式中世纪")) throw new Error("worldview add broken");
+const cont2 = await defs.novel_continuity_check.execute({ book: "测试" }, exec);
+console.log("continuity 用语扫描:", cont2.candidates.filter((x) => x.type === "用语冲突").map((x) => x.detail.slice(0, 30)).join(" | ") || "(无)");
+
 // 5) 路由 allowLan：非 loopback 同源放行
 const handler = routes.find((r) => r.path === "/api/dsh-novel-writer/state").handler;
 const res = { status: 0, body: "", writeHead(s) { this.status = s; }, end(b) { this.body = String(b); } };
