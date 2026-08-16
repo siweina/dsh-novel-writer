@@ -8,7 +8,7 @@ English | [**中文**](./README.md)
 [![GitHub release](https://img.shields.io/github/v/release/siweina/dsh-novel-writer.svg?style=flat-square)](https://github.com/siweina/dsh-novel-writer/releases)
 [![DSH plugin](https://img.shields.io/badge/DSH-plugin-4b8bbe.svg?style=flat-square)](https://github.com/deepseek-ai/deepseek-harness)
 
-A novel-writing assistant plugin for **DeepSeek Harness (DSH)**: chapter library management, sentence-pattern analysis, style checking, plot tracking, settings management, batch import, and AI-assisted continuation writing. Zero third-party dependencies on host (Node built-ins only); browser side depends only on the Web GUI's built-in react.
+A novel-writing assistant plugin for **DeepSeek Harness (DSH)**: chapter library management, sentence-pattern analysis, style checking, plot tracking, settings management, worldview detection, batch import, and AI-assisted continuation writing. Zero third-party dependencies on host (Node built-ins only); browser side depends only on the Web GUI's built-in react.
 
 ---
 
@@ -38,12 +38,13 @@ After installing, **restart the web app** to activate (Host registers 13 tools +
 2. **Sentence-pattern analysis** (`novel_sentence_analysis`): 9 categories, transition patterns, sentence-length rhythm, emotion curve (joy/anger/sorrow/fear/surprise), style fingerprint + guidance, with cache & report export.
 3. **Style check** (`novel_style_check`): chapter vs book → cosine similarity + deviation list (syntax/length/emotion) + advice.
 4. **Plot tracking** (`novel_plot`): foreshadowing/plot-hook registry (open/done), typed fields (priority/characters/payoff) + auto mention tracking.
-5. **Settings management** (`novel_settings`): four tables — characters / locations / items / timeline, with scan candidates.
-6. **Chapter summaries** (`novel_summary`): 200-500 char digest + key events per chapter, for long-book continuation.
-7. **Continuity audit** (`novel_continuity_check`): scans book against settings → number-usage / missing-characters / unused-aliases / duplicate-entry candidates.
-8. **Batch import** (`novel_import`): auto-detect book names & chapter numbers from a folder, classified import (same-book hints, file selection).
-9. **Continuation writing**: read-first workflow keeping style & foreshadowing consistent; `novel_new_chapter` creates new chapters.
-10. **Per-tool UI toggles**: "Writing Assistant" sidebar panel (master switch + per-tool switches).
+5. **Settings management** (`novel_settings`): five tables — characters / locations / items / timeline / **worldview (usage norms)**, with scan candidates.
+6. **Worldview detection** (v0.9.0): `novel_settings category=worldview action=detect` scans the book and auto-judges the cultural baseline (western/eastern/mixed) with confidence and evidence; register banned words (`bannedWords`) and recommended replacements (`recommended`); `novel_continuity_check` auto-scans for mixed-culture anachronisms.
+7. **Chapter summaries** (`novel_summary`): 200-500 char digest + key events per chapter, for long-book continuation.
+8. **Continuity audit** (`novel_continuity_check`): scans book against settings → number-usage / missing-characters / unused-aliases / duplicate-entries / usage-conflicts candidates.
+9. **Batch import** (`novel_import`): auto-detect book names & chapter numbers from a folder, classified import (same-book hints, file selection).
+10. **Continuation writing**: read-first workflow keeping style & foreshadowing consistent; `novel_new_chapter` creates new chapters.
+11. **Per-tool UI toggles**: "Writing Assistant" sidebar panel (master switch + per-tool switches).
 
 ---
 
@@ -61,7 +62,7 @@ After installing, **restart the web app** to activate (Host registers 13 tools +
 | `novel_sentence_config` | View/set tool toggles |
 | `novel_style_check` | Style check (similarity+diffs) |
 | `novel_plot` | Plot/foreshadowing tracker |
-| `novel_settings` | Settings management |
+| `novel_settings` | Settings management (+worldview) |
 | `novel_summary` | Chapter summaries |
 | `novel_continuity_check` | Continuity audit |
 
