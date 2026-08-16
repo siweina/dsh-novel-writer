@@ -1,7 +1,7 @@
 {
   "name": "dsh-novel-writer",
-  "version": "0.7.0",
-  "description": "小说写作助手插件（v0.7.0）：10 个工具全部带独立 UI 开关（侧边栏「写作助手功能」面板统一管理）、句式分析/风格自检/伏笔登记/批量导入、分析缓存与报告导出、情感词典去噪、编码探测",
+  "version": "0.8.0",
+  "description": "小说写作助手插件（v0.8.0 记忆层）：四张设定表（人物/地点/道具/时间线）、章节摘要、连贯性审计、伏笔字段化+提及追踪、细节密度指标、统一数据目录（plots/settings/summaries/analysis/audits）、UI 路径可视化修复",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
