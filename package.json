@@ -1,58 +1,32 @@
 {
   "name": "dsh-novel-writer",
-  "version": "0.3.0",
-  "description": "小说写作助手插件：章节库管理、剧情/写作手法/高频关键词分析、句式模式分析（句式分布/排列规律/句长节奏/情感曲线/风格指纹，带 Web UI 开关）、续写辅助（支持任意位置章号、中文数字、UTF-8/UTF-16/GBK 编码自动探测）",
+  "version": "0.4.0",
+  "description": "小说写作助手插件：章节库管理、剧情/写作手法/高频关键词分析、续写辅助、原稿件批量导入自动分类、句式模式仿写（stylePattern 开关，Web 设置可调）",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",
-    "./client": "./lib/client.js",
+    "./client": "./client.js",
     "./package.json": "./package.json"
   },
+  "files": [
+    "lib",
+    "client.js",
+    "cordis.patch.yml",
+    "README.md"
+  ],
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
     },
     "client": {
+      "platform": "web",
       "inject": [
         "@deepseek-ai/dsh-client-runtime",
-        "@deepseek-ai/dsh-client-connection",
-        "@deepseek-ai/dsh-client-ui-settings"
-      ],
-      "platform": "web"
+        "@deepseek-ai/dsh-client-ui-slots"
+      ]
     }
   },
-  "peerDependencies": {
-    "react": "^18.2.0"
-  },
-  "files": [
-    "lib",
-    "skills",
-    "cordis.patch.yml",
-    "INSTALL.md",
-    "README.md"
-  ],
-  "keywords": [
-    "dsh",
-    "cordis",
-    "deepseek-harness",
-    "plugin",
-    "novel",
-    "writing",
-    "fiction",
-    "chapters",
-    "sentence-analysis",
-    "style-analysis"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/siweina/dsh-novel-writer.git"
-  },
-  "homepage": "https://github.com/siweina/dsh-novel-writer",
-  "bugs": {
-    "url": "https://github.com/siweina/dsh-novel-writer/issues"
-  },
-  "author": "siweina",
   "dependencies": {},
   "license": "MIT"
 }
