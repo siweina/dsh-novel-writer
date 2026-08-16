@@ -1,15 +1,15 @@
-# dsh-novel-writer — 小说写作助手插件（v0.8.0：记忆层）
+# dsh-novel-writer — 小说写作助手插件（v0.8.1：记忆层）
 
 DSH（DeepSeek Harness）小说写作助手 bundle 插件。宿主端零第三方依赖（仅 Node 内置模块），
 浏览器端仅依赖 Web GUI 自带的 react。
-**v0.8.0 在 v0.7.0 基础上补全「记忆层」：四张设定表、章节摘要、连贯性审计、伏笔字段化与提及追踪、细节密度指标、统一数据目录、UI 路径可视化修复**：分析缓存与报告导出、风格自检、伏笔登记表、
+**v0.8.1 在 v0.7.0 基础上补全「记忆层」：四张设定表、章节摘要、连贯性审计、伏笔字段化与提及追踪、细节密度指标、统一数据目录、UI 路径可视化修复**：分析缓存与报告导出、风格自检、伏笔登记表、
 关键词三字组/疑似人名、情感词典去噪、祈使句与环境分类改进、局域网开关可选放行。
 
 ## 工具清单（13 个，全部带独立 UI 开关）
 
 novel_books / novel_chapters / novel_read / novel_keywords / novel_new_chapter / novel_import / novel_sentence_analysis / novel_sentence_config / novel_style_check / novel_plot / **novel_settings（设定管理）** / **novel_summary（章节摘要）** / **novel_continuity_check（连贯性审计）**
 
-## v0.8.0 新增能力
+## v0.8.1 新增能力
 
 - **novel_settings（四张表）**：人物卡/地点卡/道具清单/时间线，list/add/update/delete + scan 候选提取；
 - **novel_summary**：模型生成、插件存储的每章摘要（长书续写先读摘要）；
