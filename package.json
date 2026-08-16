@@ -1,7 +1,7 @@
 {
   "name": "dsh-novel-writer",
-  "version": "0.9.0",
-  "description": "小说写作助手插件（v0.9.0 世界观层）：novel_settings 第五张表「世界观/用语规范」（detect 自动判断文化基准 + 禁用词表 + 推荐替代 + 仪式规范）、continuity 用语风格扫描、续写提示词用语一致性检查",
+  "version": "1.0.0",
+  "description": "小说写作助手插件（v1.0.0 语用级世界观）：worldview 表加 speechStyle 说话方式规范（称谓/客套/仪式/语气）、continuity 语用扫描（含上X柱香通配）、续写语用一致性检查",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
