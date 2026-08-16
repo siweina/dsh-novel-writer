@@ -29,6 +29,17 @@
 - 写完新章节后调用 `novel_style_check`：本章 vs 全书其余章节 → 相似度 + 偏差清单 + 建议；
 - 偏差明显时主动调整文风（对话/心理占比、句长、情绪），防止漂移。
 
+## 设定管理（v0.8.0 新增）
+
+- §BT§novel_settings§BT§：四张表（人物卡/地点卡/道具清单/时间线），list/add/update/delete/scan；
+- 登记新人物/新地点/道具去向，时间线记录"第几天/倒计时"；
+- §BT§novel_continuity_check§BT§：续写前跑一次，输出设定矛盾候选（数字口径/人物缺场/别名/重复）。
+
+## 章节摘要（v0.8.0 新增）
+
+- 读完每章后调用 §BT§novel_summary§BT§ add 保存 200-500 字摘要 + 关键事件 + 关键设定；
+- 续写长书时先 §BT§novel_summary§BT§ list 回忆剧情，再按需 §BT§novel_read§BT§ 细读。
+
 ## 伏笔登记表（v0.6.0 新增）
 
 - `novel_plot`：list / add / update / done / delete 管理伏笔与剧情钩子；
