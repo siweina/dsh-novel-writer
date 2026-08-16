@@ -1,11 +1,11 @@
-# dsh-novel-writer — 小说写作助手插件（v0.6.0 工程化版）
+# dsh-novel-writer — 小说写作助手插件（v0.7.0：全工具 UI 开关）
 
 DSH（DeepSeek Harness）小说写作助手 bundle 插件。宿主端零第三方依赖（仅 Node 内置模块），
 浏览器端仅依赖 Web GUI 自带的 react。
-**v0.6.0 在 v0.5.0（合并版）基础上完成工程化升级**：分析缓存与报告导出、风格自检、伏笔登记表、
+**v0.7.0 在 v0.6.0 基础上为全部 10 个工具增加独立 UI 开关（侧边栏「写作助手功能」面板统一管理）**：分析缓存与报告导出、风格自检、伏笔登记表、
 关键词三字组/疑似人名、情感词典去噪、祈使句与环境分类改进、局域网开关可选放行。
 
-## 工具清单（10 个）
+## 工具清单（10 个，全部带独立 UI 开关）
 
 | 工具 | 说明 |
 |---|---|
@@ -33,9 +33,10 @@ DSH（DeepSeek Harness）小说写作助手 bundle 插件。宿主端零第三�
 8. **novel_import 异名同书提示**：scan 结果中组名包含/高重合时列出 `maybe` 字段，提示用 `book` 合并。
 9. **局域网开关可选放行**：config `allowLanState: true` 时，state 路由对同源局域网请求放行（默认仍仅 loopback）。
 
-## UI 开关（与 v0.5.0 相同，统一在一处）
+## UI 开关（v0.7.0：10 个工具全开关）
 
-- 唯一开关位置：侧边栏「句式分析」面板（总开关 enabled + 子开关 autoAnalyze）；
+- **唯一开关位置：侧边栏「写作助手功能」面板**——总开关（enabled，控制句式分析/风格自检）+ 自动分析（autoAnalyze）+ **10 个工具各自独立开关**（全部默认开启）；
+- 关闭的工具，AI 调用时会收到明确提示；novel_sentence_config 可查/改全部开关（含 tools 字段）；
 - 设置 > 插件配置 卡片仅显示状态 + 「打开开关面板」跳转；
 - 持久化 `~/.dsh/dsh-novel-writer/state.json`；兼容 v0.4.0 的 novel-writer.json / config.stylePattern；
 - 默认开启；路由 `/api/dsh-novel-writer/state`（loopback 围栏，可选局域网放行）。
@@ -58,4 +59,11 @@ dsh plugin --profile web add D:/tools/dsh-novel-writer
       enabled: true
       autoAnalyze: true
     allowLanState: false   # true=局域网访问 GUI 时也允许保存开关
+
+## v0.7.0 更新内容
+
+- **10 个工具全部带独立 UI 开关**（侧边栏「写作助手功能」面板）：novel_books / novel_chapters / novel_read / novel_keywords / novel_new_chapter / novel_import / novel_sentence_analysis / novel_sentence_config / novel_style_check / novel_plot，默认全开；
+- UI 更名：侧边栏入口/面板/横幅由「句式分析」改为「写作助手功能」；设置页卡片同步；
+- novel_sentence_config 升级：支持 tools 参数（如 `{ novel_plot: false }`）与返回各工具开关状态；
+- 关闭的工具调用时返回明确提示（模型可见）。
 ```
