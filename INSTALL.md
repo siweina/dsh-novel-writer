@@ -1,11 +1,11 @@
-# dsh-novel-writer v0.6.0 — 安装指南
+# dsh-novel-writer v0.7.0 — 安装指南
 
-基于 v0.5.0 合并版的工程化升级。新增：分析缓存/报告导出、风格自检、伏笔登记表、关键词三字组与疑似人名、情感词典去噪、局域网开关可选放行。
+基于 v0.6.0 工程化版的 UI 升级：10 个工具全部带独立 UI 开关（侧边栏「写作助手功能」面板统一管理）。
 
 ```
 dsh-novel-writer-v0.6.0/
 ├── lib/
-│   ├── index.js        # 宿主端（10 个工具 + state 路由 + 缓存）
+│   ├── index.js        # 宿主端（10 个工具全开关 + state 路由 + 缓存）
 │   ├── analysis.js     # 句式模式分析引擎（含 fingerprintSimilarity / styleDiffs）
 │   └── client.js       # 浏览器端（侧边栏面板 + 设置页状态卡片）
 ├── test/               # 引擎 + client + e2e 测试
