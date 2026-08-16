@@ -1,5 +1,11 @@
 # dsh-novel-writer — 小说写作助手插件（v0.7.0：全工具 UI 开关）
 
+[![npm version](https://img.shields.io/npm/v/dsh-novel-writer.svg?style=flat-square&color=blue)](https://www.npmjs.com/package/dsh-novel-writer)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/siweina/dsh-novel-writer.svg?style=flat-square&color=orange)](https://github.com/siweina/dsh-novel-writer/stargazers)
+[![GitHub release](https://img.shields.io/github/v/release/siweina/dsh-novel-writer.svg?style=flat-square)](https://github.com/siweina/dsh-novel-writer/releases)
+[![DSH plugin](https://img.shields.io/badge/DSH-plugin-4b8bbe.svg?style=flat-square)](https://github.com/deepseek-ai/deepseek-harness)
+
 DSH（DeepSeek Harness）小说写作助手 bundle 插件。宿主端零第三方依赖（仅 Node 内置模块），
 浏览器端仅依赖 Web GUI 自带的 react。
 **v0.7.0 在 v0.6.0 基础上为全部 10 个工具增加独立 UI 开关（侧边栏「写作助手功能」面板统一管理）**：分析缓存与报告导出、风格自检、伏笔登记表、
