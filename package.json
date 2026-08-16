@@ -1,31 +1,38 @@
 {
   "name": "dsh-novel-writer",
-  "version": "0.4.0",
-  "description": "小说写作助手插件：章节库管理、剧情/写作手法/高频关键词分析、续写辅助、原稿件批量导入自动分类、句式模式仿写（stylePattern 开关，Web 设置可调）",
+  "version": "0.5.0",
+  "description": "小说写作助手插件（v0.3.0 与 v0.4.0 合并版）：章节库管理、剧情/写作手法/高频关键词分析、句式模式分析（九类句式/排列规律/情感曲线/风格指纹/节奏建议，带 Web UI 开关）、原稿件批量导入自动分类、续写辅助（支持任意位置章号、中文数字、UTF-8/UTF-16/GBK 编码自动探测）",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
     ".": "./lib/index.js",
-    "./client": "./client.js",
+    "./client": "./lib/client.js",
     "./package.json": "./package.json"
   },
   "files": [
     "lib",
     "client.js",
     "cordis.patch.yml",
-    "README.md"
+    "README.md",
+    "INSTALL.md",
+    "skills",
+    "test"
   ],
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
     },
     "client": {
-      "platform": "web",
       "inject": [
         "@deepseek-ai/dsh-client-runtime",
-        "@deepseek-ai/dsh-client-ui-slots"
-      ]
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-ui-settings"
+      ],
+      "platform": "web"
     }
+  },
+  "peerDependencies": {
+    "react": "^18.2.0"
   },
   "dependencies": {},
   "license": "MIT"
