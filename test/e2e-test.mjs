@@ -84,7 +84,7 @@ if (!existsSync(plotFile)) throw new Error("plot file not persisted");
 console.log("伏笔文件:", plotFile, "存在 ✓");
 
 // 4) 关键词（三字组/疑似人名）
-writeFileSync(join(testRoot, "novels", "测试", "第03章.md"), "露西亚说着话，琉璃点了点头。露西亚问导师问题，琉璃笑道。\n", "utf8");
+writeFileSync(join(testRoot, "novels", "测试", "第03章.md"), "露西亚说着话，琉璃点了点头。露西亚问导师问题，琉璃笑道：\"多谢导师提点，承蒙关照。\" 她又给母神上了一柱香。\n", "utf8");
 const kw = await defs.novel_keywords.execute({ book: "测试", top: 20 }, exec);
 console.log("关键词:", kw.keywords.map((k) => k.word + "(" + k.kind + ")").join(" "));
 if (!kw.keywords.some((k) => k.kind === "name-candidate" && (k.word.includes("露西") || k.word.includes("琉璃")))) throw new Error("name candidate missing");
@@ -96,6 +96,13 @@ if (typeof det.culture !== "string") throw new Error("detect broken");
 await defs.novel_settings.execute({ book: "测试", category: "worldview", action: "add", name: "欧式中世纪", basis: "教堂/神甫/马车", bannedWords: ["上香", "老夫"], recommended: { "上香": "点烛" }, ritual: "点烛不烧香" }, exec);
 const wv = await defs.novel_settings.execute({ book: "测试", category: "worldview", action: "list" }, exec);
 if (!wv.worldview.some((e) => e.name === "欧式中世纪")) throw new Error("worldview add broken");
+// v1.0.0 语用级：worldview 带 speechStyle（欧式）→ 扫描客套/仪式/称谓
+await defs.novel_settings.execute({ book: "测试", category: "worldview", action: "add", name: "欧式基准", basis: "western 风格", bannedWords: [], recommended: {}, speechStyle: { title: "Miss+名,不用XX小姐", honorBad: ["提点", "承蒙"], honorGood: { "提点": "提醒" }, ritualBadPatterns: ["上[一二三四五六七八九十百千]*柱?香"], ritualGoodNote: "点烛", tone: "口语化" } }, exec);
+const cont3 = await defs.novel_continuity_check.execute({ book: "测试" }, exec);
+const prag = cont3.candidates.filter((x) => x.type.startsWith("语用"));
+console.log("v1.0.0 语用扫描:", prag.map((x) => x.type + ":" + x.detail.slice(0, 24)).join(" | ") || "(无)");
+if (prag.length === 0) throw new Error("pragmatic scan broken (test text lacks markers)");
+
 const cont2 = await defs.novel_continuity_check.execute({ book: "测试" }, exec);
 console.log("continuity 用语扫描:", cont2.candidates.filter((x) => x.type === "用语冲突").map((x) => x.detail.slice(0, 30)).join(" | ") || "(无)");
 
