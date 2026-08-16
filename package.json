@@ -9,6 +9,32 @@
       "patch": "./cordis.patch.yml"
     }
   },
-  "dependencies": {},
-  "license": "MIT"
+  "files": [
+    "lib",
+    "skills",
+    "cordis.patch.yml",
+    "INSTALL.md",
+    "README.md"
+  ],
+  "keywords": [
+    "dsh",
+    "cordis",
+    "deepseek-harness",
+    "plugin",
+    "novel",
+    "writing",
+    "fiction",
+    "chapters"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/siweina/dsh-novel-writer.git"
+  },
+  "homepage": "https://github.com/siweina/dsh-novel-writer",
+  "bugs": {
+    "url": "https://github.com/siweina/dsh-novel-writer/issues"
+  },
+  "author": "siweina",
+  "license": "MIT",
+  "dependencies": {}
 }
