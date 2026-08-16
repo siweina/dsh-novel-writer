@@ -1,4 +1,4 @@
-// 端到端测试：10 工具注册、缓存、伏笔、风格自检、路由（v0.6.0）
+// 端到端测试：13 工具注册、缓存、伏笔、风格自检、路由、设定/摘要/连贯性（v0.8.0）
 import { mkdirSync, writeFileSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -21,7 +21,7 @@ apply(ctx, { root: testRoot, sentenceAnalysis: { enabled: true, autoAnalyze: tru
 const defs = Object.fromEntries(registry.map((d) => [d.name, d]));
 const names = registry.map((d) => d.name);
 console.log("工具数:", names.length, names.join(", "));
-if (names.length !== 10) throw new Error("expected 10 tools");
+if (names.length !== 13) throw new Error("expected 13 tools");
 
 const exec = { agent: { session: { header: { cwd: testRoot } } } };
 
@@ -79,7 +79,7 @@ await defs.novel_plot.execute({ book: "测试", action: "done", id }, exec);
 const afterDone = await defs.novel_plot.execute({ book: "测试", action: "list" }, exec);
 console.log("done 后:", afterDone.entries.map((e) => e.content + ":" + e.status).join(" "));
 if (afterDone.entries.find((e) => e.id === id).status !== "done") throw new Error("plot done broken");
-const plotFile = join(testRoot, ".novel-writer", "测试.json");
+const plotFile = join(testRoot, ".novel-writer", "plots", "测试.json");
 if (!existsSync(plotFile)) throw new Error("plot file not persisted");
 console.log("伏笔文件:", plotFile, "存在 ✓");
 
