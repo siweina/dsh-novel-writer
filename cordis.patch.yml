@@ -1,0 +1,8 @@
+# dsh-novel-writer bundle patch: mounts the novel-writing assistant plugin
+# into the profile's loader tree. The entry's `name` is the plugin package
+# itself, resolved from the profile's node_modules.
+- insert:
+    - id: novel-writer
+      name: 'dsh-novel-writer'
+      config:
+        root: ''
