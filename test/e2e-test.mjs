@@ -1,4 +1,4 @@
-// 端到端测试：13 工具注册、缓存、伏笔、风格自检、路由、设定/摘要/连贯性（v0.8.0）
+// 端到端测试：10 工具注册、缓存、伏笔、风格自检、路由（v0.6.0）
 import { mkdirSync, writeFileSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -21,7 +21,7 @@ apply(ctx, { root: testRoot, sentenceAnalysis: { enabled: true, autoAnalyze: tru
 const defs = Object.fromEntries(registry.map((d) => [d.name, d]));
 const names = registry.map((d) => d.name);
 console.log("工具数:", names.length, names.join(", "));
-if (names.length !== 13) throw new Error("expected 13 tools");
+if (names.length !== 13) throw new Error("expected 13 tools (v0.8.0)");
 
 const exec = { agent: { session: { header: { cwd: testRoot } } } };
 
@@ -54,7 +54,7 @@ console.log("DSH schema 规则检查: 全部通过");
 
 // 1) 分析 + 缓存（第一次 miss，第二次 hit）
 const first = await defs.novel_sentence_analysis.execute({ book: "测试" }, exec);
-console.log("首次分析 cache:", first.cache, "| reportFile:", first.reportFile?.includes("cache"));
+console.log("首次分析 cache:", first.cache, "| reportFile:", first.reportFile?.includes("analysis") ? "✓ 新目录" : "✗ " + first.reportFile);
 if (first.cache !== "miss") throw new Error("first should be miss");
 const second = await defs.novel_sentence_analysis.execute({ book: "测试" }, exec);
 console.log("二次分析 cache:", second.cache, "| 指纹一致:", second.fingerprint === first.fingerprint);
