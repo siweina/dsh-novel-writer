@@ -8,7 +8,7 @@
 [![GitHub release](https://img.shields.io/github/v/release/siweina/dsh-novel-writer.svg?style=flat-square)](https://github.com/siweina/dsh-novel-writer/releases)
 [![DSH plugin](https://img.shields.io/badge/DSH-plugin-4b8bbe.svg?style=flat-square)](https://github.com/deepseek-ai/deepseek-harness)
 
-为 **DeepSeek Harness (DSH)** 打造的小说写作助手插件：章节库管理、句式模式分析、风格自检、伏笔登记、设定管理、批量导入与 AI 续写辅助。宿主端零第三方依赖（仅 Node 内置模块），浏览器端仅依赖 Web GUI 自带的 react。
+为 **DeepSeek Harness (DSH)** 打造的小说写作助手插件：章节库管理、句式模式分析、风格自检、伏笔登记、设定管理、世界观检测、批量导入与 AI 续写辅助。宿主端零第三方依赖（仅 Node 内置模块），浏览器端仅依赖 Web GUI 自带的 react。
 
 ---
 
@@ -38,12 +38,13 @@ dsh plugin --profile web add github:siweina/dsh-novel-writer#main
 2. **句式模式分析**：`novel_sentence_analysis` 输出九类句式分布、排列规律、句长节奏、情感曲线（喜怒哀惧惊）、风格指纹与节奏建议，带分析缓存与报告导出。
 3. **风格自检**：`novel_style_check` 章节 vs 全书 → 余弦相似度 + 句式/句长/情绪偏差清单 + 续写建议。
 4. **伏笔登记表**：`novel_plot` 维护伏笔/剧情钩子（open/done），字段化（类型/优先级/关联人物/回收条件）+ 章节提及自动追踪。
-5. **设定管理**：`novel_settings` 四张表——人物卡/地点卡/道具清单/时间线，list/add/update/delete + scan 候选提取。
-6. **章节摘要**：`novel_summary` 每章 200-500 字摘要 + 关键事件，长书续写先读摘要。
-7. **连贯性审计**：`novel_continuity_check` 对照设定表扫描全书 → 数字口径/人物缺场/别名/重复条目矛盾候选。
-8. **批量导入**：`novel_import` 原稿件文件夹自动识别书名与章节号，分类导入（异名同书提示、files 精确指定）。
-9. **续写辅助**：先读后写、保持文风与伏笔一致，`novel_new_chapter` 创建新章节。
-10. **全工具 UI 开关**：侧边栏「写作助手功能」面板统一管理（总开关 + 每工具独立开关）。
+5. **设定管理**：`novel_settings` 五张表——人物卡/地点卡/道具清单/时间线/**世界观（用语规范）**，list/add/update/delete + scan 候选提取。
+6. **世界观检测**（v0.9.0）：`novel_settings category=worldview action=detect` 扫描全书自动判断文化基准（西方/东方/混合），输出置信度与证据词表；登记禁用词表（bannedWords）与推荐替代（recommended），`novel_continuity_check` 自动扫描中西意象混搭冲突。
+7. **章节摘要**：`novel_summary` 每章 200-500 字摘要 + 关键事件，长书续写先读摘要。
+8. **连贯性审计**：`novel_continuity_check` 对照设定表扫描全书 → 数字口径/人物缺场/别名/重复条目/用语冲突候选。
+9. **批量导入**：`novel_import` 原稿件文件夹自动识别书名与章节号，分类导入（异名同书提示、files 精确指定）。
+10. **续写辅助**：先读后写、保持文风与伏笔一致，`novel_new_chapter` 创建新章节。
+11. **全工具 UI 开关**：侧边栏「写作助手功能」面板统一管理（总开关 + 每工具独立开关）。
 
 ---
 
@@ -61,9 +62,9 @@ dsh plugin --profile web add github:siweina/dsh-novel-writer#main
 | `novel_sentence_config` | 查看/修改工具开关 |
 | `novel_style_check` | 风格自检（相似度+偏差清单） |
 | `novel_plot` | 伏笔/剧情线登记表 |
-| `novel_settings` | 设定管理（人物/地点/道具/时间线） |
+| `novel_settings` | 设定管理（人物/地点/道具/时间线/世界观） |
 | `novel_summary` | 章节摘要（长书续写辅助） |
-| `novel_continuity_check` | 连贯性审计（设定矛盾候选） |
+| `novel_continuity_check` | 连贯性审计（设定矛盾+用语冲突候选） |
 
 ---
 
