@@ -1,12 +1,6 @@
 # dsh-novel-writer bundle patch: mounts the novel-writing assistant plugin
-# into the profile's loader tree. The entry's name is the plugin package
+# into the profile's loader tree. The entry's `name` is the plugin package
 # itself, resolved from the profile's node_modules.
-#
-# v0.3.0: the same row now carries BOTH halves — the node half (exports ".")
-# runs in the host process (novel_* tools + /api/dsh-novel-writer/state
-# routes for the UI switch), and the dsh.client declaration in package.json
-# makes the browser half (exports "./client") load in the web GUI, mounting
-# the 「句式分析」 sidebar entry with the enable switch.
 - insert:
     - id: novel-writer
       name: 'dsh-novel-writer'
