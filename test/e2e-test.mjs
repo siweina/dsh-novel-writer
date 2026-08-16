@@ -25,6 +25,33 @@ if (names.length !== 10) throw new Error("expected 10 tools");
 
 const exec = { agent: { session: { header: { cwd: testRoot } } } };
 
+// ---- DSH schema 规则检查（additionalProperties 必须布尔；禁用 pattern/format/数值边界关键字）----
+const SCHEMA_KEYWORDS = new Set(["type", "properties", "required", "additionalProperties", "items", "enum", "const", "oneOf"]);
+const SCHEMA_BANNED = ["pattern", "format", "minimum", "maximum", "minLength", "maxLength", "minItems", "maxItems"];
+function assertDshSchema(node, where) {
+  if (node === null || typeof node !== "object" || Array.isArray(node)) return;
+  for (const key of Object.keys(node)) {
+    const v = node[key];
+    if (!SCHEMA_KEYWORDS.has(key)) continue;
+    if (key === "additionalProperties" && typeof v !== "boolean") throw new Error(where + ".additionalProperties must be boolean: " + JSON.stringify(v).slice(0, 60));
+    if (key === "type" && typeof v !== "string") throw new Error(where + ".type must be string");
+    if (key === "properties") {
+      if (v === null || typeof v !== "object") throw new Error(where + ".properties must be object");
+      for (const field of Object.keys(v)) assertDshSchema(v[field], where + ".properties." + field);
+    } else if (typeof v === "object" && v !== null) {
+      assertDshSchema(v, where + "." + key);
+    }
+  }
+  for (const banned of SCHEMA_BANNED) {
+    if (Object.prototype.hasOwnProperty.call(node, banned)) throw new Error(where + "." + banned + " not supported by DSH");
+  }
+}
+for (const d of registry) {
+  if (d.parameters) assertDshSchema(d.parameters, d.name + ".parameters");
+  if (d.output?.schema) assertDshSchema(d.output.schema, d.name + ".output");
+}
+console.log("DSH schema 规则检查: 全部通过");
+
 // 1) 分析 + 缓存（第一次 miss，第二次 hit）
 const first = await defs.novel_sentence_analysis.execute({ book: "测试" }, exec);
 console.log("首次分析 cache:", first.cache, "| reportFile:", first.reportFile?.includes("cache"));
