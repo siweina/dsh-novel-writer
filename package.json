@@ -1,0 +1,14 @@
+{
+  "name": "dsh-novel-writer",
+  "version": "0.2.0",
+  "description": "小说写作助手插件：章节库管理、剧情/写作手法/高频关键词分析、续写辅助（支持任意位置章号、中文数字、UTF-8/UTF-16/GBK 编码自动探测）",
+  "type": "module",
+  "main": "lib/index.js",
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "dependencies": {},
+  "license": "MIT"
+}
