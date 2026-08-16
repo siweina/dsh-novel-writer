@@ -1,6 +1,6 @@
 {
   "name": "dsh-novel-writer",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "小说写作助手插件（v1.0.0 语用级世界观）：worldview 表加 speechStyle 说话方式规范（称谓/客套/仪式/语气）、continuity 语用扫描（含上X柱香通配）、续写语用一致性检查",
   "type": "module",
   "main": "lib/index.js",
