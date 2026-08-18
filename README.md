@@ -2,16 +2,13 @@
 
 [**English**](./README.en.md) | 中文
 
-[![Awesome DSH Plugin](https://beancookie.github.io/awesome-dsh-plugin/badge.svg)](https://beancookie.github.io/awesome-dsh-plugin)
-[![Awesome DeepSeek Harness](https://awesome.re/badge.svg)](https://github.com/Dominic789654/awesome-deepseek-harness)
-
 [![npm version](https://img.shields.io/npm/v/dsh-novel-writer.svg?style=flat-square&color=blue)](https://www.npmjs.com/package/dsh-novel-writer)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)](LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/siweina/dsh-novel-writer.svg?style=flat-square&color=orange)](https://github.com/siweina/dsh-novel-writer/stargazers)
 [![GitHub release](https://img.shields.io/github/v/release/siweina/dsh-novel-writer.svg?style=flat-square)](https://github.com/siweina/dsh-novel-writer/releases)
 [![DSH plugin](https://img.shields.io/badge/DSH-plugin-4b8bbe.svg?style=flat-square)](https://github.com/deepseek-ai/deepseek-harness)
 
-为 **DeepSeek Harness (DSH)** 打造的小说写作助手插件：章节库管理、句式模式分析、风格自检、伏笔登记、设定管理、世界观/语用检测、批量导入与 AI 续写辅助。宿主端零第三方依赖（仅 Node 内置模块），浏览器端仅依赖 Web GUI 自带的 react。
+为 **DeepSeek Harness (DSH)** 打造的小说写作助手插件：章节库管理、句式模式分析、风格自检、伏笔登记、设定管理、世界观/语用检测、情感净化、批量导入与 AI 续写辅助。宿主端零第三方依赖（仅 Node 内置模块），浏览器端仅依赖 Web GUI 自带的 react。
 
 ---
 
@@ -38,16 +35,18 @@ dsh plugin --profile web add github:siweina/dsh-novel-writer#main
 ## 功能
 
 1. **章节库管理**：章节存放于 `novels/<书名>/第N章.md`（或 .txt/.markdown），章号支持任意位置与中文数字（第一章/第十四章），编码自动探测（UTF-8/UTF-16/GBK）。
-2. **句式模式分析**：`novel_sentence_analysis` 输出九类句式分布、排列规律、句长节奏、情感曲线（喜怒哀惧惊）、风格指纹与节奏建议，带分析缓存与报告导出。
-3. **风格自检**：`novel_style_check` 章节 vs 全书 → 余弦相似度 + 句式/句长/情绪偏差清单 + 续写建议。
-4. **伏笔登记表**：`novel_plot` 维护伏笔/剧情钩子（open/done），字段化 + 章节提及自动追踪。
-5. **设定管理**：`novel_settings` 五张表——人物/地点/道具/时间线/**世界观（用语+语用规范）**。
-6. **世界观与语用检测**（v0.9.0/v1.0.0）：`detect` 自动判断文化基准（西/东/混合）+ 置信度；worldview 表含 `speechStyle`——称谓规范（title）、客套禁词（honorBad）+ 替代（honorGood）、仪式禁式通配（ritualBadPatterns，如"上X柱香"）、语气指导（tone）；basis 含 west 时自动注入默认欧式语用。
-7. **章节摘要**：`novel_summary` 每章摘要 + 关键事件，长书续写先读摘要。
-8. **连贯性审计**：`novel_continuity_check` 设定矛盾 + **语用冲突**（客套/仪式/称谓三类）候选，带建议替换。
-9. **批量导入**：`novel_import` 原稿件自动识别书名与章节号分类导入。
-10. **续写辅助**：先读后写、保持文风/伏笔/世界观一致，`novel_new_chapter` 创建新章节。
-11. **全工具 UI 开关**：侧边栏「写作助手功能」面板统一管理。
+2. **句式模式分析**：`novel_sentence_analysis` 输出九类句式分布、排列规律、句长节奏、情感曲线、风格指纹与节奏建议，带分析缓存与报告导出。
+3. **情感净化**（v1.5.0）：情绪词分级（强情绪词=真实基调 / 弱情绪词=生理爽感词易污染）；污染源检测（R18/战斗/恐怖密度超标 → 可信度降级 low + caveat 预警 + aiAction 强制 AI 复核原文）；cleanDominant 剔除污染词后的真实主导情绪。
+4. **风格自检**：`novel_style_check` 章节 vs 全书 → 余弦相似度 + 句式/句长/情绪偏差清单 + 续写建议。
+5. **伏笔登记表**：`novel_plot` 维护伏笔/剧情钩子（open/done），字段化 + 章节提及自动追踪。
+6. **设定管理**：`novel_settings` 五张表——人物/地点/道具/时间线/世界观（用语+语用规范）。
+7. **世界观与语用检测**：`detect` 自动判断文化基准（西/东/混合）+ 置信度；`speechStyle` 称谓规范/客套禁词/仪式禁式/语气；中式与欧式语用规范双向支持（v1.0.1）。
+8. **题材与流派检测**（v1.5.0）：`detect` 输出题材（骨）+ 流派（皮），低频噪音自动过滤（count<5 省略）、泛化词清理。
+9. **章节摘要**：`novel_summary` 每章摘要 + 关键事件，长书续写先读摘要。
+10. **连贯性审计**：`novel_continuity_check` 设定矛盾 + 语用冲突（客套/仪式/称谓）候选，带建议替换。
+11. **批量导入**：`novel_import` 原稿件自动识别书名与章节号分类导入。
+12. **续写辅助**：先读后写、保持文风/伏笔/世界观一致，`novel_new_chapter` 创建新章节。
+13. **全工具 UI 开关**：侧边栏「写作助手功能」面板统一管理（总开关 + 每工具独立开关 + 功能开关 emotionCaveat/genreTheme）。
 
 ---
 
@@ -61,8 +60,8 @@ dsh plugin --profile web add github:siweina/dsh-novel-writer#main
 | `novel_keywords` | 关键词：二字组/三字组/疑似人名 |
 | `novel_new_chapter` | 创建新章节文件 |
 | `novel_import` | 原稿件批量导入/分类 |
-| `novel_sentence_analysis` | 句式模式分析（九类/情感曲线/指纹） |
-| `novel_sentence_config` | 查看/修改工具开关 |
+| `novel_sentence_analysis` | 句式模式分析（九类/情感净化/曲线/指纹） |
+| `novel_sentence_config` | 查看/修改工具与功能开关 |
 | `novel_style_check` | 风格自检（相似度+偏差清单） |
 | `novel_plot` | 伏笔/剧情线登记表 |
 | `novel_settings` | 设定管理（人物/地点/道具/时间线/世界观） |
