@@ -37,6 +37,7 @@ After installing, **restart the web app** to activate.
 1. **Chapter library**: chapters in `novels/<book>/第N章.md` (or .txt/.markdown); auto encoding detection (UTF-8/UTF-16/GBK).
 2. **Sentence-pattern analysis**: 9 categories, emotion curve, style fingerprint + guidance, with cache & report export.
 3. **Emotion purification** (v1.5.0): strong/weak emotion-word grading (weak = physiological/pleasure words easily polluted); pollution-source detection (R18/battle/horror density thresholds → confidence downgrade + caveat warning + aiAction forcing AI re-verification); cleanDominant = true baseline after removing pollution.
+4. **Emotion quantification engine** (v1.6.0): Valence mapping (~150 words, 7 dimensions) + sliding window (100 chars) → variance V (tearing) / delta Δ (trend) / conflict index C (same-window interweave vs segmental); implicit imagery carriers (rain/dusk/dry branches, 28 groups) + explicit-implicit conflict (forced-smile detection); complexity score (entropy+diversity+conflict, level always available); composite emotion pairs (bitter-sweet). Model reads numbers at near-zero token cost; controlled by emotionComplexity toggle.
 4. **Style check**: chapter vs book → cosine similarity + deviation list + advice.
 5. **Plot tracking**: foreshadowing/plot-hook registry with typed fields + auto mention tracking.
 6. **Settings management**: five tables — characters / locations / items / timeline / worldview (usage + pragmatics norms).
