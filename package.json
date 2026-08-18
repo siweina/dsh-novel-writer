@@ -1,7 +1,7 @@
 {
   "name": "dsh-novel-writer",
-  "version": "1.6.0",
-  "description": "小说写作助手插件（v1.6.0）：情感量化引擎——Valence映射+滑动窗口+方差/斜率/矛盾指数+隐性意象载体，模型读数字零成本理解复杂情感",
+  "version": "2.0.0",
+  "description": "小说写作助手插件（v2.0.0）：本地语义嵌入（bge-small-zh ONNX，0 token）——语义检索/语义风格对比/情感量化/世界观题材流派/语用审查，14 工具全 UI 开关",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -14,9 +14,8 @@
     "client.js",
     "cordis.patch.yml",
     "README.md",
-    "INSTALL.md",
-    "skills",
-    "test"
+    "README.en.md",
+    "skills"
   ],
   "dsh": {
     "bundle": {
@@ -34,6 +33,9 @@
   "peerDependencies": {
     "react": "^18.2.0"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@huggingface/tokenizers": "^0.1.0",
+    "onnxruntime-web": "^1.24.3"
+  },
   "license": "MIT"
 }

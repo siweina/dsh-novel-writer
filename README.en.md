@@ -1,93 +1,20 @@
-# 📚 dsh-novel-writer — Novel Writing Assistant
+# dsh-novel-writer — Novel Writing Assistant Plugin (v2.0.0)
 
-English | [**中文**](./README.md)
+A DSH (DeepSeek Harness) bundle plugin. **v2.0.0 ships a local semantic embedding engine (bge-small-zh-v1.5 ONNX, bundled, CPU inference, 0 token cost)** — semantic capabilities without any API fees.
 
-[![npm version](https://img.shields.io/npm/v/dsh-novel-writer.svg?style=flat-square&color=blue)](https://www.npmjs.com/package/dsh-novel-writer)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)](LICENSE)
-[![GitHub stars](https://img.shields.io/github/stars/siweina/dsh-novel-writer.svg?style=flat-square&color=orange)](https://github.com/siweina/dsh-novel-writer/stargazers)
-[![GitHub release](https://img.shields.io/github/v/release/siweina/dsh-novel-writer.svg?style=flat-square)](https://github.com/siweina/dsh-novel-writer/releases)
-[![DSH plugin](https://img.shields.io/badge/DSH-plugin-4b8bbe.svg?style=flat-square)](https://github.com/deepseek-ai/deepseek-harness)
+## Tools (14, each with an independent UI switch)
+novel_books / novel_chapters / novel_read / novel_keywords / novel_new_chapter / novel_import / novel_sentence_analysis / novel_sentence_config / novel_style_check / novel_plot / novel_settings / novel_summary / novel_continuity_check / **novel_semantic_search (new in v2.0.0)**
 
-A novel-writing assistant plugin for **DeepSeek Harness (DSH)**: chapter library management, sentence-pattern analysis, style checking, plot tracking, settings management, worldview/pragmatics detection, emotion purification, batch import, and AI-assisted continuation writing. Zero third-party dependencies on host (Node built-ins only).
+## v2.0.0 — Semantic Layer
+- **Local engine** (lib/embedding.js): Xenova/bge-small-zh-v1.5 (quantized), 512-dim Chinese vectors, ~23MB, bundled; @huggingface/tokenizers + onnxruntime-web (WASM), local CPU, 0 token / 0 API cost;
+- **Lazy load** (~0.3s first call); automatic fallback to pure-rule mode if unavailable;
+- **Index cache**: per-book vectors at `.novel-writer/embedding/<book>.json` — repeated searches are instant;
+- **novel_semantic_search**: natural-language search across the whole book (foreshadowing clues, emotional scenes, setting mentions) — matches by meaning even when keywords differ;
+- **novel_style_check upgrade**: adds semantic similarity (target chapter vs rest of book) alongside rule-based fingerprint similarity;
+- **Switch: semanticEmbedding** — default ON (probe-based: auto-enabled when the model is present); turn it off in the sidebar「写作助手功能」panel to fully return to rule-only mode.
 
----
+## History (v0.3 → v1.6)
+Sentence-pattern analysis; emotion purification + AI review (strong/weak lexicon, pollution caveat); emotion quantification (Valence sliding window: variance/slope/conflict + implicit imagery + complexity score); worldview/genre/theme detection (modern/western/eastern + 15 genres + 35 themes); pragmatic-style review; settings tables (5) + foreshadowing registry + summaries + continuity audit + style check; analysis cache & report export (`.novel-writer/analysis/`).
 
-## Installation
-
-**Option 1: npm (recommended)**
-
-```sh
-npm install dsh-novel-writer
-# or
-dsh plugin --profile web add dsh-novel-writer
-```
-
-**Option 2: From GitHub**
-
-```sh
-dsh plugin --profile web add github:siweina/dsh-novel-writer#main
-```
-
-After installing, **restart the web app** to activate.
-
----
-
-## Features
-
-1. **Chapter library**: chapters in `novels/<book>/第N章.md` (or .txt/.markdown); auto encoding detection (UTF-8/UTF-16/GBK).
-2. **Sentence-pattern analysis**: 9 categories, emotion curve, style fingerprint + guidance, with cache & report export.
-3. **Emotion purification** (v1.5.0): strong/weak emotion-word grading (weak = stimulus-driven/pleasure words easily polluted); pollution-source detection (suggestive/battle/horror scene-density thresholds → confidence downgrade + caveat warning + aiAction forcing AI re-verification); cleanDominant = true baseline after removing pollution.
-4. **Emotion quantification engine** (v1.6.0): Valence mapping (~150 words, 7 dimensions) + sliding window (100 chars) → variance V (tearing) / delta Δ (trend) / conflict index C (same-window interweave vs segmental); implicit imagery carriers (rain/dusk/dry branches, 28 groups) + explicit-implicit conflict (forced-smile detection); complexity score (entropy+diversity+conflict, level always available); composite emotion pairs (bitter-sweet). Model reads numbers at near-zero token cost; controlled by emotionComplexity toggle.
-4. **Style check**: chapter vs book → cosine similarity + deviation list + advice.
-5. **Plot tracking**: foreshadowing/plot-hook registry with typed fields + auto mention tracking.
-6. **Settings management**: five tables — characters / locations / items / timeline / worldview (usage + pragmatics norms).
-7. **Worldview & pragmatics detection**: auto cultural-baseline detection with confidence; `speechStyle` title/honorifics/rituals/tone; both eastern & western pragmatics supported (v1.0.1).
-8. **Genre & theme detection** (v1.5.0): `detect` outputs theme (bone) + genre (skin); low-frequency noise filtered (count<5), generalization words cleaned.
-9. **Chapter summaries**: per-chapter digest + key events for long-book continuation.
-10. **Continuity audit**: settings conflicts + pragmatics conflicts (honorifics/rituals/titles) with replacement suggestions.
-11. **Batch import**: auto-detect book names & chapter numbers, classified import.
-12. **Continuation writing**: read-first workflow; `novel_new_chapter` creates chapters.
-13. **Per-tool UI toggles**: "Writing Assistant" sidebar panel (master + per-tool + feature toggles emotionCaveat/genreTheme).
-
----
-
-## Provided Tools
-
-| Tool | Description |
-|------|-------------|
-| `novel_books` | List all books in library |
-| `novel_chapters` | List a book's chapters |
-| `novel_read` | Read a chapter (paginated) |
-| `novel_keywords` | Keywords: bigram/trigram/name candidates |
-| `novel_new_chapter` | Create new chapter file |
-| `novel_import` | Batch import manuscripts |
-| `novel_sentence_analysis` | Sentence-pattern analysis |
-| `novel_sentence_config` | View/set tool & feature toggles |
-| `novel_style_check` | Style check (similarity+diffs) |
-| `novel_plot` | Plot/foreshadowing tracker |
-| `novel_settings` | Settings management (+worldview) |
-| `novel_summary` | Chapter summaries |
-| `novel_continuity_check` | Continuity audit |
-
----
-
-## Configuration
-
-```yaml
-- id: novel-writer
-  config:
-    root: 'D:/my-novel-library'
-    allowLanState: false   # true = allow state save from LAN GUI access
-```
-
----
-
-## Data Directory
-
-Under `<library-root>/.novel-writer/`: `plots` / `settings` / `summaries` / `analysis` / `audits`.
-
----
-
-## License
-
-[MIT](./LICENSE)
+## Size
+~95MB total (23MB quantized model + 70MB runtime); zip 31MB. If disk is tight, disable the semantic switch and delete `lib/models/` + `node_modules/` to go back to rule-only.

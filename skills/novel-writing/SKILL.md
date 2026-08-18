@@ -78,8 +78,8 @@
 ## 情感可信度与 AI 复核（v1.5.0）
 
 - novel_sentence_analysis 返回 emotion 含 `dominant`（raw）与 `cleanDominant`（仅强情绪词）与 `confidence`（high/medium/low）与 `caveat`（污染警告）与 `aiAction`（明确指令）；
-- **当 `caveat` 非空（confidence=low，检测到高密度 R18/战斗/恐怖描写）时，你必须执行 `aiAction`**：用 §BT§novel_read§BT§ 抽查 2-3 段原文，复核真实情感基调后，在结论中同时给出"插件预警"与"AI 复核结果"，不得直接采信 dominant；
-- 例如：某部情感描写密集的作品raw 主导"喜"但 clean 主导"哀"且 R18 密度超标 → 插件报 low + 警告，AI 抽查后应判断"整体基调为哀伤，'喜'来自生理反应词"；
+- **当 `caveat` 非空（confidence=low，检测到高密度 刺激/战斗/恐怖场景描写）时，你必须执行 `aiAction`**：用 §BT§novel_read§BT§ 抽查 2-3 段原文，复核真实情感基调后，在结论中同时给出"插件预警"与"AI 复核结果"，不得直接采信 dominant；
+- 例如：某部情感描写密集的作品 raw 主导"喜"但 clean 主导"哀"且刺激场景密度超标 → 插件报 low + 警告，AI 抽查后应判断"整体基调为哀伤，'喜'来自感官刺激类用词"；
 - 功能开关（侧边栏「写作助手功能」面板或 novel_sentence_config）：emotionCaveat（情感净化预警）/ genreTheme（题材与流派检测），关闭后对应输出消失。
 
 ## 情感量化解读（v1.6.0）
@@ -96,3 +96,17 @@ novel_sentence_analysis 的 emotion.quantification 是纯规则计算的数字�
 - **composites**：全书高频复合情感对（悲喜交加×N 等）。
 
 用法：把这些数字直接转化为写作指令（如"C=0.7 → 这段要矛盾螺旋，不能平滑"），不要为了判断情感去读整章原文。
+
+## 语义隐性情感（v2.0.0）
+
+novel_sentence_analysis 的 emotion.quantification.semanticImplicit（semanticEmbedding 开启且模型可用时输出）：
+- **hits**：全书"词表外疑似意象段落"top 10——每条含情感标签（温暖/甜蜜/释然/幸福/温柔/眷恋/仰慕/压抑的愤怒/隐忍/悲伤/孤独/怅惘/失落/心碎/恐惧/焦虑/不安/厌恶/震惊/疏离/决绝/不舍/无奈/脆弱/苦涩，共 25 类原型）+ 余弦分数 + 章节；
+- **distribution**：各情感命中段落数分布；
+- 与规则意象表（雨/黄昏/攥紧衣角）互补：规则抓"已知载体"，语义抓"没有关键词但读起来就是那个情绪"的段落；
+- 用法：写复杂心理时，可据此感知全文的隐性情感基调（如 distribution 显示"脆弱 2/焦虑 2/失落 1" → 这本书表面中性、内里压抑），不用读全文。
+
+## 非净化模式（v2.0.0，用户双重确认后开启）
+
+- 当 systemPrompt 注入【非净化模式已开启】或检测到 features.rawWriting=true 时：模仿作者文风续写**必须还原原文直白程度**（血腥/暴力/成人），不回避、不委婉、不用省略替代；
+- 该模式由用户显式开启（双重确认 + 承诺输入），仅限个人创作用途；
+- 未开启时照常按平台安全边界处理。

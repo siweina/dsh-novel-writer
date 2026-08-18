@@ -21,7 +21,7 @@ apply(ctx, { root: testRoot, sentenceAnalysis: { enabled: true, autoAnalyze: tru
 const defs = Object.fromEntries(registry.map((d) => [d.name, d]));
 const names = registry.map((d) => d.name);
 console.log("工具数:", names.length, names.join(", "));
-if (names.length !== 13) throw new Error("expected 13 tools (v0.8.0)");
+if (names.length !== 14) throw new Error("expected 14 tools (v0.8.0)");
 
 const exec = { agent: { session: { header: { cwd: testRoot } } } };
 
@@ -141,6 +141,24 @@ const saQOff = await defs.novel_sentence_analysis.execute({ book: "测试", fres
 if ("quantification" in (saQOff.emotion ?? {})) throw new Error("emotionComplexity off should drop quantification");
 await defs.novel_sentence_config.execute({ action: "set", features: { emotionComplexity: true } }, exec);
 console.log("v1.6.0 情感量化开关: 关→生效, 开→恢复 ✓");
+
+// v2.0.0：语义检索工具存在 + 开关门禁（无模型环境也应返回 available:false 而非崩溃）
+const semTool = defs.novel_semantic_search;
+if (!semTool) throw new Error("novel_semantic_search missing");
+await defs.novel_sentence_config.execute({ action: "set", features: { semanticEmbedding: false } }, exec);
+const semOff = await semTool.execute({ book: "测试", query: "任何" }, exec);
+if (semOff.available !== false) throw new Error("semantic switch off should disable search");
+await defs.novel_sentence_config.execute({ action: "set", features: { semanticEmbedding: true } }, exec);
+const cfgV2 = await defs.novel_sentence_config.execute({ action: "get" }, exec);
+if (typeof cfgV2.embedding?.available !== "boolean") throw new Error("embedding status missing");
+console.log("v2.0.0 语义检索: 工具注册✓ 开关门禁✓ 状态字段✓");
+
+// v2.0.0：非净化模式（rawWriting）开关 + 动态 section
+await defs.novel_sentence_config.execute({ action: "set", features: { rawWriting: true } }, exec);
+const cfgRaw = await defs.novel_sentence_config.execute({ action: "get" }, exec);
+if (cfgRaw.features?.rawWriting !== true) throw new Error("rawWriting set failed");
+await defs.novel_sentence_config.execute({ action: "set", features: { rawWriting: false } }, exec);
+console.log("v2.0.0 非净化模式: 开关读写✓");
 if (det3.theme && det3.theme.dominant !== null && typeof det3.theme.dominant !== "string") throw new Error("theme broken");
 
 const cont3 = await defs.novel_continuity_check.execute({ book: "测试" }, exec);
