@@ -129,6 +129,18 @@ await defs.novel_sentence_config.execute({ action: "set", features: { genreTheme
 const cfgF = await defs.novel_sentence_config.execute({ action: "get" }, exec);
 if (cfgF.features?.emotionCaveat !== true || cfgF.features?.genreTheme !== true) throw new Error("features restore failed");
 console.log("v1.5.0 功能开关: 关→生效, 开→恢复 ✓");
+
+// v1.6.0：情感量化（quantification 存在 + 开关裁剪）
+const saQ = await defs.novel_sentence_analysis.execute({ book: "测试", fresh: true }, exec);
+const q = saQ.emotion?.quantification;
+if (!q || typeof q.stats?.variance !== "number") throw new Error("quantification missing");
+if (!["high", "medium", "low"].includes(q.complexity?.level)) throw new Error("complexity level broken");
+console.log("v1.6.0 量化: V=" + q.stats.variance + " C=" + q.stats.conflict + " level=" + q.complexity?.level);
+await defs.novel_sentence_config.execute({ action: "set", features: { emotionComplexity: false } }, exec);
+const saQOff = await defs.novel_sentence_analysis.execute({ book: "测试", fresh: true }, exec);
+if ("quantification" in (saQOff.emotion ?? {})) throw new Error("emotionComplexity off should drop quantification");
+await defs.novel_sentence_config.execute({ action: "set", features: { emotionComplexity: true } }, exec);
+console.log("v1.6.0 情感量化开关: 关→生效, 开→恢复 ✓");
 if (det3.theme && det3.theme.dominant !== null && typeof det3.theme.dominant !== "string") throw new Error("theme broken");
 
 const cont3 = await defs.novel_continuity_check.execute({ book: "测试" }, exec);
