@@ -1,7 +1,7 @@
 {
   "name": "dsh-novel-writer",
-  "version": "1.5.0",
-  "description": "小说写作助手插件（v1.5.0）：情感净化（强/弱情绪词+污染检测+caveat+AI复核）、题材/流派阈值过滤、功能开关（emotionCaveat/genreTheme）全UI可调且真实生效",
+  "version": "1.6.0",
+  "description": "小说写作助手插件（v1.6.0）：情感量化引擎——Valence映射+滑动窗口+方差/斜率/矛盾指数+隐性意象载体，模型读数字零成本理解复杂情感",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
