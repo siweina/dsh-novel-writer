@@ -79,5 +79,20 @@
 
 - novel_sentence_analysis 返回 emotion 含 `dominant`（raw）与 `cleanDominant`（仅强情绪词）与 `confidence`（high/medium/low）与 `caveat`（污染警告）与 `aiAction`（明确指令）；
 - **当 `caveat` 非空（confidence=low，检测到高密度 R18/战斗/恐怖描写）时，你必须执行 `aiAction`**：用 §BT§novel_read§BT§ 抽查 2-3 段原文，复核真实情感基调后，在结论中同时给出"插件预警"与"AI 复核结果"，不得直接采信 dominant；
-- 例如：《调教人生》raw 主导"喜"但 clean 主导"哀"且 R18 密度超标 → 插件报 low + 警告，AI 抽查后应判断"整体基调为哀伤，'喜'来自生理反应词"；
+- 例如：某部情感描写密集的作品raw 主导"喜"但 clean 主导"哀"且 R18 密度超标 → 插件报 low + 警告，AI 抽查后应判断"整体基调为哀伤，'喜'来自生理反应词"；
 - 功能开关（侧边栏「写作助手功能」面板或 novel_sentence_config）：emotionCaveat（情感净化预警）/ genreTheme（题材与流派检测），关闭后对应输出消失。
+
+## 情感量化解读（v1.6.0）
+
+novel_sentence_analysis 的 emotion.quantification 是纯规则计算的数字（0 token 成本），请直接读取并按以下方式理解：
+
+- **stats.variance（撕裂度 V）**：0~1。>0.3=情绪被反复撕扯（前半大喜后半大悲类）；<0.05=平静。
+- **stats.adjVariance（相邻撕裂）**：相邻窗口情绪差平均，抓"上一秒哭下一秒笑"的急转弯。
+- **stats.delta / deltaRobust（趋势 Δ）**：>+0.3 基调转好，<-0.3 基调转坏（滑向低谷），中间=拉锯。
+- **stats.conflict（矛盾指数 C，0~1）**：同窗正负词交织程度。>0.5=极度矛盾（悲喜交加/又爱又恨），续写必须"反复横跳"不能平滑解决；≈0=单一情感或无矛盾。
+- **implicit（隐性意象）**：雨/黄昏/枯枝等意象的负向占比。negative 高 + 显性 meanValence 正 → 表里不一（表面开心内心压抑）。
+- **compare.explicitImplicitConflict**：true = 强颜欢笑类复杂情感，心理刻画必须分两层。
+- **complexity.score（0~1）**：整体复杂度温度。high(≥0.6) 禁止贴单一情感标签。
+- **composites**：全书高频复合情感对（悲喜交加×N 等）。
+
+用法：把这些数字直接转化为写作指令（如"C=0.7 → 这段要矛盾螺旋，不能平滑"），不要为了判断情感去读整章原文。
