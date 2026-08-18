@@ -98,6 +98,39 @@ const wv = await defs.novel_settings.execute({ book: "测试", category: "worldv
 if (!wv.worldview.some((e) => e.name === "欧式中世纪")) throw new Error("worldview add broken");
 // v1.0.0 语用级：worldview 带 speechStyle（欧式）→ 扫描客套/仪式/称谓
 await defs.novel_settings.execute({ book: "测试", category: "worldview", action: "add", name: "欧式基准", basis: "western 风格", bannedWords: [], recommended: {}, speechStyle: { title: "Miss+名,不用XX小姐", honorBad: ["提点", "承蒙"], honorGood: { "提点": "提醒" }, ritualBadPatterns: ["上[一二三四五六七八九十百千]*柱?香"], ritualGoodNote: "点烛", tone: "口语化" } }, exec);
+// v1.0.2：detect 流派 + add/update 单条返回
+const det2 = await defs.novel_settings.execute({ book: "测试", category: "worldview", action: "detect" }, exec);
+console.log("v1.0.2 detect:", det2.culture, "| 流派:", det2.genre?.dominant ?? "unknown");
+const sumAdd = await defs.novel_summary.execute({ book: "测试", action: "add", chapter: "第01章", summary: "单条测试" }, exec);
+if (sumAdd.summaries.length !== 1) throw new Error("summary add should return single entry");
+const plotAdd = await defs.novel_plot.execute({ book: "测试", action: "add", content: "单条伏笔" }, exec);
+if (plotAdd.entries.length !== 1) throw new Error("plot add should return single entry");
+const setAdd = await defs.novel_settings.execute({ book: "测试", category: "character", action: "add", name: "单条角色" }, exec);
+if (setAdd.characters.length !== 1) throw new Error("settings add should return single entry");
+console.log("v1.0.2 单条返回: summary/plot/settings 全部 ✓");
+// v1.0.2 题材检测（骨）
+const det3 = await defs.novel_settings.execute({ book: "测试", category: "worldview", action: "detect" }, exec);
+console.log("v1.0.2 题材:", det3.theme?.dominant ?? "unknown", "→", det3.theme?.secondary ?? "");
+
+// v1.5.0：情感净化（clean/caveat）+ 功能开关生效
+const saClean = await defs.novel_sentence_analysis.execute({ book: "测试", fresh: true }, exec);
+console.log("v1.5.0 emotion:", saClean.emotion?.dominant, "| clean:", saClean.emotion?.cleanDominant, "| conf:", saClean.emotion?.confidence);
+if (!("cleanDominant" in (saClean.emotion ?? {}))) throw new Error("emotion clean missing");
+// 关闭 emotionCaveat → clean/caveat 消失
+await defs.novel_sentence_config.execute({ action: "set", features: { emotionCaveat: false } }, exec);
+const saOff = await defs.novel_sentence_analysis.execute({ book: "测试", fresh: true }, exec);
+if ("cleanDominant" in (saOff.emotion ?? {})) throw new Error("emotionCaveat off should crop clean");
+await defs.novel_sentence_config.execute({ action: "set", features: { emotionCaveat: true } }, exec);
+// 关闭 genreTheme → detect 无 genre/theme
+await defs.novel_sentence_config.execute({ action: "set", features: { genreTheme: false } }, exec);
+const detOff = await defs.novel_settings.execute({ book: "测试", category: "worldview", action: "detect" }, exec);
+if ("genre" in detOff) throw new Error("genreTheme off should drop genre");
+await defs.novel_sentence_config.execute({ action: "set", features: { genreTheme: true } }, exec);
+const cfgF = await defs.novel_sentence_config.execute({ action: "get" }, exec);
+if (cfgF.features?.emotionCaveat !== true || cfgF.features?.genreTheme !== true) throw new Error("features restore failed");
+console.log("v1.5.0 功能开关: 关→生效, 开→恢复 ✓");
+if (det3.theme && det3.theme.dominant !== null && typeof det3.theme.dominant !== "string") throw new Error("theme broken");
+
 const cont3 = await defs.novel_continuity_check.execute({ book: "测试" }, exec);
 const prag = cont3.candidates.filter((x) => x.type.startsWith("语用"));
 console.log("v1.0.0 语用扫描:", prag.map((x) => x.type + ":" + x.detail.slice(0, 24)).join(" | ") || "(无)");
