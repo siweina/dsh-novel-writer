@@ -74,3 +74,10 @@
   - The Writer's Complete Fantasy Reference
   - Fantasy Writers Phrase Book（Jackson Dean Chase）
   - 凌力谈历史小说语言：错用一个现代词会破坏整个历史氛围
+
+## 情感可信度与 AI 复核（v1.5.0）
+
+- novel_sentence_analysis 返回 emotion 含 `dominant`（raw）与 `cleanDominant`（仅强情绪词）与 `confidence`（high/medium/low）与 `caveat`（污染警告）与 `aiAction`（明确指令）；
+- **当 `caveat` 非空（confidence=low，检测到高密度 R18/战斗/恐怖描写）时，你必须执行 `aiAction`**：用 §BT§novel_read§BT§ 抽查 2-3 段原文，复核真实情感基调后，在结论中同时给出"插件预警"与"AI 复核结果"，不得直接采信 dominant；
+- 例如：《调教人生》raw 主导"喜"但 clean 主导"哀"且 R18 密度超标 → 插件报 low + 警告，AI 抽查后应判断"整体基调为哀伤，'喜'来自生理反应词"；
+- 功能开关（侧边栏「写作助手功能」面板或 novel_sentence_config）：emotionCaveat（情感净化预警）/ genreTheme（题材与流派检测），关闭后对应输出消失。
