@@ -1,7 +1,7 @@
 {
   "name": "dsh-novel-writer",
-  "version": "1.0.1",
-  "description": "小说写作助手插件（v1.0.0 语用级世界观）：worldview 表加 speechStyle 说话方式规范（称谓/客套/仪式/语气）、continuity 语用扫描（含上X柱香通配）、续写语用一致性检查",
+  "version": "1.5.0",
+  "description": "小说写作助手插件（v1.5.0）：情感净化（强/弱情绪词+污染检测+caveat+AI复核）、题材/流派阈值过滤、功能开关（emotionCaveat/genreTheme）全UI可调且真实生效",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
