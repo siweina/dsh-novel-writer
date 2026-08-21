@@ -8,7 +8,7 @@
 [![GitHub release](https://img.shields.io/github/v/release/siweina/dsh-novel-writer.svg?style=flat-square)](https://github.com/siweina/dsh-novel-writer/releases)
 [![DSH plugin](https://img.shields.io/badge/DSH-plugin-4b8bbe.svg?style=flat-square)](https://github.com/deepseek-ai/deepseek-harness)
 
-为 **DeepSeek Harness (DSH)** 打造的小说写作助手插件（v2.5.0）：章节库管理、句式分析、情感净化与量化、氛围光谱、**风格画像报告**、伏笔设定管理、本地语义检索（0 token）、网文信号识别、批量导入与 AI 续写辅助。宿主端零第三方依赖，浏览器端仅依赖 Web GUI 自带的 react。
+为 **DeepSeek Harness (DSH)** 打造的小说写作助手插件（v2.5.5）：章节库管理、句式分析、情感净化与量化、氛围光谱、**风格画像报告**、伏笔设定管理、本地语义检索（0 token）、网文信号识别、批量导入与 AI 续写辅助。宿主端零第三方依赖，浏览器端仅依赖 Web GUI 自带的 react。
 
 ---
 

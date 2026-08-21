@@ -1,7 +1,7 @@
 {
   "name": "dsh-novel-writer",
-  "version": "2.5.0",
-  "description": "小说写作助手插件（v2.5.0）：句式/情感/意象分析、伏笔设定管理、本地语义检索、氛围光谱、风格画像报告（测量与判断分离）。",
+  "version": "2.5.5",
+  "description": "小说写作助手插件（v2.5.5）：句式/情感/意象分析、伏笔设定管理、本地语义检索、氛围光谱、风格画像报告（测量与判断分离）。",
   "type": "module",
   "main": "lib/index.js",
   "exports": {

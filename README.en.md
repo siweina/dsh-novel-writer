@@ -8,7 +8,7 @@ English | [**中文**](./README.md)
 [![GitHub release](https://img.shields.io/github/v/release/siweina/dsh-novel-writer.svg?style=flat-square)](https://github.com/siweina/dsh-novel-writer/releases)
 [![DSH plugin](https://img.shields.io/badge/DSH-plugin-4b8bbe.svg?style=flat-square)](https://github.com/deepseek-ai/deepseek-harness)
 
-A novel-writing assistant plugin for **DeepSeek Harness (DSH)** (v2.5.0): chapter library management, sentence-pattern analysis, emotion purification & quantification, **12-axis vibe spectrum**, **style portrait report**, plot & settings management, local semantic search (0 token), webnovel signal detection, batch import, and AI-assisted continuation writing. Zero third-party dependencies on host.
+A novel-writing assistant plugin for **DeepSeek Harness (DSH)** (v2.5.5): chapter library management, sentence-pattern analysis, emotion purification & quantification, **12-axis vibe spectrum**, **style portrait report**, plot & settings management, local semantic search (0 token), webnovel signal detection, batch import, and AI-assisted continuation writing. Zero third-party dependencies on host.
 
 ---
 

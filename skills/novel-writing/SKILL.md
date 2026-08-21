@@ -31,7 +31,7 @@
 
 ## 设定管理（v0.8.0 新增）
 
-- §BT§novel_settings§BT§：四张表（人物卡/地点卡/道具清单/时间线），list/add/update/delete/scan；
+- §BT§novel_settings§BT§：五张表（人物卡/地点卡/道具清单/时间线/世界观用语规范），list/add/update/delete/scan/detect；
 - 登记新人物/新地点/道具去向，时间线记录"第几天/倒计时"；
 - §BT§novel_continuity_check§BT§：续写前跑一次，输出设定矛盾候选（数字口径/人物缺场/别名/重复）。
 
