@@ -60,7 +60,7 @@
 - 用户放入章节文件的方式不限：自己复制、AI 用 `write`/`edit` 创建，或用 novel_import 批量导入。
 - 分析结果与续写正文都应使用中文呈现。
 
-## 世界观用语规范（v0.10.0 新增）
+## 世界观用语规范（v0.9.0 新增）
 
 - **文化基准自动判断**：§BT§novel_settings§BT§（category=worldview，action=detect）扫描全书，按中西词表命中自动判断文化基准（western/eastern/mixed/unknown）并给出证据与置信度；
 - **用语规范登记**：detect 后可用 §BT§novel_settings§BT§ add（category=worldview）登记：name（基准名）、basis（判断依据）、bannedWords（禁用词表）、recommended（替代词映射）、ritual（仪式规范，如"点烛不烧香"）；
@@ -111,5 +111,12 @@ novel_sentence_analysis 的 emotion.quantification.semanticImplicit（semanticEm
 - 该模式由用户显式开启（双重确认 + 承诺输入），仅限个人创作用途；
 - 未开启时照常按平台安全边界处理。
 
-9. **风格画像报告（v2.5.0）**：分析/续写前先跑 novel_style_report——它输出 6 维测量数据（文风指纹/高频词汇/题材流派/情感量化/氛围光谱 12 轴/语义风格距离），**插件不贴标签**；AI 需结合数据给出风格气质判断，并通过 aiJudgment 参数回传（插件存入 .novel-writer/style-reports/，后续用 action=get 读取）。续写时参考已保存判断保持风格一致。
-10. **网文信号层（v2.2.0）**：网文动作/套路词群（含 genre-tropes 现成词）、题材联动（豪门总裁→甜宠等）、情感直给词密度——三层信号只加分不换引擎，权重封顶防污染；三组回归（公版文学/手写样本/网文库）验证无污染。
+## 风格画像报告（v2.5.0）
+
+- 分析/续写前先跑 novel_style_report：输出 6 维测量数据（文风指纹/高频词汇/题材流派/情感量化/氛围光谱 12 轴/语义风格距离），插件不贴标签；
+- AI 结合数据给出风格气质判断，通过 aiJudgment 参数回传（插件存入 .novel-writer/style-reports/，后续 action=get 读取）；续写时参考已保存判断保持风格一致。
+
+## 网文信号层（v2.2.0）
+
+- 网文动作/套路词群（含 genre-tropes 现成词）、题材联动（豪门总裁→甜宠等）、情感直给词密度——三层信号只加分不换引擎，权重封顶防污染；
+- 三组回归（公版文学/手写样本/网文库）验证无污染。
