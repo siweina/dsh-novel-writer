@@ -1,7 +1,7 @@
 {
   "name": "dsh-novel-writer",
-  "version": "2.0.2",
-  "description": "小说写作助手插件（v2.0.2）：本地语义嵌入（bge-small-zh ONNX，0 token）——语义检索/语义风格对比/情感量化/世界观题材流派/语用审查，14 工具全 UI 开关",
+  "version": "2.5.0",
+  "description": "小说写作助手插件（v2.5.0）：句式/情感/意象分析、伏笔设定管理、本地语义检索、氛围光谱、风格画像报告（测量与判断分离）。",
   "type": "module",
   "main": "lib/index.js",
   "exports": {

@@ -60,7 +60,7 @@
 - 用户放入章节文件的方式不限：自己复制、AI 用 `write`/`edit` 创建，或用 novel_import 批量导入。
 - 分析结果与续写正文都应使用中文呈现。
 
-## 世界观用语规范（v0.9.0 新增）
+## 世界观用语规范（v0.10.0 新增）
 
 - **文化基准自动判断**：§BT§novel_settings§BT§（category=worldview，action=detect）扫描全书，按中西词表命中自动判断文化基准（western/eastern/mixed/unknown）并给出证据与置信度；
 - **用语规范登记**：detect 后可用 §BT§novel_settings§BT§ add（category=worldview）登记：name（基准名）、basis（判断依据）、bannedWords（禁用词表）、recommended（替代词映射）、ritual（仪式规范，如"点烛不烧香"）；
@@ -78,8 +78,8 @@
 ## 情感可信度与 AI 复核（v1.5.0）
 
 - novel_sentence_analysis 返回 emotion 含 `dominant`（raw）与 `cleanDominant`（仅强情绪词）与 `confidence`（high/medium/low）与 `caveat`（污染警告）与 `aiAction`（明确指令）；
-- **当 `caveat` 非空（confidence=low，检测到高密度 刺激/战斗/恐怖场景描写）时，你必须执行 `aiAction`**：用 §BT§novel_read§BT§ 抽查 2-3 段原文，复核真实情感基调后，在结论中同时给出"插件预警"与"AI 复核结果"，不得直接采信 dominant；
-- 例如：某部情感描写密集的作品 raw 主导"喜"但 clean 主导"哀"且刺激场景密度超标 → 插件报 low + 警告，AI 抽查后应判断"整体基调为哀伤，'喜'来自感官刺激类用词"；
+- **当 `caveat` 非空（confidence=low，检测到高密度成人向/战斗/恐怖描写）时，你必须执行 `aiAction`**：用 §BT§novel_read§BT§ 抽查 2-3 段原文，复核真实情感基调后，在结论中同时给出"插件预警"与"AI 复核结果"，不得直接采信 dominant；
+- 例如：某作品 raw 主导"喜"但 clean 主导"哀"且成人向词密度超标 → 插件报 low + 警告，AI 抽查后应判断"整体基调为哀伤，'喜'来自感官反应词"；
 - 功能开关（侧边栏「写作助手功能」面板或 novel_sentence_config）：emotionCaveat（情感净化预警）/ genreTheme（题材与流派检测），关闭后对应输出消失。
 
 ## 情感量化解读（v1.6.0）
@@ -110,3 +110,6 @@ novel_sentence_analysis 的 emotion.quantification.semanticImplicit（semanticEm
 - 当 systemPrompt 注入【非净化模式已开启】或检测到 features.rawWriting=true 时：模仿作者文风续写**必须还原原文直白程度**（血腥/暴力/成人），不回避、不委婉、不用省略替代；
 - 该模式由用户显式开启（双重确认 + 承诺输入），仅限个人创作用途；
 - 未开启时照常按平台安全边界处理。
+
+9. **风格画像报告（v2.5.0）**：分析/续写前先跑 novel_style_report——它输出 6 维测量数据（文风指纹/高频词汇/题材流派/情感量化/氛围光谱 12 轴/语义风格距离），**插件不贴标签**；AI 需结合数据给出风格气质判断，并通过 aiJudgment 参数回传（插件存入 .novel-writer/style-reports/，后续用 action=get 读取）。续写时参考已保存判断保持风格一致。
+10. **网文信号层（v2.2.0）**：网文动作/套路词群（含 genre-tropes 现成词）、题材联动（豪门总裁→甜宠等）、情感直给词密度——三层信号只加分不换引擎，权重封顶防污染；三组回归（公版文学/手写样本/网文库）验证无污染。

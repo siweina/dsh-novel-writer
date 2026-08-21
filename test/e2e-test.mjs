@@ -1,4 +1,5 @@
 // 端到端测试：10 工具注册、缓存、伏笔、风格自检、路由（v0.6.0）
+
 import { mkdirSync, writeFileSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
@@ -21,7 +22,7 @@ apply(ctx, { root: testRoot, sentenceAnalysis: { enabled: true, autoAnalyze: tru
 const defs = Object.fromEntries(registry.map((d) => [d.name, d]));
 const names = registry.map((d) => d.name);
 console.log("工具数:", names.length, names.join(", "));
-if (names.length !== 14) throw new Error("expected 14 tools (v0.8.0)");
+if (names.length !== 15) throw new Error("expected 15 tools (v2.5.0)");
 
 const exec = { agent: { session: { header: { cwd: testRoot } } } };
 
@@ -179,6 +180,17 @@ await handler({
 }, res);
 console.log("局域网 GET（allowLanState=true）:", res.status);
 if (res.status !== 200) throw new Error("allowLan route broken");
+
+
+// v2.5.0: novel_style_report 实际调用（报告生成 + 字段完整性）
+{
+  const def = defs.novel_style_report;
+  if (!def) throw new Error("novel_style_report not registered");
+  const r = await def.execute({ book: "测试", root: testRoot }, exec);
+  if (!r.report || !String(r.report).includes("风格画像报告")) throw new Error("style_report: report 内容缺失");
+  if (!Array.isArray(r.semantic)) throw new Error("style_report: semantic 应为数组");
+  console.log("novel_style_report: OK (" + r.chars + " chars, semantic " + r.semantic.length + ")");
+}
 
 // 清理缓存文件（保留状态文件）
 rmSync(testRoot, { recursive: true, force: true });
