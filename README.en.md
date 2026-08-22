@@ -10,6 +10,9 @@ English | [**中文**](./README.md)
 
 A novel-writing assistant plugin for **DeepSeek Harness (DSH)** (v2.6.0): chapter library management, sentence-pattern analysis, emotion purification & quantification, **12-axis vibe spectrum**, **style portrait report**, plot & settings management, local semantic search (0 token), webnovel signal detection, batch import, and AI-assisted continuation writing. Zero third-party dependencies on host. **Requires Node ≥ 22.3.**
 
+> **A note to non-Chinese users**: This plugin is designed specifically for Chinese-language novel analysis and writing — its core capabilities (sentence-pattern analysis, emotion quantification, imagery detection) and its built-in semantic model are all built and tuned for Chinese text. Fully supporting English or other languages alongside Chinese is beyond my current capability. I sincerely apologize for any inconvenience this may cause.
+
+
 ---
 
 ## Installation
