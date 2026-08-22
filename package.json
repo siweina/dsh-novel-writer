@@ -1,7 +1,7 @@
 {
   "name": "dsh-novel-writer",
   "version": "3.0.0",
-  "description": "小说写作助手插件（v3.0.0）：句式/情感/意象分析、伏笔设定管理、本地语义检索、氛围光谱、风格画像报告、文笔六维基线带与原创风格自检。",
+  "description": "小说写作助手 / Novel Writing Assistant for DeepSeek Harness — sentence/emotion/imagery analysis, 6-dim writing baseline band, 12-axis vibe spectrum, style report, local semantic search (0 token), plot & settings management.",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -40,5 +40,26 @@
   "license": "MIT",
   "engines": {
     "node": ">=22.3"
-  }
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "novel-writing",
+    "chinese-novel",
+    "writing-assistant",
+    "creative-writing",
+    "fiction",
+    "webnovel",
+    "ai-writing",
+    "text-analysis",
+    "semantic-search",
+    "style-analysis",
+    "sentence-analysis",
+    "emotion-analysis",
+    "vibe",
+    "quantification",
+    "story-plot",
+    "writing-tool"
+  ]
 }
