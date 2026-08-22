@@ -5,6 +5,16 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { apply } from "../lib/index.js";
 
+// v3.0.0：e2e 会写全局 state（lastRoot/容差等）——备份并在退出时恢复，避免污染用户配置
+const STATE_FILE = join(homedir(), ".dsh", "dsh-novel-writer", "state.json");
+const stateBackup = existsSync(STATE_FILE) ? readFileSync(STATE_FILE, "utf8") : null;
+process.on("exit", () => {
+  try {
+    if (stateBackup !== null) writeFileSync(STATE_FILE, stateBackup, "utf8");
+    else rmSync(STATE_FILE, { force: true });
+  } catch { /* 忽略 */ }
+});
+
 const testRoot = join(process.cwd(), ".e2e-test");
 rmSync(testRoot, { recursive: true, force: true });
 mkdirSync(join(testRoot, "novels", "测试"), { recursive: true });
