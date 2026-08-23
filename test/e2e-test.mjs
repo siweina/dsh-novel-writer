@@ -32,7 +32,7 @@ apply(ctx, { root: testRoot, sentenceAnalysis: { enabled: true, autoAnalyze: tru
 const defs = Object.fromEntries(registry.map((d) => [d.name, d]));
 const names = registry.map((d) => d.name);
 console.log("工具数:", names.length, names.join(", "));
-if (names.length !== 15) throw new Error("expected 15 tools (v2.5.0)");
+if (names.length !== 16) throw new Error("expected 16 tools (v3.1.0)");
 
 const exec = { agent: { session: { header: { cwd: testRoot } } } };
 
@@ -191,6 +191,57 @@ await handler({
 console.log("局域网 GET（allowLanState=true）:", res.status);
 if (res.status !== 200) throw new Error("allowLan route broken");
 
+
+// v3.1.0: POST 保存设定 → 自动创建创作资料（设定同步）
+{
+  const bodyStr = JSON.stringify({ creationProfiles: { "设定同步书": { worldview: "末日测试" } } });
+  const req = {
+    method: "POST", url: "/api/dsh-novel-writer/state",
+    socket: { remoteAddress: "127.0.0.1" },
+    headers: { host: "127.0.0.1:3080", origin: "http://127.0.0.1:3080" },
+    [Symbol.asyncIterator]: function () {
+      const chunks = [Buffer.from(bodyStr)]; let i = 0;
+      return { next: async () => (i < chunks.length ? { value: chunks[i++], done: false } : { done: true }) };
+    }
+  };
+  const res = { status: 0, body: "", writeHead(s) { this.status = s; }, end(b) { this.body = String(b); } };
+  await handler(req, res);
+  if (res.status !== 200) throw new Error("POST state broken: " + res.status);
+  const f = join(testRoot, "novels", "创作资料", "设定同步书", "创作设定.md");
+  if (!existsSync(f)) throw new Error("sync: 创作设定.md 未自动创建");
+  const c = readFileSync(f, "utf8");
+  if (!c.includes("世界观：末日测试")) throw new Error("sync: 设定未预填");
+  const cf = join(testRoot, "novels", "创作资料", "设定同步书", "主要人物设定.md");
+  if (existsSync(cf)) {
+    const cc = readFileSync(cf, "utf8");
+    if (cc.includes("【用户角色设定】")) throw new Error("sync: 无角色设定不应有角色段");
+  }
+  console.log("v3.1.0 设定同步: POST 自动建创作资料✓");
+}
+
+// v3.1.0: init 首次创建 → 主要人物设定.md 角色段同步（回归：角色设定不丢）
+{
+  await defs.novel_sentence_config.execute({ action: "set", creationProfiles: { "角色测试书": { worldview: "末世", characters: "女主：冷面剑客" } } }, exec);
+  await defs.novel_outline.execute({ book: "角色测试书", action: "init", root: testRoot }, exec);
+  const cf = join(testRoot, "novels", "创作资料", "角色测试书", "主要人物设定.md");
+  const cc = readFileSync(cf, "utf8");
+  if (!cc.includes("【用户角色设定】") || !cc.includes("女主：冷面剑客")) throw new Error("novel_outline: 首次 init 角色段缺失");
+  console.log("novel_outline: 首 init 角色段✓");
+}
+
+// v3.1.0: novel_outline 实际调用（初始化 + 大纲 + 钩子 + 未回填提醒）
+{
+  const def = defs.novel_outline;
+  if (!def) throw new Error("novel_outline not registered");
+  await def.execute({ book: "测试", action: "init", root: testRoot }, exec);
+  await def.execute({ book: "测试", action: "chapter", number: 1, title: "开篇", root: testRoot }, exec);
+  const st = await def.execute({ book: "测试", action: "read", file: "status", root: testRoot }, exec);
+  if (!String(st.content).includes("未回填钩子章节")) throw new Error("novel_outline: 未回填提醒缺失");
+  await def.execute({ book: "测试", action: "hook", number: 1, body: "结尾悬念。", root: testRoot }, exec);
+  const st2 = await def.execute({ book: "测试", action: "read", file: "status", root: testRoot }, exec);
+  if (String(st2.content).includes("未回填钩子章节")) throw new Error("novel_outline: 回填后仍提醒");
+  console.log("novel_outline: OK (init + outline + hook + remind)");
+}
 
 // v2.5.0: novel_style_report 实际调用（报告生成 + 字段完整性）
 {
