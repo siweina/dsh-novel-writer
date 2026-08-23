@@ -8,7 +8,7 @@ English | [**中文**](./README.md)
 [![GitHub release](https://img.shields.io/github/v/release/siweina/dsh-novel-writer.svg?style=flat-square)](https://github.com/siweina/dsh-novel-writer/releases)
 [![DSH plugin](https://img.shields.io/badge/DSH-plugin-4b8bbe.svg?style=flat-square)](https://github.com/deepseek-ai/deepseek-harness)
 
-A novel-writing assistant plugin for **DeepSeek Harness (DSH)** (v3.1.0): chapter library management, sentence-pattern analysis, emotion purification & quantification, **12-axis vibe spectrum**, **style portrait report**, **six-dimension style baseline band**, plot & settings management, local semantic search (0 token), webnovel signal detection, **original mode with creation files (bible/dynamic outline/hook backfill)**, batch import, and AI-assisted continuation writing. Zero third-party dependencies on host. **Requires Node ≥ 22.3.**
+A novel-writing assistant plugin for **DeepSeek Harness (DSH)** (v3.2.0): chapter library management, sentence-pattern analysis, emotion purification & quantification, **12-axis vibe spectrum**, **style portrait report**, **six-dimension style baseline band**, **writing sentinels (bridge/OOC/outline drift)**, plot & settings management, local semantic search (0 token), webnovel signal detection, **original mode with creation files (bible/dynamic outline/hook backfill)**, batch import, and AI-assisted continuation writing. Zero third-party dependencies on host. **Requires Node ≥ 22.3.**
 
 > **A note to non-Chinese users**: This plugin is designed specifically for Chinese-language novel analysis and writing — its core capabilities (sentence-pattern analysis, emotion quantification, imagery detection) and its built-in semantic model are all built and tuned for Chinese text. Fully supporting English or other languages alongside Chinese is beyond my current capability. I sincerely apologize for any inconvenience this may cause.
 
@@ -31,7 +31,7 @@ npm install dsh-novel-writer
 dsh plugin --profile web add github:siweina/dsh-novel-writer#main
 ```
 
-After installing, **restart the web app** to activate (host registers 15 tools + state/reveal routes; browser mounts the "Writing Assistant" sidebar toggle panel).
+After installing, **restart the web app** to activate (host registers 16 tools + state/reveal routes; browser mounts the "Writing Assistant" sidebar toggle panel).
 
 ---
 
@@ -45,11 +45,14 @@ After installing, **restart the web app** to activate (host registers 15 tools +
 6. **Worldview & pragmatics detection**: auto cultural-baseline detection with confidence; speechStyle title/honorifics/rituals/tone norms; genre & theme + webnovel signals.
 7. **Writing toolkit**: plot tracking / five settings tables (characters·locations·items·timeline·worldview) / chapter summaries / continuity audit / batch import / style check / continuation writing.
 8. **Per-tool UI toggles**: "Writing Assistant" sidebar panel (master + grouped tool toggles + feature toggles), plain-language labels, data-dir usage & semantic-engine status display.
-9. **Style Baseline (v3.1.0)**: Six writing metrics (syntactic complexity / modifier density / abstraction / action density / hedging / gap index) + per-chapter μ±σ baseline band; `novel_style_report` outputs the band, `novel_style_check` compares new chapters (in-band ✓ / out-of-band ⚠); per-metric ±% tolerance configurable in the sidebar (**recommended = 1.5× σ of the book's chapter variance**, rounded, clamped to ±10%~100%; leave blank to use recommended) — free theme, writing style kept inside the band.
+9. **Style Baseline**: Six writing metrics (syntactic complexity / modifier density / abstraction / action density / hedging / gap index) + per-chapter μ±σ baseline band; `novel_style_report` outputs the band, `novel_style_check` compares new chapters (in-band ✓ / out-of-band ⚠); per-metric ±% tolerance configurable in the sidebar (**recommended = 1.5× σ of the book's chapter variance**, rounded, clamped to ±10%~100%; leave blank to use recommended) — free theme, writing style kept inside the band.
+10. **Writing sentinels (v3.2.0)**: `novel_continuity_check` extended — ①**bridge check** (`chapter`: time jumps / semantic distance / character continuity / hook handoff, with quoted evidence) ②**OOC check** (`ooc`: per-character emotion baseline deviation) ③**outline drift** (`outline`: direction vs body keyword overlap); **brief mode** for report tools.
+11. **Original mode & creation files**: fill in creation settings in the sidebar (worldview/characters/forbidden/main conflict/genre/extras, blank = model decides, per-book profile library); novel_outline maintains creation files (bible/characters/outline/hooks/status), enforcing the bible → outline → hook chain with dynamic batches (10→20→30 chapters) to prevent plot jumps and OOC.
+12. **Experience & stats**: main panel **library stats** (per-book chapters/total chars/7-day active chars, 🔥 green), **🎬 demo** (built-in sample, no files, runs the 6-dim baseline), **📊 report history** (analysis/style-reports browsing); actionable error hints; slimmer tool descriptions.
 
 ---
 
-## Provided Tools (15)
+## Provided Tools (16)
 
 | Tool | Description |
 |------|-------------|
@@ -66,8 +69,9 @@ After installing, **restart the web app** to activate (host registers 15 tools +
 | `novel_plot` | Plot/foreshadowing tracker |
 | `novel_settings` | Settings management (+worldview) |
 | `novel_summary` | Chapter summaries |
-| `novel_continuity_check` | Continuity audit |
+| `novel_continuity_check` | Continuity audit + **bridge/OOC/outline sentinels** |
 | `novel_semantic_search` | Semantic search (local embedding, 0 token) |
+| `novel_outline` | **Creation-file management** (bible/characters/outline/hooks/status) |
 
 ---
 
@@ -91,6 +95,3 @@ Under `<library-root>/.novel-writer/`: `plots` / `settings` / `summaries` / `ana
 ## License
 
 [MIT](./LICENSE)
-
-- **Writing sentinels (v3.2.0)**: `novel_continuity_check` extended — ①**bridge check** (`chapter`: time jumps/semantic distance/character continuity/hook handoff, with quoted evidence) ②**OOC check** (`ooc`: per-character emotion baseline deviation) ③**outline drift** (`outline`: direction vs body keyword overlap); **brief mode** for report tools; main panel gains **library stats** (7-day active chars), **🎬 demo** (built-in sample, no files), **📊 report history**; actionable error hints; slimmer tool descriptions; unit tests + GitHub Actions packaging.
-- **Original mode**: fill in creation settings in the sidebar (worldview/characters/forbidden/main conflict/genre/extras, blank = model decides); novel_outline maintains creation files (bible/characters/outline/hooks/status), enforcing the bible → outline → hook chain with dynamic batches (10→20→30 chapters) to prevent plot jumps and OOC.
