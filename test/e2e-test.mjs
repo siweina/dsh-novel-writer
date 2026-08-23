@@ -236,6 +236,14 @@ if (res.status !== 200) throw new Error("allowLan route broken");
   console.log("novel_outline: 首 init 角色段✓");
 }
 
+// v3.2.0: 衔接检查模式（chapter 参数 + action/chapter 输出字段契约）
+{
+  const r = await defs.novel_continuity_check.execute({ book: "测试", chapter: "第02章", root: testRoot }, exec);
+  if (r.action !== "衔接") throw new Error("continuity: 衔接模式 action 缺失");
+  if (typeof r.chapter !== "string") throw new Error("continuity: chapter 输出缺失");
+  console.log("v3.2.0 衔接模式: OK (" + (r.candidates || []).length + " 候选)");
+}
+
 // v3.1.0: novel_outline 实际调用（初始化 + 大纲 + 钩子 + 未回填提醒）
 {
   const def = defs.novel_outline;

@@ -40,6 +40,12 @@
 - 读完每章后调用 §BT§novel_summary§BT§ add 保存 200-500 字摘要 + 关键事件 + 关键设定；
 - 续写长书时先 §BT§novel_summary§BT§ list 回忆剧情，再按需 §BT§novel_read§BT§ 细读。
 
+## 写作哨兵（v3.2.0，novel_continuity_check 扩展）
+- **衔接检查**（chapter 参数）：写完一章跑一次——四路检测（时间硬跳词表 / 上章结尾与本章开头语义距离（0 token embedding）/ 人物延续 / 上一章钩子承接），命中带原文引用；硬跳（三天后/一周后）必须补过渡，软跳（次日清晨）可接受；
+- **OOC 检测**（ooc 参数）：登记角色后对比每章该角色附近文本的情绪值 vs 全书基线（>2σ 或小样本 0.3），偏离先确认是否有剧情触发；
+- **大纲走偏**（outline 参数）：对照创作资料大纲方向行，重合率 <25% 提示可能偏离；
+- **报告精简**：novel_sentence_analysis / novel_style_report 传 brief:true 返回一句话结论；
+
 ## 伏笔登记表（v0.6.0 新增）
 
 - `novel_plot`：list / add / update / done / delete 管理伏笔与剧情钩子；
