@@ -217,6 +217,13 @@ if (res.status !== 200) throw new Error("allowLan route broken");
     if (cc.includes("【用户角色设定】")) throw new Error("sync: 无角色设定不应有角色段");
   }
   console.log("v3.1.0 设定同步: POST 自动建创作资料✓");
+  // v3.1.1: 删除设定 → 空壳文件夹同步删除
+  const bodyStr3 = JSON.stringify({ creationProfiles: { "设定同步书": null } });
+  const req3 = { method: "POST", url: "/api/dsh-novel-writer/state", socket: { remoteAddress: "127.0.0.1" }, headers: { host: "127.0.0.1:3080", origin: "http://127.0.0.1:3080" }, [Symbol.asyncIterator]: function () { const c = [Buffer.from(bodyStr3)]; let i = 0; return { next: async () => (i < c.length ? { value: c[i++], done: false } : { done: true }) }; } };
+  const res3 = { status: 0, body: "", writeHead(s) { this.status = s; }, end(b) { this.body = String(b); } };
+  await handler(req3, res3);
+  if (existsSync(join(testRoot, "novels", "创作资料", "设定同步书"))) throw new Error("sync: 空壳文件夹未删除");
+  console.log("v3.1.1 空壳删除: 设定删除后文件夹消失✓");
 }
 
 // v3.1.0: init 首次创建 → 主要人物设定.md 角色段同步（回归：角色设定不丢）

@@ -1,6 +1,6 @@
 {
   "name": "dsh-novel-writer",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "description": "小说写作助手 / Novel Writing Assistant for DeepSeek Harness — sentence/emotion/imagery analysis, 6-dim writing baseline band, 12-axis vibe spectrum, style report, original-creation mode with per-book profiles, local semantic search (0 token), plot & settings management.",
   "type": "module",
   "main": "lib/index.js",
