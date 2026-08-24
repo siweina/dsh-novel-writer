@@ -71,7 +71,7 @@
 
 ## 世界观用语规范（v0.9.0 新增）
 
-- **文化基准自动判断**：`novel_settings`（category=worldview，action=detect）扫描全书，按中西词表命中自动判断文化基准（western/eastern/mixed/unknown）并给出证据与置信度；
+- **文化基准自动判断**：`novel_settings`（category=worldview，action=detect）扫描全书，按中西词表命中自动判断文化基准（western/eastern/mixed/modern/unknown）并给出证据与置信度；
 - **用语规范登记**：detect 后可用 `novel_settings` add（category=worldview）登记：name（基准名）、basis（判断依据）、bannedWords（禁用词表）、recommended（替代词映射）、ritual（仪式规范，如"点烛不烧香"）；
 - **续写前检查**：动笔前先确认 worldview（detect 或人工指定），对照 bannedWords/recommended 用词，**并对照 speechStyle 检查说话方式**（称谓/客套/仪式/语气——不只管"词"，还管"怎么说话"）；
 - **语用级检查（v1.0.0）**：worldview 的 speechStyle 定义 title（称谓规范）/ honorBad（中式客套禁词）/ ritualBadPatterns（仪式通配，如"上X柱香"）/ tone（语气）；novel_continuity_check 会输出「语用冲突·客套 / 语用冲突·仪式 / 语用冲突·称谓」三类候选；
@@ -109,7 +109,7 @@ novel_sentence_analysis 的 emotion.quantification 是纯规则计算的数字�
 ## 语义隐性情感（v2.0.0）
 
 novel_sentence_analysis 的 emotion.quantification.semanticImplicit（semanticEmbedding 开启且模型可用时输出）：
-- **hits**：全书"词表外疑似意象段落"top 10——每条含情感标签（温暖/甜蜜/释然/幸福/温柔/眷恋/仰慕/压抑的愤怒/隐忍/悲伤/孤独/怅惘/失落/心碎/恐惧/焦虑/不安/厌恶/震惊/疏离/决绝/不舍/无奈/脆弱/苦涩，共 25 类原型）+ 余弦分数 + 章节；
+- **hits**：全书"词表外疑似意象段落"top 10——每条含情感标签（温暖/甜蜜/释然/幸福/温柔/眷恋/仰慕/压抑的愤怒/隐忍/悲伤/孤独/怅惘/失落/心碎/恐惧/焦虑/不安/厌恶/震惊/疏离/决绝/不舍/无奈/脆弱/苦涩/甜宠/悬疑/唯美/情欲，共 29 类原型）+ 余弦分数 + 章节；
 - **distribution**：各情感命中段落数分布；
 - 与规则意象表（雨/黄昏/攥紧衣角）互补：规则抓"已知载体"，语义抓"没有关键词但读起来就是那个情绪"的段落；
 - 用法：写复杂心理时，可据此感知全文的隐性情感基调（如 distribution 显示"脆弱 2/焦虑 2/失落 1" → 这本书表面中性、内里压抑），不用读全文。

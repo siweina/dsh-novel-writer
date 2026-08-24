@@ -49,7 +49,8 @@ function assertDshSchema(node, where) {
     const v = node[key];
     if (!SCHEMA_KEYWORDS.has(key)) continue;
     if (key === "additionalProperties" && typeof v !== "boolean") throw new Error(where + ".additionalProperties must be boolean: " + JSON.stringify(v).slice(0, 60));
-    if (key === "type" && typeof v !== "string") throw new Error(where + ".type must be string");
+    // v3.7.0：宿主不支持 type 数组（曾写 ["object","null"] 导致插件树加载失败）——schema type 必须是单字符串，e2e 必须拦住
+    if (key === "type" && typeof v !== "string") throw new Error(where + ".type must be a single string (type arrays are not supported by host): " + JSON.stringify(v).slice(0, 60));
     if (key === "properties") {
       if (v === null || typeof v !== "object") throw new Error(where + ".properties must be object");
       for (const field of Object.keys(v)) assertDshSchema(v[field], where + ".properties." + field);
@@ -68,13 +69,14 @@ for (const d of registry) {
 console.log("DSH schema 规则检查: 全部通过");
 
 // v3.5.0 #74：输出契约校验——additionalProperties:false 的工具，真实调用后返回键必须全在 schema 声明（防"新字段漏声明"回归）
-(async function outputContractCheck() {
+await (async function outputContractCheck() {
+  // v3.7.0：契约 IIFE 顶层 await——此前未 await，与分析段并发（首次分析 cache 断言竞态 flaky）
   const contractCalls = {
     novel_books: { root: testRoot },
     novel_chapters: { book: "测试", root: testRoot },
     novel_read: { book: "测试", chapter: "1", root: testRoot },
     novel_keywords: { book: "测试", root: testRoot },
-    novel_sentence_analysis: { book: "测试", brief: true, root: testRoot },
+    // novel_sentence_analysis 已从契约清单移除（v3.7.0：它会写缓存，与"首次分析 cache: miss"断言冲突；分析已有专门测试段）
     novel_sentence_config: { action: "get" },
     novel_style_check: { book: "测试", chapter: "第02章", root: testRoot },
     novel_plot: { book: "测试", root: testRoot },
@@ -95,6 +97,23 @@ console.log("DSH schema 规则检查: 全部通过");
     const props = new Set(Object.keys(sch.properties || {}));
     const missing = Object.keys(result || {}).filter((k) => !props.has(k));
     if (missing.length) { contractIssues++; console.log("契约 ✗ " + d.name + ": " + missing.join(",")); }
+    // v3.6.0：宿主级值类型断言（schema type 校验——get 未设置返回 null 必须被 ["object","null"] 放行）
+    const typeOk = (val, t) => {
+      if (Array.isArray(t)) return t.some((x) => typeOk(val, x));
+      if (t === "object") return val !== null && typeof val === "object" && !Array.isArray(val);
+      if (t === "array") return Array.isArray(val);
+      if (t === "null") return val === null;
+      if (t === "string") return typeof val === "string";
+      if (t === "boolean") return typeof val === "boolean";
+      if (t === "integer" || t === "number") return typeof val === "number";
+      return true;
+    };
+    for (const [k, ps] of Object.entries(sch.properties || {})) {
+      if (k in (result || {}) && !typeOk(result[k], ps.type)) {
+        contractIssues++;
+        console.log("契约类型 ✗ " + d.name + "." + k + ": 需要 " + JSON.stringify(ps.type) + " 实际 " + (result[k] === null ? "null" : typeof result[k]));
+      }
+    }
   }
   if (contractIssues > 0) throw new Error("输出契约未声明字段 " + contractIssues + " 处");
   console.log("输出契约检查: 全部通过");
@@ -364,6 +383,37 @@ if (res.status !== 200) throw new Error("allowLan route broken");
   if (!r.report || !String(r.report).includes("风格画像报告")) throw new Error("style_report: report 内容缺失");
   if (!Array.isArray(r.semantic)) throw new Error("style_report: semantic 应为数组");
   console.log("novel_style_report: OK (" + r.chars + " chars, semantic " + r.semantic.length + ")");
+}
+
+// v3.7.0 ⑤：覆盖缺口——import/new_chapter/semantic_search 成功路径 + config set/清除类型断言
+{
+  const mk = (bn, fname, txt) => {
+    mkdirSync(join(testRoot, "novels", bn), { recursive: true });
+    writeFileSync(join(testRoot, "novels", bn, fname), txt, "utf8");
+  };
+  mk("导入书", "第01章 开篇.md", "第一章正文内容。\n");
+  // import apply 成功路径
+  const imp = await defs.novel_import.execute({ src: join(testRoot, "novels", "导入书"), mode: "scan", root: testRoot }, exec);
+  if (!Array.isArray(imp.groups) || imp.groups.length === 0) throw new Error("import scan 空结果");
+  console.log("import scan: ✓ (" + imp.groups.length + " 组)");
+  // new_chapter 成功路径 + 章号归一拒绝
+  const nc = await defs.novel_new_chapter.execute({ book: "导入书", content: "新章正文", root: testRoot }, exec);
+  if (!nc.file || nc.number !== 2) throw new Error("new_chapter 失败: " + JSON.stringify(nc));
+  let dupRejected = false;
+  try { await defs.novel_new_chapter.execute({ book: "导入书", chapter: 2, root: testRoot }, exec); } catch (e) { dupRejected = String(e).includes("已存在"); }
+  if (!dupRejected) throw new Error("new_chapter 同号未拒绝");
+  console.log("new_chapter: ✓ (编号 2, 同号拒绝)");
+  // semantic_search 成功路径
+  const ss = await defs.novel_semantic_search.execute({ book: "导入书", query: "开篇内容", root: testRoot }, exec);
+  if (ss.available !== true) throw new Error("semantic_search 不可用: " + ss.message);
+  console.log("semantic_search: ✓ (" + ss.results.length + " 结果, " + ss.cache + ")");
+  // config set 空对象清除 + 类型断言（宿主级）
+  const cfgSet = await defs.novel_sentence_config.execute({ action: "set", styleTolerance: { complexity: { low: -10, high: 10 } }, root: testRoot }, exec);
+  if (typeof cfgSet.styleTolerance !== "object" || cfgSet.styleTolerance === null) throw new Error("config set 容差类型错");
+  const cfgClear = await defs.novel_sentence_config.execute({ action: "set", styleTolerance: {}, root: testRoot }, exec);
+  if (typeof cfgClear.styleTolerance !== "object" || Object.keys(cfgClear.styleTolerance).length !== 0) throw new Error("config 清除应输出空对象");
+  console.log("config set/清除: ✓ 类型断言过");
+  rmSync(join(testRoot, "novels", "导入书"), { recursive: true, force: true });
 }
 
 // 清理缓存文件（保留状态文件）

@@ -17,6 +17,11 @@ const checks = [
   ["「小姐，先歇下吧。」", "dialogue"],
   ["难道这就是结局？", "rhetoric-question"],
   ["快睡吧，明天还要上班。", "imperative"],   // v0.6.0：命令动词开头 + 吧
+  // v3.7.0 ⑥：补全九类（statement/question/exclamation/ellipsis 此前未覆盖）
+  ["他拿起桌上的杯子，喝了一口水。", "statement"],
+  ["你明天还会来吗？", "question"],
+  ["多安静啊！", "exclamation"],
+  ["……", "ellipsis"],
 ];
 for (const [text, expect] of checks) {
   const got = classifySentence(text).type;
