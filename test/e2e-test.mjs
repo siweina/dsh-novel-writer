@@ -6,7 +6,7 @@ import { homedir } from "node:os";
 import { apply } from "../lib/index.js";
 
 // v3.0.0：e2e 会写全局 state（lastRoot/容差等）——备份并在退出时恢复，避免污染用户配置
-const STATE_FILE = join(homedir(), ".dsh", "dsh-novel-writer", "state.json");
+const STATE_FILE = process.env.DSH_NOVEL_WRITER_STATE || join(homedir(), ".dsh", "dsh-novel-writer", "state.json"); // v3.6.0：env 隔离时备份/恢复不碰用户配置
 const stateBackup = existsSync(STATE_FILE) ? readFileSync(STATE_FILE, "utf8") : null;
 process.on("exit", () => {
   try {
@@ -15,7 +15,8 @@ process.on("exit", () => {
   } catch { /* 忽略 */ }
 });
 
-const testRoot = join(process.cwd(), ".e2e-test");
+// v3.6.0：cwd 无关——测试目录固定在 test 同级（任意目录运行不再污染工作区）
+const testRoot = join(import.meta.dirname, ".e2e-test");
 // v3.5.0 #75：测试隔离——env 覆盖 state 路径（不碰用户配置，SIGKILL 也无污染）
 process.env.DSH_NOVEL_WRITER_STATE = join(testRoot, "state-test.json");
 rmSync(testRoot, { recursive: true, force: true });
@@ -88,8 +89,9 @@ console.log("DSH schema 规则检查: 全部通过");
     const args = contractCalls[d.name];
     const sch = d.output?.schema;
     if (!args || !sch || sch.additionalProperties !== false) continue;
+    // v3.5.0 M20：调用失败不再静默跳过——任何故障都显式失败（防"全绿"假象）
     let result = null;
-    try { result = await d.execute(args, exec); } catch { continue; }
+    try { result = await d.execute(args, exec); } catch (e) { throw new Error("输出契约检查调用失败 " + d.name + ": " + String(e).slice(0, 120)); }
     const props = new Set(Object.keys(sch.properties || {}));
     const missing = Object.keys(result || {}).filter((k) => !props.has(k));
     if (missing.length) { contractIssues++; console.log("契约 ✗ " + d.name + ": " + missing.join(",")); }
@@ -239,6 +241,54 @@ await handler({
 console.log("局域网 GET（allowLanState=true）:", res.status);
 if (res.status !== 200) throw new Error("allowLan route broken");
 
+
+// v3.5.0 M23：核心路径补测
+{
+  // ① POST null 拒绝（400）
+  const nullReq = { method: "POST", url: "/api/dsh-novel-writer/state", socket: { remoteAddress: "127.0.0.1" }, headers: { host: "127.0.0.1:3080", origin: "http://127.0.0.1:3080" }, [Symbol.asyncIterator]: function () { const chunks = [Buffer.from("null")]; let i = 0; return { next: async () => (i < chunks.length ? { value: chunks[i++], done: false } : { done: true }) }; } };
+  const nullRes = { status: 0, body: "", writeHead(s) { this.status = s; }, end(b) { this.body = String(b); } };
+  const routeState = routes.find((r) => r.path === "/api/dsh-novel-writer/state");
+  await routeState.handler(nullReq, nullRes);
+  if (nullRes.status !== 400) throw new Error("POST null 应拒绝 400，实际 " + nullRes.status);
+  console.log("POST null 拒绝: ✓");
+  // ② OOC 哨兵模式（无登记角色 → 提示不崩）
+  const ooc = await defs.novel_continuity_check.execute({ book: "测试", ooc: true, root: testRoot }, exec);
+  if (ooc.action !== "OOC") throw new Error("ooc 模式 action 缺失");
+  console.log("OOC 哨兵: ✓ (" + ((ooc.advice || "").slice(0, 20)) + ")");
+  // ③ outline 哨兵模式
+  const ol = await defs.novel_continuity_check.execute({ book: "测试", outline: true, root: testRoot }, exec);
+  if (ol.action !== "大纲对照") throw new Error("outline 模式 action 缺失");
+  console.log("大纲哨兵: ✓");
+  // ④ read 分页（offset/limit + truncated）
+  const rp = await defs.novel_read.execute({ book: "测试", chapter: "第01章", offset: 1, limit: 1, root: testRoot }, exec);
+  if (rp.lines.length !== 1) throw new Error("read 分页 limit 失效");
+  console.log("read 分页: ✓ (" + rp.lines.length + " 行, truncated=" + rp.truncated + ")");
+  // ⑤ settings timeline update 按 day 双查（M10）
+  await defs.novel_settings.execute({ book: "测试", category: "timeline", action: "add", day: "第1天", event: "穿越", root: testRoot }, exec);
+  const up = await defs.novel_settings.execute({ book: "测试", category: "timeline", action: "update", day: "第1天", event: "穿越后", root: testRoot }, exec);
+  if (!/更新|已更新|已修改/.test(up.message || "")) throw new Error("timeline update 失效: " + (up.message || ""));
+  console.log("timeline update: ✓");
+}
+
+// v3.5.0 M21b：detect 断言加固（西式/中式样本 → culture+evidence 非空）
+{
+  const mkBook = async (bn, text) => {
+    const dir = join(testRoot, "novels", bn);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, "第01章.md"), text, "utf8");
+  };
+  await mkBook("西式样本", "城堡的钟声响起，骑士在教堂前祈祷，公爵举起酒杯。\n");
+  await mkBook("中式样本", "老爷坐在堂前，丫鬟奉上香茶，小姐在庙里上香祈福。\n");
+  const detW = await defs.novel_settings.execute({ book: "西式样本", action: "detect", root: testRoot }, exec);
+  if (detW.culture !== "western" || !(detW.evidence?.western ?? []).length) throw new Error("西式 detect 失败: " + detW.culture);
+  console.log("detect 西式样本: ✓ " + detW.culture + " 证据 " + (detW.evidence.western || []).length + " 条");
+  const detC = await defs.novel_settings.execute({ book: "中式样本", action: "detect", root: testRoot }, exec);
+  if (detC.culture !== "eastern" || !(detC.evidence?.eastern ?? []).length) throw new Error("中式 detect 失败: " + detC.culture);
+  console.log("detect 中式样本: ✓ " + detC.culture + " 证据 " + (detC.evidence.eastern || []).length + " 条");
+  // 清理样本
+  rmSync(join(testRoot, "novels", "西式样本"), { recursive: true, force: true });
+  rmSync(join(testRoot, "novels", "中式样本"), { recursive: true, force: true });
+}
 
 // v3.1.0: POST 保存设定 → 自动创建创作资料（设定同步）
 {
