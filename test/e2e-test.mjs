@@ -16,6 +16,8 @@ process.on("exit", () => {
 });
 
 const testRoot = join(process.cwd(), ".e2e-test");
+// v3.5.0 #75：测试隔离——env 覆盖 state 路径（不碰用户配置，SIGKILL 也无污染）
+process.env.DSH_NOVEL_WRITER_STATE = join(testRoot, "state-test.json");
 rmSync(testRoot, { recursive: true, force: true });
 mkdirSync(join(testRoot, "novels", "测试"), { recursive: true });
 writeFileSync(join(testRoot, "novels", "测试", "第01章.md"), "雨下了一整夜。她站在窗前，心里想着明天的事。\n“你真的要走吗？”他低声问。\n难道这就是结局？她不禁这样想。\n", "utf8");
@@ -40,7 +42,8 @@ const exec = { agent: { session: { header: { cwd: testRoot } } } };
 const SCHEMA_KEYWORDS = new Set(["type", "properties", "required", "additionalProperties", "items", "enum", "const", "oneOf"]);
 const SCHEMA_BANNED = ["pattern", "format", "minimum", "maximum", "minLength", "maxLength", "minItems", "maxItems"];
 function assertDshSchema(node, where) {
-  if (node === null || typeof node !== "object" || Array.isArray(node)) return;
+  if (node === null || typeof node !== "object") return;
+  if (Array.isArray(node)) { node.forEach(function (item, i) { assertDshSchema(item, where + "[" + i + "]"); }); return; }
   for (const key of Object.keys(node)) {
     const v = node[key];
     if (!SCHEMA_KEYWORDS.has(key)) continue;
@@ -62,6 +65,51 @@ for (const d of registry) {
   if (d.output?.schema) assertDshSchema(d.output.schema, d.name + ".output");
 }
 console.log("DSH schema 规则检查: 全部通过");
+
+// v3.5.0 #74：输出契约校验——additionalProperties:false 的工具，真实调用后返回键必须全在 schema 声明（防"新字段漏声明"回归）
+(async function outputContractCheck() {
+  const contractCalls = {
+    novel_books: { root: testRoot },
+    novel_chapters: { book: "测试", root: testRoot },
+    novel_read: { book: "测试", chapter: "1", root: testRoot },
+    novel_keywords: { book: "测试", root: testRoot },
+    novel_sentence_analysis: { book: "测试", brief: true, root: testRoot },
+    novel_sentence_config: { action: "get" },
+    novel_style_check: { book: "测试", chapter: "第02章", root: testRoot },
+    novel_plot: { book: "测试", root: testRoot },
+    novel_settings: { book: "测试", action: "list", category: "character", root: testRoot },
+    novel_summary: { book: "测试", root: testRoot },
+    novel_continuity_check: { book: "测试", chapter: "第02章", root: testRoot },
+    novel_style_report: { book: "测试", brief: true, root: testRoot },
+    novel_outline: { book: "测试", action: "read", file: "status", root: testRoot }
+  };
+  let contractIssues = 0;
+  for (const d of registry) {
+    const args = contractCalls[d.name];
+    const sch = d.output?.schema;
+    if (!args || !sch || sch.additionalProperties !== false) continue;
+    let result = null;
+    try { result = await d.execute(args, exec); } catch { continue; }
+    const props = new Set(Object.keys(sch.properties || {}));
+    const missing = Object.keys(result || {}).filter((k) => !props.has(k));
+    if (missing.length) { contractIssues++; console.log("契约 ✗ " + d.name + ": " + missing.join(",")); }
+  }
+  if (contractIssues > 0) throw new Error("输出契约未声明字段 " + contractIssues + " 处");
+  console.log("输出契约检查: 全部通过");
+})();
+
+// v3.5.0 三轮：5 个工具的开关门禁断言（关开关 → 拒绝并提示）
+{
+  const gatedTools = ["novel_settings", "novel_summary", "novel_continuity_check", "novel_style_report", "novel_semantic_search"];
+  for (const t of gatedTools) {
+    await defs.novel_sentence_config.execute({ action: "set", tools: { [t]: false } }, exec);
+    let rejected = false;
+    try { await defs[t].execute({ book: "测试", root: testRoot }, exec); } catch (e) { rejected = String(e).includes("关闭"); }
+    if (!rejected) throw new Error("开关门禁失败: " + t);
+    await defs.novel_sentence_config.execute({ action: "set", tools: { [t]: true } }, exec);
+  }
+  console.log("开关门禁: 5 工具全部拒绝 ✓");
+}
 
 // 1) 分析 + 缓存（第一次 miss，第二次 hit）
 const first = await defs.novel_sentence_analysis.execute({ book: "测试" }, exec);

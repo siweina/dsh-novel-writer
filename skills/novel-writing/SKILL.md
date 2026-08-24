@@ -17,6 +17,9 @@
    - **写作手法**：叙事视角、节奏、对话、环境与细节描写、比喻意象、留白；
    - **关键词与意象**：结合 novel_keywords 的结果，指出作者反复使用的词汇与意象，并引用具体章节佐证。
 
+## 语义检索（0 token）
+- **novel_semantic_search**：自然语言检索全书语义相关段落（本地 embedding，无需关键词命中）。找"与血统秘密相关的段落""女主压抑克制的时刻"这类模糊描述时优先用它。
+
 ## 句式模式分析（v0.5.0 合并 + v0.6.0 增强）
 
 - 九类句式：陈述/环境/心理/对话/疑问/反问/感叹/祈使/省略留白；
@@ -31,26 +34,26 @@
 
 ## 设定管理（v0.8.0 新增）
 
-- §BT§novel_settings§BT§：五张表（人物卡/地点卡/道具清单/时间线/世界观用语规范），list/add/update/delete/scan/detect；
+- `novel_settings`：五张表（人物卡/地点卡/道具清单/时间线/世界观用语规范），list/add/update/delete/scan/detect；
 - 登记新人物/新地点/道具去向，时间线记录"第几天/倒计时"；
-- §BT§novel_continuity_check§BT§：续写前跑一次，输出设定矛盾候选（数字口径/人物缺场/别名/重复）。
+- `novel_continuity_check`：续写前跑一次，输出设定矛盾候选（数字口径/人物缺场/别名/重复）。
 
 ## 章节摘要（v0.8.0 新增）
 
-- 读完每章后调用 §BT§novel_summary§BT§ add 保存 200-500 字摘要 + 关键事件 + 关键设定；
-- 续写长书时先 §BT§novel_summary§BT§ list 回忆剧情，再按需 §BT§novel_read§BT§ 细读。
+- 读完每章后调用 `novel_summary` add 保存 200-500 字摘要 + 关键事件 + 关键设定；
+- 续写长书时先 `novel_summary` list 回忆剧情，再按需 `novel_read` 细读。
 
 ## 写作哨兵（v3.2.0，novel_continuity_check 扩展）
 - **衔接检查**（chapter 参数）：写完一章跑一次——四路检测（时间硬跳词表 / 上章结尾与本章开头语义距离（0 token embedding）/ 人物延续 / 上一章钩子承接），命中带原文引用；硬跳（三天后/一周后）必须补过渡，软跳（次日清晨）可接受；
 - **OOC 检测**（ooc 参数）：登记角色后对比每章该角色附近文本的情绪值 vs 全书基线（>2σ 或小样本 0.3），偏离先确认是否有剧情触发；
-- **大纲走偏**（outline 参数）：对照创作资料大纲方向行，重合率 <25% 提示可能偏离；
+- **大纲走偏**（outline 参数）：对照创作资料大纲方向行，重合率 <12% 提示可能偏离；
 - **报告精简**：novel_sentence_analysis / novel_style_report 传 brief:true 返回一句话结论；
 
 ## 伏笔登记表（v0.6.0 新增）
 
 - `novel_plot`：list / add / update / done / delete 管理伏笔与剧情钩子；
 - 续写前先 `novel_plot list` 查看未回收伏笔，续写中主动回收；
-- 存储于 `<书库根>/.novel-writer/<书名>.json`。
+- 存储于 `<书库根>/.novel-writer/plots/<书名>.json`。
 
 ## 续写工作流
 
@@ -68,12 +71,12 @@
 
 ## 世界观用语规范（v0.9.0 新增）
 
-- **文化基准自动判断**：§BT§novel_settings§BT§（category=worldview，action=detect）扫描全书，按中西词表命中自动判断文化基准（western/eastern/mixed/unknown）并给出证据与置信度；
-- **用语规范登记**：detect 后可用 §BT§novel_settings§BT§ add（category=worldview）登记：name（基准名）、basis（判断依据）、bannedWords（禁用词表）、recommended（替代词映射）、ritual（仪式规范，如"点烛不烧香"）；
+- **文化基准自动判断**：`novel_settings`（category=worldview，action=detect）扫描全书，按中西词表命中自动判断文化基准（western/eastern/mixed/unknown）并给出证据与置信度；
+- **用语规范登记**：detect 后可用 `novel_settings` add（category=worldview）登记：name（基准名）、basis（判断依据）、bannedWords（禁用词表）、recommended（替代词映射）、ritual（仪式规范，如"点烛不烧香"）；
 - **续写前检查**：动笔前先确认 worldview（detect 或人工指定），对照 bannedWords/recommended 用词，**并对照 speechStyle 检查说话方式**（称谓/客套/仪式/语气——不只管"词"，还管"怎么说话"）；
 - **语用级检查（v1.0.0）**：worldview 的 speechStyle 定义 title（称谓规范）/ honorBad（中式客套禁词）/ ritualBadPatterns（仪式通配，如"上X柱香"）/ tone（语气）；novel_continuity_check 会输出「语用冲突·客套 / 语用冲突·仪式 / 语用冲突·称谓」三类候选；
 - **示例**（欧式中世纪）：Miss+名（不用"XX小姐"）、不写"提点/承蒙/在下"、宗教点烛不烧香/不"上柱香"、对话口语化不文言；
-- **自动化审计**：§BT§novel_continuity_check§BT§ 会自动扫描禁用词命中，输出「用语冲突」候选（含建议替换词）；
+- **自动化审计**：`novel_continuity_check` 会自动扫描禁用词命中，输出「用语冲突」候选（含建议替换词）；
 - **时代错置分类**（词表按此组织）：器物 / 称谓 / 计量 / 宗教仪式 / 市井风貌 / 服饰 / 食物 / 制度；
 - **参考资料**（写作时校对）：
   - Medieval Wordbook（Madeleine Pelner Cosman）
@@ -84,7 +87,7 @@
 ## 情感可信度与 AI 复核（v1.5.0）
 
 - novel_sentence_analysis 返回 emotion 含 `dominant`（raw）与 `cleanDominant`（仅强情绪词）与 `confidence`（high/medium/low）与 `caveat`（污染警告）与 `aiAction`（明确指令）；
-- **当 `caveat` 非空（confidence=low，检测到高密度成人向/战斗/恐怖描写）时，你必须执行 `aiAction`**：用 §BT§novel_read§BT§ 抽查 2-3 段原文，复核真实情感基调后，在结论中同时给出"插件预警"与"AI 复核结果"，不得直接采信 dominant；
+- **当 `caveat` 非空（confidence=low，检测到高密度成人向/战斗/恐怖描写）时，你必须执行 `aiAction`**：用 `novel_read` 抽查 2-3 段原文，复核真实情感基调后，在结论中同时给出"插件预警"与"AI 复核结果"，不得直接采信 dominant；
 - 例如：某作品 raw 主导"喜"但 clean 主导"哀"且成人向词密度超标 → 插件报 low + 警告，AI 抽查后应判断"整体基调为哀伤，'喜'来自感官反应词"；
 - 功能开关（侧边栏「写作助手功能」面板或 novel_sentence_config）：emotionCaveat（情感净化预警）/ genreTheme（题材与流派检测），关闭后对应输出消失。
 
@@ -122,7 +125,7 @@ novel_sentence_analysis 的 emotion.quantification.semanticImplicit（semanticEm
 - 分析/续写前先跑 novel_style_report：输出 6 维测量数据（文风指纹/高频词汇/题材流派/情感量化/氛围光谱 12 轴/语义风格距离），插件不贴标签；
 - **风格基线（v3.0.0）**：novel_style_report 额外输出「文笔六维基线带」（句法复杂度/修饰密度/抽象度/动作密度/不确定性/留白指数，按章节 μ±σ）；
   原创或风格模仿时：① 先读原书基线带 → ② 动笔前声明本书基线（默认取原书 μ±σ，可声明有意偏移，如“节奏加快一档”）→ ③ 每章写完跑 novel_style_check，对照「文笔六维对照」节，出带（超出 ±容差）的维度定向修正后再续写；
-  容差带（允许低于/高于基线的百分比）可在侧边栏「写作助手功能 → 风格基线」调整，默认 ±15%；主题/情节/人物完全自由，基线只管写法层面。
+  容差带（允许低于/高于基线的百分比）可在侧边栏「写作助手功能 → 风格基线」调整，默认推荐 = 原著章节波动的 1.5σ（每维独立，下限 ±15% 兜底）；主题/情节/人物完全自由，基线只管写法层面。
 - AI 结合数据给出风格气质判断，通过 aiJudgment 参数回传（插件存入 .novel-writer/style-reports/，后续 action=get 读取）；续写时参考已保存判断保持风格一致。
 
 ## 原创模式（v3.1.0）

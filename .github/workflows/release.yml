@@ -17,13 +17,15 @@ jobs:
           registry-url: https://registry.npmjs.org/
       - name: Install zip
         run: sudo apt-get install -y zip
+      - name: Install dependencies
+        run: npm ci --omit=dev || npm install --omit=dev
       - name: Get version
         id: ver
         run: echo "VERSION=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
       - name: Prepare bundle
         run: |
           mkdir -p dist
-          rsync -a --exclude='.github' --exclude='dist' --exclude='*.zip' --exclude='node_modules' --exclude='.e2e-test' --exclude='.git' --exclude='.novel-writer' ./ dist/dsh-novel-writer-v${{ steps.ver.outputs.VERSION }}/
+          rsync -a --exclude='.github' --exclude='dist' --exclude='*.zip' --exclude='.e2e-test' --exclude='.git' --exclude='.novel-writer' ./ dist/dsh-novel-writer-v${{ steps.ver.outputs.VERSION }}/
       - name: Create zip
         run: cd dist && zip -r ../dsh-novel-writer-v${{ steps.ver.outputs.VERSION }}.zip dsh-novel-writer-v${{ steps.ver.outputs.VERSION }}
       - name: Upload artifact

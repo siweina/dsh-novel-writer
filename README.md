@@ -8,7 +8,7 @@
 [![GitHub release](https://img.shields.io/github/v/release/siweina/dsh-novel-writer.svg?style=flat-square)](https://github.com/siweina/dsh-novel-writer/releases)
 [![DSH plugin](https://img.shields.io/badge/DSH-plugin-4b8bbe.svg?style=flat-square)](https://github.com/deepseek-ai/deepseek-harness)
 
-为 **DeepSeek Harness (DSH)** 打造的小说写作助手插件：章节库管理、句式分析、情感净化与量化、氛围光谱、**风格画像报告**、**文笔六维基线带**、**写作哨兵三件套（衔接/OOC/大纲走偏）**、伏笔设定管理、本地语义检索（0 token）、网文信号识别、**原创模式与创作资料管理（设定书/动态大纲/钩子回填）**、批量导入与 AI 续写辅助。宿主端零第三方依赖，浏览器端仅依赖 Web GUI 自带的 react。**要求 Node ≥ 22.3。**
+为 **DeepSeek Harness (DSH)** 打造的小说写作助手插件：章节库管理、句式分析、情感净化与量化、氛围光谱、**风格画像报告**、**文笔六维基线带**、**写作哨兵三件套（衔接/OOC/大纲走偏）**、伏笔设定管理、本地语义检索（0 token）、网文信号识别、**原创模式与创作资料管理（设定书/动态大纲/钩子回填）**、批量导入与 AI 续写辅助。语义引擎依赖 `onnxruntime-web` 与 `@huggingface/tokenizers`（随包自动安装），浏览器端仅依赖 Web GUI 自带的 react。**要求 Node ≥ 22.3。**
 
 > **致非中文用户**：本插件为中文小说分析写作而设计——句式、情感、意象等核心能力以及内置的语义模型，全部针对中文语料构建与调优。在深耕中文的同时兼顾英文等其他语言，确实超出了我目前的能力范围。若因此给您带来不便，我深感抱歉，恳请谅解。
 
@@ -39,7 +39,7 @@ dsh plugin --profile web add github:siweina/dsh-novel-writer#main
 
 1. **风格画像报告**（novel_style_report）：6 维测量报告——文风指纹 / 高频词汇 / 题材流派 / 情感量化 / 氛围光谱 12 轴 / 语义风格距离。**测量与判断分离**：插件只报数不贴标签，AI 判断可回传存盘（`.novel-writer/style-reports/`），续写保持风格一致。
 2. **氛围光谱 12 轴**：噩梦感 / 焦虑压抑 / 温馨治愈 / 甜宠日常 / 催泪虐心 / 黑暗残酷 / 悬疑神秘 / 热血激昂 / 荒诞无厘头 / 孤独疏离 / 文艺唯美 / 情欲暧昧——证据链可追溯，0 token。
-3. **本地语义引擎**：bge-small-zh 中文模型（23MB 随插件分发）本地 CPU 推理——`novel_semantic_search` 自然语言搜全书语义相关段落（带章节定位），语义级风格对比、语义隐性情感，懒加载 + 自动回退。
+3. **本地语义引擎**：bge-small-zh 中文模型（24MB 随插件分发）本地 CPU 推理——`novel_semantic_search` 自然语言搜全书语义相关段落（带章节定位），语义级风格对比、语义隐性情感，懒加载 + 自动回退。
 4. **句式模式分析**：九类句式分布、排列规律、句长节奏、情感曲线、风格指纹与节奏建议，带缓存与报告导出。
 5. **情感净化 + 量化**：强/弱情绪词分级、污染源检测、caveat 预警 + AI 复核；Valence 滑动窗口 → 方差 V / 斜率 Δ / 矛盾指数 C + 隐性意象载体。
 6. **世界观与语用检测**：文化基准自动判断（西/东/混合）+ 置信度；speechStyle 称谓/客套/仪式/语气规范；题材流派 + 网文信号。
