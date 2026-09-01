@@ -31,7 +31,7 @@ jobs:
       - name: Prepare bundle
         run: |
           mkdir -p dist
-          rsync -a --exclude='.github' --exclude='dist' --exclude='*.zip' --exclude='.e2e-test' --exclude='.git' --exclude='.novel-writer' ./ dist/dsh-novel-writer-v${{ steps.ver.outputs.VERSION }}/
+          rsync -a --exclude='.github' --exclude='dist' --exclude='*.zip' --exclude='.e2e-test' --exclude='.git' --exclude='.novel-writer' --exclude='_*.mjs' --exclude='.f39' --exclude='*.bak*' --exclude='.f3*' ./ dist/dsh-novel-writer-v${{ steps.ver.outputs.VERSION }}/
       - name: Create zip
         run: cd dist && zip -r ../dsh-novel-writer-v${{ steps.ver.outputs.VERSION }}.zip dsh-novel-writer-v${{ steps.ver.outputs.VERSION }}
       - name: Upload artifact

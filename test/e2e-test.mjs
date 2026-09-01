@@ -416,6 +416,53 @@ if (res.status !== 200) throw new Error("allowLan route broken");
   rmSync(join(testRoot, "novels", "导入书"), { recursive: true, force: true });
 }
 
+// v3.9.0 ⑯：render 层断言——宿主只把 render() 文本给模型看，关键字段必须出现在文本里（防止 value 有、模型看不到的回归）
+{
+  const mk = (bn, fname, txt) => {
+    mkdirSync(join(testRoot, "novels", bn), { recursive: true });
+    writeFileSync(join(testRoot, "novels", bn, fname), txt, "utf8");
+  };
+  mk("渲染书", "第01章.md", "雨下了一整夜。她站在窗前，心里想着明天的事。窗外风急，她深吸一口气，又缓缓叹了出来。\n她低声问：\"你真的要走吗？\"他摇了摇头，没有说话。难道这就是结局？她不禁这样想。");
+  mk("渲染书", "第02章.md", "日子照旧。她习惯了独自吃饭。窗外风急，雨打芭蕉。");
+  const nc2 = await defs.novel_new_chapter.execute({ book: "渲染书", content: "正文。", root: testRoot }, exec);
+  const ncText = defs.novel_new_chapter.output.render({}, nc2)[0].text;
+  for (const key of ["风格基线", "风格锚", "句式骨架", "强制流程"]) {
+    if (!ncText.includes(key)) throw new Error("new_chapter render 缺 " + key + " 字段");
+  }
+  console.log("render new_chapter: ✓ (基线/锚包/骨架/流程均在文本)");
+  const sc2 = await defs.novel_style_check.execute({ book: "渲染书", chapter: "第01章", root: testRoot }, exec);
+  const scText = defs.novel_style_check.output.render({}, sc2)[0].text;
+  if (sc2.fixAnchors && sc2.fixAnchors.length > 0) {
+    if (!scText.includes("对照修正")) throw new Error("style_check render 缺 fixAnchors 段落");
+    if (!scText.includes(sc2.fixAnchors[0].text.slice(0, 8))) throw new Error("style_check render 缺锚段文本");
+  }
+  console.log("render style_check: ✓ (fixAnchors 在文本)");
+  const sr2 = await defs.novel_style_report.execute({ book: "渲染书", root: testRoot }, exec);
+  const srText = defs.novel_style_report.output.render({}, sr2)[0].text;
+  if (Array.isArray(sr2.anchors) && sr2.anchors.length > 0) {
+    if (!srText.includes("风格锚")) throw new Error("style_report render 缺锚段标题");
+    if (!srText.includes(sr2.anchors[0].text.slice(0, 8))) throw new Error("style_report render 缺锚段文本");
+  }
+  if (Array.isArray(sr2.skeletons) && sr2.skeletons.length > 0) {
+    if (!srText.includes("句式骨架")) throw new Error("style_report render 缺骨架标题");
+  }
+  console.log("render style_report: ✓ (anchors/skeletons 在文本)");
+  // v3.9.0 复查 2：sentence_analysis render——情感量化/细节密度可见（动作链占比不再 ×100、语义标签用 top 字段）
+  const sa = await defs.novel_sentence_analysis.execute({ book: "渲染书", root: testRoot, fresh: true }, exec);
+  const saText = defs.novel_sentence_analysis.output.render({}, sa)[0].text;
+  if (saText.includes("10000.0%")) throw new Error("sentence_analysis render 动作链占比仍 ×100");
+  if (sa.emotion && sa.emotion.quantification && Object.keys(sa.emotion.quantification).length > 0) {
+    if (!saText.includes("情感量化")) throw new Error("sentence_analysis render 缺情感量化");
+    if (saText.includes("隐性情感句")) throw new Error("sentence_analysis render 仍有误导性的隐性情感句文案");
+  }
+  if (sa.density && typeof sa.density.actionChainRatio === "number" && saText.includes("动作链占比")) {
+    const m = saText.match(/动作链占比 ([0-9.]+)%/);
+    if (m && Number(m[1]) > 100) throw new Error("动作链占比仍超 100%: " + m[1]);
+  }
+  console.log("render sentence_analysis: ✓ (量化可见/占比不放大/文案干净)");
+  rmSync(join(testRoot, "novels", "渲染书"), { recursive: true, force: true });
+}
+
 // 清理缓存文件（保留状态文件）
 rmSync(testRoot, { recursive: true, force: true });
 console.log("\nALL E2E TESTS PASSED");
