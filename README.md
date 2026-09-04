@@ -90,6 +90,15 @@ dsh plugin --profile web add github:siweina/dsh-novel-writer#main
 
 `<书库根>/.novel-writer/`：`plots`（伏笔）/ `settings`（设定）/ `summaries`（摘要）/ `analysis`（分析报告）/ `audits`（审计）/ `embedding`（语义索引）/ `style-reports`（风格画像）。
 
+## 更新日志
+
+### v3.9.1（2026-09-05）
+
+- 🐛 修复：单章风格分析（语义隐性情感）此前按整书检索，会把其他章节的意象命中混入本章报告；现改为按章节范围检测与检索，越界的旧缓存会自动重算并写回，不再重复触发。
+- 🐛 修复：`brief=true` 精简模式此前仍返回完整报告与锚包，未达到省 token 的目的；现仅返回一行精简简报，并省略六维 `dimensions` / `semantic` / 锚点包等冗余字段。
+- 🔧 优化：简报按 `METRIC_ORDER` 顺序输出并使用中文维度标签，与完整报告口径一致。
+- 🧹 整理：`package.json` 去除 BOM、恢复规范排版，`description` 更新至 v3.9.1。
+
 ---
 
 ## 许可证
