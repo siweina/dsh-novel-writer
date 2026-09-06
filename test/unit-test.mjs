@@ -6,8 +6,17 @@ const ok = (name, cond) => { if (cond) { pass++; console.log("  ✓ " + name); }
 const m1 = measureStyleMetrics("她走了。他来了。雨停了。").metrics;
 ok("留白指数正常（非 100）", m1.gapIndex < 60, "gap=" + m1.gapIndex);
 ok("留白有省略号更高", measureStyleMetrics("她走了……他来了。").metrics.gapIndex > m1.gapIndex);
+// ①b v3.9.1 #1：连续句末标点并入同句（不再拆成孤立标点残片）；未完句/留白判定保持可用
+ok("连续叹号=1 句", measureStyleMetrics("太好了！！！").detail.sentenceCount === 1, "n=" + measureStyleMetrics("太好了！！！").detail.sentenceCount);
+ok("连续问号=1 句", measureStyleMetrics("真的？？").detail.sentenceCount === 1, "n=" + measureStyleMetrics("真的？？").detail.sentenceCount);
+ok("。。。跨句=2 句", measureStyleMetrics("他哭了。。。她笑了。").detail.sentenceCount === 2, "n=" + measureStyleMetrics("他哭了。。。她笑了。").detail.sentenceCount);
+ok("纯省略号句保留", measureStyleMetrics("她走了……\n他来了。").detail.sentenceCount === 2, "n=" + measureStyleMetrics("她走了……\n他来了。").detail.sentenceCount);
+// ①c v3.9.1 #2：修饰密度 X地 排除名词词素（原地/当地/土地…），真状语 X地 仍计
+ok("名词X地不计修饰", measureStyleMetrics("他站在原地。当地政府连夜开会。土地已经荒了。").detail.advMods === 0, "advMods=" + measureStyleMetrics("他站在原地。当地政府连夜开会。土地已经荒了。").detail.advMods);
+ok("状语X地仍计修饰", measureStyleMetrics("她慢慢地走。").detail.advMods === 1, "advMods=" + measureStyleMetrics("她慢慢地走。").detail.advMods);
 // ② recTol：1.5σ / mu=0 回退 15 / 上限 100
-const b = computeBaselineFromPerChapter([{ file: "a", metrics: m1 }, { file: "b", metrics: measureStyleMetrics("他站在原地。她回头看了一眼。").metrics }]);
+// v3.9.1 #2：基线样本用真状语"慢慢地走"（"原地"已不算修饰词，用它会让 modifier 维 mu=0）
+const b = computeBaselineFromPerChapter([{ file: "a", metrics: m1 }, { file: "b", metrics: measureStyleMetrics("她慢慢地走。她回头看了一眼。").metrics }]);
 const allOk = Object.values(b).every(v => typeof v.recTol === "number" && isFinite(v.recTol) && v.recTol >= 10 && v.recTol <= 100);
 ok("recTol 全部合法（10~100）", allOk);
 const noHedge = computeBaselineFromPerChapter([{ file: "x", metrics: measureStyleMetrics("他站在窗边。窗外是夜晚。").metrics }]);

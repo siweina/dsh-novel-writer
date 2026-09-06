@@ -90,15 +90,6 @@ After installing, **restart the web app** to activate (host registers 16 tools +
 
 Under `<library-root>/.novel-writer/`: `plots` / `settings` / `summaries` / `analysis` / `audits` / `embedding` / `style-reports`.
 
-## Changelog
-
-### v3.9.1 (2026-09-05)
-
-- 🐛 Fix: per-chapter style analysis (semantic implicit emotion) previously searched the whole book and leaked hits from other chapters into the report; it is now scoped to the chapter, and stale out-of-scope caches are recomputed and written back automatically.
-- 🐛 Fix: `brief=true` previously still returned the full report and anchor payload (token saving never worked); it now returns a single compact brief and omits `dimensions` / `semantic` / anchors / skeletons.
-- 🔧 Tweak: the brief now follows `METRIC_ORDER` with Chinese dimension labels, consistent with the full report.
-- 🧹 Chore: removed the BOM and normalized formatting in `package.json`; `description` bumped to v3.9.1.
-
 ---
 
 ## License

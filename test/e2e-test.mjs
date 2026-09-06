@@ -1,24 +1,23 @@
-// 端到端测试：10 工具注册、缓存、伏笔、风格自检、路由（v0.6.0）
+// v3.9.5 端到端测试：16 工具注册、缓存、伏笔、风格自检、路由、语用扫描（v0.6.0 起持续扩展）
 
 import { mkdirSync, writeFileSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
+import { tmpdir } from "node:os";
 import { apply } from "../lib/index.js";
 
-// v3.0.0：e2e 会写全局 state（lastRoot/容差等）——备份并在退出时恢复，避免污染用户配置
-const STATE_FILE = process.env.DSH_NOVEL_WRITER_STATE || join(homedir(), ".dsh", "dsh-novel-writer", "state.json"); // v3.6.0：env 隔离时备份/恢复不碰用户配置
+// v3.9.5 修正（H3）：先隔离 env、再解析 STATE_FILE——旧版在模块加载时先绑定了用户真实 ~/.dsh 路径，
+// 退出处理器可能写回/删除真实用户配置；testRoot 也移出仓库目录（不再在 test/ 下留残渣）
+const testRoot = join(tmpdir(), "dsh-novel-writer-e2e-" + process.pid + "-" + Date.now().toString(36));
+process.env.DSH_NOVEL_WRITER_STATE = join(testRoot, "state-test.json");
+const STATE_FILE = process.env.DSH_NOVEL_WRITER_STATE;
 const stateBackup = existsSync(STATE_FILE) ? readFileSync(STATE_FILE, "utf8") : null;
 process.on("exit", () => {
   try {
     if (stateBackup !== null) writeFileSync(STATE_FILE, stateBackup, "utf8");
     else rmSync(STATE_FILE, { force: true });
   } catch { /* 忽略 */ }
+  try { rmSync(testRoot, { recursive: true, force: true }); } catch { /* 忽略 */ }
 });
-
-// v3.6.0：cwd 无关——测试目录固定在 test 同级（任意目录运行不再污染工作区）
-const testRoot = join(import.meta.dirname, ".e2e-test");
-// v3.5.0 #75：测试隔离——env 覆盖 state 路径（不碰用户配置，SIGKILL 也无污染）
-process.env.DSH_NOVEL_WRITER_STATE = join(testRoot, "state-test.json");
 rmSync(testRoot, { recursive: true, force: true });
 mkdirSync(join(testRoot, "novels", "测试"), { recursive: true });
 writeFileSync(join(testRoot, "novels", "测试", "第01章.md"), "雨下了一整夜。她站在窗前，心里想着明天的事。\n“你真的要走吗？”他低声问。\n难道这就是结局？她不禁这样想。\n", "utf8");
@@ -461,6 +460,38 @@ if (res.status !== 200) throw new Error("allowLan route broken");
   }
   console.log("render sentence_analysis: ✓ (量化可见/占比不放大/文案干净)");
   rmSync(join(testRoot, "novels", "渲染书"), { recursive: true, force: true });
+}
+
+// v3.9.5 回归：H2/H1/L07/M03/M04/M11 修复验证
+{
+  // H2：novel_settings 参数 schema 必须声明 bannedWords/recommended（此前缺失导致 SKILL 流程走不通）
+  const sp = defs.novel_settings.parameters.properties;
+  if (!sp.bannedWords || !sp.recommended) throw new Error("novel_settings schema 缺 bannedWords/recommended（H2 未修）");
+  console.log("v3.9.5 schema: bannedWords/recommended 已声明 ✓");
+  // H1：功能关闭时输出仍满足 schema 顶层必填（totalChars 存在）且 render 无 undefined
+  await defs.novel_sentence_config.execute({ action: "set", enabled: false }, exec);
+  const saDisabled = await defs.novel_sentence_analysis.execute({ book: "测试" }, exec);
+  if (saDisabled.enabled !== false || typeof saDisabled.totalChars !== "number") throw new Error("disabled 分支缺 totalChars（H1 未修）");
+  const saDisabledText = defs.novel_sentence_analysis.output.render({}, saDisabled)[0].text;
+  if (saDisabledText.includes("undefined")) throw new Error("disabled render 仍含 undefined");
+  await defs.novel_sentence_config.execute({ action: "set", enabled: true }, exec);
+  console.log("v3.9.5 disabled 契约: totalChars 必填且渲染无 undefined ✓");
+  // L07：brief 命中/未命中文案一致
+  const bMiss = await defs.novel_sentence_analysis.execute({ book: "测试", brief: true, fresh: true }, exec);
+  const bHit = await defs.novel_sentence_analysis.execute({ book: "测试", brief: true }, exec);
+  if (bMiss.cache !== "miss" || bHit.cache !== "hit") throw new Error("brief 缓存路径异常: " + bMiss.cache + "/" + bHit.cache);
+  if (bMiss.brief !== bHit.brief) throw new Error("brief 命中/未命中文案不一致（L07 未修）");
+  console.log("v3.9.5 brief: miss === hit ✓");
+  // M03/M04：候选 detail 不得含 undefined；自定义 bannedWords（欧式中世纪）与 speechStyle（欧式基准）互不遮蔽
+  const ccFix = await defs.novel_continuity_check.execute({ book: "测试", root: testRoot }, exec);
+  const badDetail = ccFix.candidates.find((x) => x.detail && x.detail.includes("undefined"));
+  if (badDetail) throw new Error("候选 detail 含 undefined（M03/M04 未修）: " + badDetail.detail);
+  if (ccFix.candidates.filter((x) => x.type.startsWith("语用")).length === 0) throw new Error("语用候选缺失（speechEntry 未生效）");
+  console.log("v3.9.5 continuity: 无 undefined 候选且语用扫描生效 ✓ (" + ccFix.candidates.length + " 条)");
+  // M11：scan 按 category 分派（地点消息不再是人物候选）
+  const scanLoc = await defs.novel_settings.execute({ book: "测试", category: "location", action: "scan", root: testRoot }, exec);
+  if (!String(scanLoc.message).includes("地点")) throw new Error("scan location 未按类别分派（M11 未修）: " + scanLoc.message);
+  console.log("v3.9.5 scan 分派: " + scanLoc.message + " ✓");
 }
 
 // 清理缓存文件（保留状态文件）
