@@ -92,6 +92,33 @@ Under `<library-root>/.novel-writer/`: `plots` / `settings` / `summaries` / `ana
 
 ---
 
+## Dependencies, permissions and failure bounds
+
+**Runtime dependencies** (installed by `npm install`; all public packages):
+
+- `onnxruntime-web` ^1.24.3 — local ONNX inference (WASM backend) for semantic search and style distance;
+- `@huggingface/tokenizers` ^0.1.0 — tokenization (WASM);
+- peerDependency `react` ^18.2.0 — the browser half reuses the React shipped with the DSH Web GUI.
+
+**Local model**: `lib/models/` ships the quantized bge-small-zh-v1.5 model (~24MB ONNX) and its tokenizer
+(`tokenizer.json.gz`, decompressed on load). All inference runs on the local CPU; no text is uploaded.
+
+**Permissions and external services**:
+
+- Filesystem: only the user-chosen library root (`novels/`), its data directory (`<root>/.novel-writer/`)
+  and the plugin state file (`~/.dsh/dsh-novel-writer/state.json`).
+- Local HTTP: five routes registered inside the DSH Web GUI, loopback-only by default.
+- Network: the only outbound call is the GitHub Releases API (`api.github.com`) for update checks —
+  3s timeout, 24h cache, silent fallback; no manuscript content is sent.
+- Subprocesses: none, except opening the OS file manager with an argv array.
+- Lifecycle scripts: none.
+
+**Failure bounds**: semantic engine failure falls back to pure rule mode; cache/disk failures never block
+tool results; a plugin load failure cannot affect the DSH host process.
+
+**Compatibility**: Node.js >= 22.3 (`engines.node`); DSH >= 0.1.1-rc.2 (`dsh.engines.dsh`).
+
+---
 ## License
 
 [MIT](./LICENSE)

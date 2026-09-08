@@ -92,6 +92,38 @@ dsh plugin --profile web add github:siweina/dsh-novel-writer#main
 
 ---
 
+## 依赖、权限与失败边界
+
+**运行时依赖**（`npm install` 自动安装，均为公开包）：
+
+- `onnxruntime-web` ^1.24.3 —— 本地 ONNX 推理（WASM 后端），用于语义检索与语义风格距离；
+- `@huggingface/tokenizers` ^0.1.0 —— 中文分词（WASM）；
+- peerDependency：`react` ^18.2.0（浏览器端复用 DSH Web GUI 自带的 React，不额外打包）。
+
+**本地模型**：`lib/models/` 随包分发 bge-small-zh-v1.5 量化模型（约 24MB，ONNX）与分词器
+（`tokenizer.json.gz`，加载时解压）。全部推理在本机 CPU 完成，**不上传任何文本**。
+
+**权限与外部服务**：
+
+- 文件系统：只读写用户指定的书库根目录 `novels/` 与其数据目录 `<root>/.novel-writer/`，
+  以及插件自身的开关文件 `~/.dsh/dsh-novel-writer/state.json`；不访问其他路径。
+- 本地 HTTP：在 DSH Web GUI 内注册 5 条路由（state / reveal / reports / demo / update-check），
+  仅回环地址可访问；`allowLanState` 默认关闭，局域网访问默认拒绝。
+- 外部网络：唯一外呼是 GitHub Releases API（`api.github.com`）检查新版本——3 秒超时、24 小时缓存、
+  失败静默降级；请求不含任何书籍内容。
+- 子进程：无。唯一例外是打开系统文件管理器（Windows `explorer` / macOS `open` / Linux `xdg-open`），
+  以数组参数直调、不经 shell。
+- 生命周期脚本：无（无 preinstall / postinstall / prepare）。
+
+**失败边界**：
+
+- 语义引擎不可用（模型缺失或 WASM 初始化失败）时自动回退纯规则模式，其余功能不受影响；
+- 分析结果落盘失败不阻塞工具返回；缓存损坏按"无缓存"处理并重建；
+- 插件加载失败不影响 DSH 主进程：工具注册与提示词注入相互独立。
+
+**兼容范围**：Node.js >= 22.3（`engines.node`）；DSH >= 0.1.1-rc.2（`dsh.engines.dsh`）。
+
+---
 ## 许可证
 
 [MIT](./LICENSE)
