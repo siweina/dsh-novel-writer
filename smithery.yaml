@@ -1,0 +1,30 @@
+# Smithery 部署配置（https://smithery.ai/docs）
+# 本服务器是本地 stdio 进程：Smithery 用 npx 拉起，用户在网页上填的配置项会变成启动参数/环境变量。
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties:
+      root:
+        type: string
+        title: 小说库根目录（novels root）
+        description: >-
+          书库根目录，其下应为 novels/<书名>/第01章.md 的结构。
+          留空则依次回退到环境变量 DSH_NOVEL_WRITER_ROOT、当前工作目录。
+      stateFile:
+        type: string
+        title: 状态文件路径（可选）
+        description: >-
+          可选。插件状态文件（记录句式分析开关等）的绝对路径，
+          默认 ~/.dsh/dsh-novel-writer/state.json。
+    required: []
+  commandFunction: |-
+    (config) => ({
+      command: 'npx',
+      args: config.root
+        ? ['-y', '-p', 'dsh-novel-writer', 'dsh-novel-writer-mcp', '--root', config.root]
+        : ['-y', '-p', 'dsh-novel-writer', 'dsh-novel-writer-mcp'],
+      env: config.stateFile ? { DSH_NOVEL_WRITER_STATE: config.stateFile } : {}
+    })
+  exampleConfig:
+    root: /path/to/your/novels
