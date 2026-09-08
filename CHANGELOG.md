@@ -10,7 +10,8 @@
   bin 名（`dsh-novel-writer-mcp`）与包名（`dsh-novel-writer`）不同，直接 `npx dsh-novel-writer-mcp` 会 404；
 - `mcp/README.md` 去掉测试机器残留的绝对路径示例，改为 npx 与包内路径两种通用写法；
 - 新增 `mcpName`（package.json）、`server.json`、`.github/workflows/publish-mcp.yml`：
-  用 GitHub OIDC 免密钥发布到官方 MCP Registry，服务器名 `io.github.siweina/dsh-novel-writer`。
+  用 GitHub OIDC 免密钥发布到官方 MCP Registry，服务器名 `io.github.siweina/dsh-novel-writer`；
+- 仓库根目录新增 `smithery.yaml`（供 Smithery 目录直接读取仓库配置收录；该文件随下一个版本进压缩包）。
 
 功能与工具行为无任何变化。
 
