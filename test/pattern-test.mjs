@@ -1,5 +1,6 @@
 // 句式模式分析引擎测试（v0.6.0：九类 + 去噪 + 相似度；v3.9.1：祈使/否定/分块/人称回归）
-import { analyzeText, classifySentence, fingerprintSimilarity, styleDiffs, splitBlocks, splitSentences, valenceSeries } from "../lib/analysis.js";
+// v4.0.0：移除未使用的 splitSentences（全文件除 import 外无引用）
+import { analyzeText, classifySentence, fingerprintSimilarity, styleDiffs, splitBlocks, valenceSeries } from "../lib/analysis.js";
 
 const SAMPLE = `雨下了一整夜。她站在窗前，心里想着明天的事。
 “你真的要走吗？”他低声问。
@@ -60,9 +61,18 @@ console.log("v3.9.1 否定: fear=", negFear, "| 不开心 series/pos:", JSON.str
 if (!negOk) ok = false;
 
 // v3.9.1 #8：剩余单字第一人称统计 我/俺/咱 三者
-const fpRes = analyzeText("俺不想去。咱走吧。");
-console.log("第一人称(俺/咱)密度:", fpRes.style.firstPersonDensity, fpRes.style.firstPersonDensity > 0 ? "PASS" : "FAIL");
-if (!(fpRes.style.firstPersonDensity > 0)) ok = false;
+// v4.0.0：旧样本只含 俺/咱（注释却写"三者"）且只断言 >0——实现漏掉"我"照样全绿；改为定值断言。
+const fpSample = "我不想去。俺不想去。咱走吧。";
+const fpRes = analyzeText(fpSample);
+const fpExpect = Math.round((3 / fpRes.totalChars) * 1000 * 100) / 100;
+const fpOk = fpRes.style.firstPersonDensity === fpExpect && fpExpect > 0;
+console.log("第一人称(我/俺/咱)密度:", fpRes.style.firstPersonDensity, "期望:", fpExpect, fpOk ? "PASS" : "FAIL");
+if (!fpOk) ok = false;
+// 三个单字各自计 1 次（等长样本 → 密度应相等且为 200/千字）
+const fpSingles = ["我不想去。", "俺不想去。", "咱不想去。"].map((s) => analyzeText(s).style.firstPersonDensity);
+const fpSinglesOk = fpSingles.every((v) => v === 200);
+console.log("单字第一人称逐个计:", JSON.stringify(fpSingles), fpSinglesOk ? "PASS" : "FAIL");
+if (!fpSinglesOk) ok = false;
 
 // v3.9.1 #11：implicit 透出加权计数 negHits/posHits/ambHits（与比率同源）
 const impRes = analyzeText("雨打芭蕉，他攥紧拳头。").emotion.quantification.implicit;
@@ -78,9 +88,13 @@ if (truncRes.totalSentences !== 5 || !truncRes.guidance.includes("采样上限")
 // 相似度与偏差
 const r2 = analyzeText(SAMPLE);
 const sim = fingerprintSimilarity(r1, r2);
-console.log("指纹相似度(不同文本):", sim, sim >= 0 && sim <= 1 ? "PASS" : "FAIL");
-console.log("styleDiffs(自比):", styleDiffs(r1, r1).length === 0 ? "PASS" : "FAIL");
-if (styleDiffs(r1, r1).length !== 0) ok = false;
+// v4.0.0：旧版只 console.log PASS/FAIL，不落 ok——相似度回归成 NaN/-1/2 时日志写 FAIL 但退出码仍是 0（假绿）
+const simOk = typeof sim === "number" && Number.isFinite(sim) && sim >= 0 && sim <= 1;
+console.log("指纹相似度(不同文本):", sim, simOk ? "PASS" : "FAIL");
+if (!simOk) ok = false;
+const sdSelf = styleDiffs(r1, r1); // v4.0.0：合并重复调用（旧版算了两次）
+console.log("styleDiffs(自比):", sdSelf.length === 0 ? "PASS" : "FAIL");
+if (sdSelf.length !== 0) ok = false;
 
 // 情感曲线分段可调
 const r3 = analyzeText(SAMPLE.repeat(20), { curveSegments: 5 });

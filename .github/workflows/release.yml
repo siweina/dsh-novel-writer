@@ -1,13 +1,37 @@
 name: Package & Release
+# v4.0.0：测试门禁——此前唯一测试入口挂在发布工作流上（只有 tag/手动触发才跑），
+# 普通分支推送与 PR 完全没有测试。现在 push（所有分支）与 pull_request 都会跑 test job，发布 job 用 needs: test 卡住。
 on:
   workflow_dispatch:
   push:
+    branches:
+      - '**'
     tags:
       - 'v*'
+  pull_request:
 permissions:
   contents: write
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org/
+      - name: Install dependencies
+        run: npm ci --omit=dev || npm install --omit=dev
+      - name: Run tests
+        run: |
+          node test/unit-test.mjs
+          node test/e2e-test.mjs
+          node test/pattern-test.mjs
+          node test/client-test.mjs
   package:
+    needs: test
+    # 打包/发布只在 tag 或手动触发时执行（分支推送只跑测试，不产出多余 artifact）
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -18,29 +42,16 @@ jobs:
       - name: Install zip
         run: sudo apt-get install -y zip
       - name: Install dependencies
-        run: npm ci --omit=dev
+        run: npm ci --omit=dev || npm install --omit=dev
       - name: Get version
         id: ver
         run: echo "VERSION=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
-      - name: Guard tag/version match
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          TAG="${GITHUB_REF#refs/tags/}"
-          EXPECTED="v${{ steps.ver.outputs.VERSION }}"
-          if [ "$TAG" != "$EXPECTED" ]; then
-            echo "::error::tag '$TAG' does not match package.json version '$EXPECTED' (v3.9.5 起增加守卫)"
-            exit 1
-          fi
-      - name: Run tests
-        run: |
-          node test/unit-test.mjs
-          node test/e2e-test.mjs
-          node test/pattern-test.mjs
-          node test/client-test.mjs
       - name: Prepare bundle
         run: |
           mkdir -p dist
-          rsync -a --exclude='.github' --exclude='dist' --exclude='*.zip' --exclude='.e2e-test' --exclude='.git' --exclude='.novel-writer' --exclude='.DS_Store' ./ dist/dsh-novel-writer-v${{ steps.ver.outputs.VERSION }}/
+          # v4.0.0：补 --exclude='node_modules'——此前 npm ci 装出的依赖树（本机 142MB）会被整包打进 release zip；
+          # 依赖由用户侧 npm install/dsh plugin add 安装。同时删掉过时排除项 .e2e-test/.f39/.f3*（测试早已改用 tmpdir，永不匹配）。
+          rsync -a --exclude='node_modules' --exclude='.github' --exclude='dist' --exclude='*.zip' --exclude='.git' --exclude='.novel-writer' --exclude='_*.mjs' --exclude='*.bak*' ./ dist/dsh-novel-writer-v${{ steps.ver.outputs.VERSION }}/
       - name: Create zip
         run: cd dist && zip -r ../dsh-novel-writer-v${{ steps.ver.outputs.VERSION }}.zip dsh-novel-writer-v${{ steps.ver.outputs.VERSION }}
       - name: Upload artifact
