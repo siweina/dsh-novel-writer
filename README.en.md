@@ -15,19 +15,19 @@ exposed as a **stdio MCP server** for Claude Desktop / Cursor.
 
 ## Install
 
-`sh
+```sh
 dsh plugin --profile web add dsh-novel-writer
 # or
 npm install dsh-novel-writer
-`
+```
 
 Requires **Node >= 22.3**. Restart the web app; a "写作助手功能" panel appears in the sidebar.
 
 ## MCP server
 
-`sh
-node /path/to/node_modules/dsh-novel-writer/mcp/server.mjs --root /path/to/your/novels
-`
+```sh
+npx -y -p dsh-novel-writer dsh-novel-writer-mcp --root /path/to/your/novels
+```
 
 See [mcp/README.md](./mcp/README.md) for the Claude Desktop / Cursor config.
 

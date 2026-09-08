@@ -16,7 +16,10 @@ Claude Desktop、Cursor 等任何 MCP 客户端。
 ## 1. 快速开始
 
 ```bash
-# 直接以 stdio 服务器方式启动（书库根目录用 --root 指定）
+# 推荐：不用先安装，npx 直接拉起（-p 指定包名，bin 名为 dsh-novel-writer-mcp）
+npx -y -p dsh-novel-writer dsh-novel-writer-mcp --root /abs/path/to/novels-workspace
+
+# 或已装进项目后，直接用包内文件启动
 node /abs/path/to/dsh-novel-writer/mcp/server.mjs --root /abs/path/to/novels-workspace
 ```
 
@@ -46,19 +49,28 @@ printf '%s\n' \
 {
   "mcpServers": {
     "dsh-novel-writer": {
+      "command": "npx",
+      "args": ["-y", "-p", "dsh-novel-writer", "dsh-novel-writer-mcp", "--root", "/绝对路径/novels-workspace"]
+    }
+  }
+}
+```
+
+也可以不用 npx，直接把 `command` 写成 `node`、`args` 指向包内文件（需先 `npm install dsh-novel-writer`）：
+
+```json
+{
+  "mcpServers": {
+    "dsh-novel-writer": {
       "command": "node",
-      "args": [
-        "F:/doment/build/dsh-novel-writer-v4.0.0/mcp/server.mjs",
-        "--root",
-        "F:/doment/novels-workspace"
-      ]
+      "args": ["/绝对路径/node_modules/dsh-novel-writer/mcp/server.mjs", "--root", "/绝对路径/novels-workspace"]
     }
   }
 }
 ```
 
 `args` 里的路径必须是**绝对路径**；Windows 上可用正斜杠 `/`（无需转义），或用双反斜杠 `\\`。
-若 `node` 不在 PATH 中，把 `command` 写成 node 可执行文件的绝对路径（如 `"C:/Program Files/nodejs/node.exe"`）。
+若 `node` / `npx` 不在 PATH 中，把 `command` 写成可执行文件的绝对路径（如 `"C:/Program Files/nodejs/node.exe"`）。
 
 ### Cursor
 

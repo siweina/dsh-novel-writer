@@ -1,5 +1,19 @@
 # 更新日志（Changelog）
 
+## [4.1.1] - 2026-09-08
+
+**修复渲染 + 上架官方 MCP Registry**：
+
+- 修复 README.md / README.en.md / mcp/README.md 中代码围栏被误写成单反引号（`` `sh ``）的问题——
+  此前安装段与 MCP 段会整段渲染成正文，Release 说明里也出现过同样的 `# MCP 客户端` 巨型标题；
+- MCP 启动命令修正为实测可用的 `npx -y -p dsh-novel-writer dsh-novel-writer-mcp`：
+  bin 名（`dsh-novel-writer-mcp`）与包名（`dsh-novel-writer`）不同，直接 `npx dsh-novel-writer-mcp` 会 404；
+- `mcp/README.md` 去掉测试机器残留的绝对路径示例，改为 npx 与包内路径两种通用写法；
+- 新增 `mcpName`（package.json）、`server.json`、`.github/workflows/publish-mcp.yml`：
+  用 GitHub OIDC 免密钥发布到官方 MCP Registry，服务器名 `io.github.siweina/dsh-novel-writer`。
+
+功能与工具行为无任何变化。
+
 ## [4.1.0] - 2026-09-08
 
 **新增：stdio MCP 服务器**——把 16 个工具原样暴露给任何 MCP 客户端（Claude Desktop / Cursor 等），

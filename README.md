@@ -32,15 +32,15 @@
 
 **方式一：npm（推荐）**
 
-`sh
+```sh
 dsh plugin --profile web add dsh-novel-writer
-`
+```
 
 **方式二：从 GitHub 安装**
 
-`sh
+```sh
 dsh plugin --profile web add github:siweina/dsh-novel-writer#main
-`
+```
 
 **方式三：MCP（不用 DSH 也能用）** —— 见 [MCP 服务器](#mcp-服务器非-dsh-用户也能用)
 
@@ -48,9 +48,9 @@ dsh plugin --profile web add github:siweina/dsh-novel-writer#main
 
 ## 60 秒上手
 
-`sh
+```sh
 mkdir -p novels/我的小说     # 把章节文件放进去（第01章.md、第02章.md …）
-`
+```
 
 然后在对话里说：**"用 novel_style_report 给我的小说做一次风格画像"**，你会拿到：
 
@@ -139,12 +139,18 @@ fixAnchors：3 条原著锚段（对话 / 心理 / 描写各一条，供逐句�
 包里自带一个 **stdio MCP 服务器**（`mcp/server.mjs`），把 16 个工具原样暴露给任何 MCP 客户端，
 例如 Claude Desktop、Cursor。**它是跑在你自己电脑上的本地进程，不需要服务器、不需要联网、不需要常驻。**
 
+```bash
+npx -y -p dsh-novel-writer dsh-novel-writer-mcp --root /你的小说库路径
+```
+
+客户端配置示例（`claude_desktop_config.json` / Cursor `mcp.json`）：
+
 ```json
 {
   "mcpServers": {
     "dsh-novel-writer": {
-      "command": "node",
-      "args": ["/绝对路径/mcp/server.mjs", "--root", "/你的小说库路径"]
+      "command": "npx",
+      "args": ["-y", "-p", "dsh-novel-writer", "dsh-novel-writer-mcp", "--root", "/你的小说库路径"]
     }
   }
 }
