@@ -1,5 +1,18 @@
 # 更新日志（Changelog）
 
+## [4.1.0] - 2026-09-08
+
+**新增：stdio MCP 服务器**——把 16 个工具原样暴露给任何 MCP 客户端（Claude Desktop / Cursor 等），
+非 DSH 用户也能用。本地进程、零依赖、零联网，书库路径支持 --root / DSH_NOVEL_WRITER_ROOT / cwd。
+
+- 新增 `mcp/server.mjs`（手写 JSON-RPC 2.0，stub ctx 启动插件并捕获 16 个工具定义）；
+- 新增 `mcp/README.md`（客户端配置示例、工具清单、环境变量）；
+- 新增 `test/mcp-test.mjs`（35 项断言：握手 / 工具列表 / 真实调用 / 错误隔离 / stdout 纯净）；
+- package.json 增加 `bin.dsh-novel-writer-mcp` 与 files 中的 `mcp`；
+- README 首屏重写（定位「给网文作者的本地章节体检」、痛点对照表、真实输出示例、对比表）。
+
+验证：mcp-test 35/35；既有四套测试全绿；AST 扫描 0 语法错误 / 0 未定义引用。
+
 ## [4.0.1] - 2026-09-08
 
 本版本为 **DSH STORE 上架契约合规版本**，不改变任何功能行为：

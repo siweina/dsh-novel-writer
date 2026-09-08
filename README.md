@@ -1,37 +1,96 @@
-# 📚 dsh-novel-writer — 小说写作助手
+# 📚 dsh-novel-writer — 给网文作者的本地章节体检
 
-[**English**](./README.en.md) | 中文
+[English](./README.en.md) | 中文
 
 [![npm version](https://img.shields.io/npm/v/dsh-novel-writer.svg?style=flat-square&color=blue)](https://www.npmjs.com/package/dsh-novel-writer)
+[![npm downloads](https://img.shields.io/npm/dm/dsh-novel-writer.svg?style=flat-square&color=green)](https://www.npmjs.com/package/dsh-novel-writer)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%3E%3D22.3-339933.svg?style=flat-square)](https://nodejs.org)
+[![DSH](https://img.shields.io/badge/DSH-%E2%89%A50.1.1--rc.2-4b8bbe.svg?style=flat-square)](https://github.com/deepseek-ai/deepseek-harness)
 [![GitHub stars](https://img.shields.io/github/stars/siweina/dsh-novel-writer.svg?style=flat-square&color=orange)](https://github.com/siweina/dsh-novel-writer/stargazers)
-[![GitHub release](https://img.shields.io/github/v/release/siweina/dsh-novel-writer.svg?style=flat-square)](https://github.com/siweina/dsh-novel-writer/releases)
-[![DSH plugin](https://img.shields.io/badge/DSH-plugin-4b8bbe.svg?style=flat-square)](https://github.com/deepseek-ai/deepseek-harness)
 
-为 **DeepSeek Harness (DSH)** 打造的小说写作助手插件：章节库管理、句式分析、情感净化与量化、氛围光谱、**风格画像报告**、**文笔六维基线带**、**写作哨兵三件套（衔接/OOC/大纲走偏）**、伏笔设定管理、本地语义检索（0 token）、网文信号识别、**原创模式与创作资料管理（设定书/动态大纲/钩子回填）**、批量导入与 AI 续写辅助。语义引擎依赖 `onnxruntime-web` 与 `@huggingface/tokenizers`（随包自动安装），浏览器端仅依赖 Web GUI 自带的 react。**要求 Node ≥ 22.3。**
+**16 个工具，把"文风跑偏"变成可量化的数字。**
+句式 / 情感 / 风格基线全部**在本地算**：24MB 中文模型随包分发，**零 API 花费、正文不出本机**。
+为 DeepSeek Harness（DSH）打造；同一套能力也可作为 **MCP 服务器**给 Claude Desktop / Cursor 使用。
 
-> **致非中文用户**：本插件为中文小说分析写作而设计——句式、情感、意象等核心能力以及内置的语义模型，全部针对中文语料构建与调优。在深耕中文的同时兼顾英文等其他语言，确实超出了我目前的能力范围。若因此给您带来不便，我深感抱歉，恳请谅解。
-
+[安装](#安装) · [60 秒上手](#60-秒上手) · [看看输出](#看看输出长什么样) · [16 个工具](#提供的工具16-个) · [MCP 服务器](#mcp-服务器非-dsh-用户也能用)
 
 ---
+
+## 它解决什么问题
+
+| 你的困扰 | 这里给的答案 |
+|---|---|
+| "我续写的这段，读起来不像我自己写的" | **文笔六维基线**：从句法复杂度 / 修饰密度 / 抽象度 / 动作密度 / 不确定性 / 留白指数六个维度算出原著的 μ±σ，新章逐维对照，出带标 ⚠ |
+| "AI 说文风变了，但说不清哪儿变了" | **风格自检**：相似度 + 偏差清单（哪类句式多了、句长偏了多少、主导情绪有没有换） |
+| "分析小说要花钱调 API" | 语义检索与情感分析**全本地推理**，零 token 花费 |
+| "伏笔埋了忘了收" | **伏笔登记表**：add / list / scan / done，自动记录每条伏笔在哪些章被提到 |
+| "人物设定前后打架" | **设定五张表 + 连贯性审计**（衔接 / OOC / 大纲走偏三件套） |
+| "报告看不懂" | 全是**表格化数字 + 原文锚段**，可以直接截图分享 |
 
 ## 安装
 
 **方式一：npm（推荐）**
 
-```sh
+`sh
 dsh plugin --profile web add dsh-novel-writer
-# 或
-npm install dsh-novel-writer
-```
+`
 
 **方式二：从 GitHub 安装**
 
-```sh
+`sh
 dsh plugin --profile web add github:siweina/dsh-novel-writer#main
+`
+
+**方式三：MCP（不用 DSH 也能用）** —— 见 [MCP 服务器](#mcp-服务器非-dsh-用户也能用)
+
+要求 **Node ≥ 22.3**。安装后**重启 Web 应用**，侧边栏出现「写作助手功能」面板。
+
+## 60 秒上手
+
+`sh
+mkdir -p novels/我的小说     # 把章节文件放进去（第01章.md、第02章.md …）
+`
+
+然后在对话里说：**"用 novel_style_report 给我的小说做一次风格画像"**，你会拿到：
+
+```text
+全书 1329 字：六维基线 μ=句法复杂度:2.3 修饰密度:35.6 抽象度:0.5 动作密度:101.7 不确定性:2.1 留白指数:7.0
+推荐容差 25%/35%/100%…
 ```
 
-安装后**重启 web 应用**生效（宿主端注册 16 个工具与 state/reveal 路由，浏览器端挂载侧边栏「写作助手功能」开关面板）。
+## 看看输出长什么样
+
+**风格自检**（新章 vs 全书基线）：
+
+```text
+相似度 0.946 · verdict: high
+偏差清单：心理占比略多 · 对话占比略少 · 短句占比略少 · 主导情绪由 anger 变为 joy
+fixAnchors：3 条原著锚段（对话 / 心理 / 描写各一条，供逐句对照修正）
+```
+
+**语义检索**（自然语言，本地向量）：
+
+```text
+查询「与那盏没有点的灯有关的段落」→
+  第02章.md  0.619  对街那盏灯，亮了。
+  第01章.md  0.593  阿澈的目光越过老周的肩膀，落在对街那栋小楼上…
+```
+
+**段落结构**：共 34 段（对话 5 / 心理 0 / 混合 15 / 叙述 14）
+
+## 为什么不用在线 AI 写作工具
+
+| | 本插件 | 在线 AI 写作工具 | 通用文本分析库 |
+|---|---|---|---|
+| 正文是否离开本机 | **否** | 是 | 视实现 |
+| 花费 | **0（本地推理）** | 按 token 计费 | 自建 |
+| 中文小说专用 | **是** | 通用 | 否 |
+| 风格基线（μ±σ） | **有** | 少见 | 无 |
+| 与 DSH 集成 | **16 工具 + 侧边栏开关** | 无 | 无 |
+| 非 DSH 用户可用 | **可以（MCP）** | 可以 | 需自己封装 |
+
+> **致非中文用户**：本插件为中文小说分析写作而设计——句式、情感、意象等核心能力以及内置的语义模型，全部针对中文语料构建与调优。在深耕中文的同时兼顾英文等其他语言，确实超出了我目前的能力范围。若因此给您带来不便，我深感抱歉，恳请谅解。
 
 ---
 
@@ -72,6 +131,27 @@ dsh plugin --profile web add github:siweina/dsh-novel-writer#main
 | `novel_continuity_check` | 连贯性审计 + **衔接/OOC/大纲走偏哨兵** |
 | `novel_semantic_search` | 语义检索（本地 embedding，0 token） |
 | `novel_outline` | **创作资料管理**（创作设定/人物/大纲/钩子/状态卡） |
+
+---
+
+## MCP 服务器（非 DSH 用户也能用）
+
+包里自带一个 **stdio MCP 服务器**（`mcp/server.mjs`），把 16 个工具原样暴露给任何 MCP 客户端，
+例如 Claude Desktop、Cursor。**它是跑在你自己电脑上的本地进程，不需要服务器、不需要联网、不需要常驻。**
+
+```json
+{
+  "mcpServers": {
+    "dsh-novel-writer": {
+      "command": "node",
+      "args": ["/绝对路径/mcp/server.mjs", "--root", "/你的小说库路径"]
+    }
+  }
+}
+```
+
+书库根目录优先级：`--root` > 环境变量 `DSH_NOVEL_WRITER_ROOT` > 当前工作目录。
+细节见 [mcp/README.md](./mcp/README.md)。
 
 ---
 

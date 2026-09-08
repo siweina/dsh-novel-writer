@@ -1,17 +1,35 @@
-# 📚 dsh-novel-writer — Novel Writing Assistant
+# 📚 dsh-novel-writer — on-device style checkup for novel writers
 
-English | [**中文**](./README.md)
+English | [中文](./README.md)
 
 [![npm version](https://img.shields.io/npm/v/dsh-novel-writer.svg?style=flat-square&color=blue)](https://www.npmjs.com/package/dsh-novel-writer)
+[![npm downloads](https://img.shields.io/npm/dm/dsh-novel-writer.svg?style=flat-square&color=green)](https://www.npmjs.com/package/dsh-novel-writer)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)](LICENSE)
-[![GitHub stars](https://img.shields.io/github/stars/siweina/dsh-novel-writer.svg?style=flat-square&color=orange)](https://github.com/siweina/dsh-novel-writer/stargazers)
-[![GitHub release](https://img.shields.io/github/v/release/siweina/dsh-novel-writer.svg?style=flat-square)](https://github.com/siweina/dsh-novel-writer/releases)
-[![DSH plugin](https://img.shields.io/badge/DSH-plugin-4b8bbe.svg?style=flat-square)](https://github.com/deepseek-ai/deepseek-harness)
+[![Node](https://img.shields.io/badge/node-%3E%3D22.3-339933.svg?style=flat-square)](https://nodejs.org)
+[![DSH](https://img.shields.io/badge/DSH-%E2%89%A50.1.1--rc.2-4b8bbe.svg?style=flat-square)](https://github.com/deepseek-ai/deepseek-harness)
 
-A novel-writing assistant plugin for **DeepSeek Harness (DSH)**: chapter library management, sentence-pattern analysis, emotion purification & quantification, **12-axis vibe spectrum**, **style portrait report**, **six-dimension style baseline band**, **writing sentinels (bridge/OOC/outline drift)**, plot & settings management, local semantic search (0 token), webnovel signal detection, **original mode with creation files (bible/dynamic outline/hook backfill)**, batch import, and AI-assisted continuation writing. The semantic engine depends on `onnxruntime-web` and `@huggingface/tokenizers` (auto-installed with the package). **Requires Node ≥ 22.3.**
+**16 tools that turn "my writing drifted" into numbers you can act on.**
+Sentence, emotion and style-baseline analysis all run **on your machine**: a 24MB Chinese model ships with the package,
+**zero API cost, your manuscript never leaves the device**. Built for DeepSeek Harness (DSH); the same engine is also
+exposed as a **stdio MCP server** for Claude Desktop / Cursor.
 
-> **A note to non-Chinese users**: This plugin is designed specifically for Chinese-language novel analysis and writing — its core capabilities (sentence-pattern analysis, emotion quantification, imagery detection) and its built-in semantic model are all built and tuned for Chinese text. Fully supporting English or other languages alongside Chinese is beyond my current capability. I sincerely apologize for any inconvenience this may cause.
+## Install
 
+`sh
+dsh plugin --profile web add dsh-novel-writer
+# or
+npm install dsh-novel-writer
+`
+
+Requires **Node >= 22.3**. Restart the web app; a "写作助手功能" panel appears in the sidebar.
+
+## MCP server
+
+`sh
+node /path/to/node_modules/dsh-novel-writer/mcp/server.mjs --root /path/to/your/novels
+`
+
+See [mcp/README.md](./mcp/README.md) for the Claude Desktop / Cursor config.
 
 ---
 
