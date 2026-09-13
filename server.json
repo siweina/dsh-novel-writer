@@ -3,7 +3,7 @@
   "name": "io.github.siweina/dsh-novel-writer",
   "title": "dsh-novel-writer — 网文写作体检",
   "description": "Offline toolkit: 16 tools for Chinese web-novel style, plot-thread and continuity audits.",
-  "version": "4.1.1",
+  "version": "4.3.0",
   "repository": {
     "url": "https://github.com/siweina/dsh-novel-writer",
     "source": "github"
@@ -13,7 +13,41 @@
     {
       "registryType": "npm",
       "identifier": "dsh-novel-writer",
-      "version": "4.1.1",
+      "version": "4.3.0",
+      "runtimeHint": "npx",
+      "packageArguments": [
+        {
+          "type": "positional",
+          "valueHint": "package",
+          "value": "dsh-novel-writer",
+          "description": "npm 包名（npx 的首个位置参数）。包名 dsh-novel-writer 与 bin 名 dsh-novel-writer-mcp 不同名：必须显式给出包名，否则 `npx -y dsh-novel-writer` 找不到同名 bin、不会启动 MCP 服务器。等价写法 `npx -y -p dsh-novel-writer dsh-novel-writer-mcp`。"
+        },
+        {
+          "type": "positional",
+          "valueHint": "bin",
+          "value": "dsh-novel-writer-mcp",
+          "description": "要执行的 bin 名（package.json 的 bin 字段）。"
+        },
+        {
+          "type": "named",
+          "name": "--root",
+          "valueHint": "path",
+          "description": "书库根目录（其下为 novels/<书名>/第01章.md）。缺省时依次回退到环境变量 DSH_NOVEL_WRITER_ROOT、当前工作目录。",
+          "isRequired": false
+        }
+      ],
+      "environmentVariables": [
+        {
+          "name": "DSH_NOVEL_WRITER_ROOT",
+          "description": "书库根目录。优先级低于命令行 --root，高于当前工作目录。",
+          "isRequired": false
+        },
+        {
+          "name": "DSH_NOVEL_WRITER_STATE",
+          "description": "插件状态文件路径，默认 ~/.dsh/dsh-novel-writer/state.json。",
+          "isRequired": false
+        }
+      ],
       "transport": {
         "type": "stdio"
       }

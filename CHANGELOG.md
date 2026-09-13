@@ -1,5 +1,272 @@
 # 更新日志（Changelog）
 
+## [4.3.0] - 2026-09-13
+
+**全量缺陷整修（第二轮）**：对 v4.1.1 的 9 个源文件 + 测试 + 文档（约 11,600 行）逐行审计后，修复 **1 处 P0（会产生错误结果）+ 6 处 P1 + 21 处 P2 + 35 处 P3**，并完成 MCP 协议符合性与版本协商、更新检查状态、语义缓存与诊断文案、打包锁文件等收尾修复，以及 1 处联调期发现的提示误报修正。四套自带测试（unit / pattern / client / e2e）与 MCP 协议测试（67 项）全部通过。
+
+> 本版把原内部迭代 **4.2.0** 与 **4.2.1** 合并发布（两者均未对外发布）；源码注释里的 `v4.3.0：` 标记即本版改动。
+
+### 一、P0：会产生错误结果（1 处）
+
+1. **同一份报告里两个"主导情感"互相矛盾**（`lib/analysis.js`）
+   `cleanScoresOf` 仍用朴素 `indexOf` 逐词扫描，没有 v4.0.0 给 `emotionOf` 补的"最长匹配 + 区间消费"，
+   于是「悲痛 ⊂ 悲痛欲绝」这类嵌套强词被双计：分章计数得 `{sorrow:2, anger:1}`、句级得 `{anger:1, sorrow:1}`，
+   同一份 `novel_sentence_analysis` 输出里 `emotion.cleanDominant = anger` 与
+   `quantification.complexity.dominant = sorrow` 同时出现（实测输入 `"悲痛欲绝，他却只觉得愤怒。"`，
+   情感复杂度评分 0.42 → 修复后 0.57）。
+   **修法**：把"收集 → 按词长降序 → 区间消费"抽成 `scanEmotionHits()`，`emotionOf` 与 `cleanScoresOf` 共用同一份实现，从结构上消除两处口径漂移。
+
+### 二、P1：必修（6 处）
+
+2. **中文章号解析漏「千」→ 摘要静默覆盖**（`lib/core.js`）
+   `normalizeChapterKey` 的字符类缺「千」且未锚定，"第一千零一章" 会从"千"之后开始匹配、归一成 `第01章`
+   （实测与 `第01章` **键碰撞 = true**），而 `parseChapterNumber("第一千零一章.md")` 得 1001 —— 同输入两种口径。
+   `novel_summary` 以它作存储键，给第 1001 章写摘要会**覆盖第 1 章的摘要并回复"已保存"**。
+   **修法**：5 处章号正则的字符类统一补「千万」（`normalizeChapterKey` / `cleanChapterTitle` /
+   `nextFreeChapterFile` / `bookNameFromFileName` / `bookNameFromContent`）。
+
+3. **祈使句判定整类失配**（`lib/analysis.js`）
+   v4.0.0 给硬祈使词加的 `(?![\u4e00-\u9fa5])` 边界过严："放下刀！/ 小心点！/ 赶紧走！/ 给我滚！"
+   整类被判成「感叹」（直接扭曲句式分布，并经 `subjectivityIndex` 抬高主观性指数）；同时"别人。" 仍被判祈使
+   （CHANGELOG 曾宣称该类误判已归零，实为未收敛残留）。
+   **修法**：在严格规则后补一条受限的宽松规则（硬词 + 0~3 字宾语/补语 + 命令语气收尾），排除句首同形副词
+   「马上/立刻」与体标记（"注意到他了。"）；新增 `SINGLE_HARD_FALSE_POSITIVES` 黑名单
+   （别人/快乐/请柬/滚烫/莫大…）；顺带修正 `caller` 捕获组导致黑名单取错位置的问题。
+
+4. **六维基线 μ=0 的维度被静默跳过**（`lib/style-metrics.js`）
+   某维基线均值为 0 时旧版直接 `continue`：新章该维无论多离谱都不产生判定，`summary` 却仍宣称
+   "全部维度在容差带内 ✓"（实测 hedgeDensity / gapIndex 给到 50 被完全忽略，μ=0 的"零留白全书 + 满篇省略号新章"会被报成正常）。
+   **修法**：σ>0 时改用绝对尺度判定（`|v| > 1.5σ` → out，`basis:"absolute"`、`devPct:null`），
+   其余登记 `skippedDims` 并写进 summary；渲染层同步支持（不再打印 "null%"），无出带维度但有跳过维度时也会披露。
+
+5. **`chunkText` 遇 U+2028/U+2029 抛 TypeError**（`lib/embedding.js`）
+   `.` 不匹配这两个行分隔符，超长行 `match()` 返回 `null` → `for...of null` 抛
+   `TypeError: pieces is not iterable`，使整本书的语义检索 / 隐性情感 / 语义风格对比同时降级；
+   混在正常文本中的它们还会被静默丢弃（chunk 与原文不再逐字一致）。
+   **修法**：归一化阶段把 `\u2028/\u2029/\u0085` 一并转成 `\n`；切块正则改 `/[\s\S]{1,150}/g` 并保留 `|| [line]` 兜底。
+
+6. **内置技能 SKILL.md 从未被 DSH 加载**（`skills/novel-writing/SKILL.md` + `lib/index.js`）
+   该文件既没有 YAML frontmatter（`dsh-skill-filesystem` 会直接忽略并 warn），包内 `skills/` 又不在宿主枚举的
+   任何技能根下（`<project>/.dsh/skills`、`~/.dsh/skills`、`~/.agents/skills`…），插件也没注册 provider ——
+   默认「精简」档提示词里那句"详细规范见 novel-writing 技能"实际上指向一个查不到的技能（实测工具报 unknown）。
+   **修法**：补 frontmatter（name/description/whenToUse）；按官方 `dsh-skill-badge` 的写法在 `apply()` 中
+   `ctx.inject(["skills"], …)` 自注册 provider（只读包内 SKILL.md、不写用户目录、不需改宿主配置，
+   宿主没有 `skills` 服务时静默跳过）。**注意**：需重启 DSH 后技能才在会话目录中可见。
+
+7. **MCP 服务器的 root/src 可越权读写**（`mcp/server.mjs`）
+   工具参数里的 `root` 被原样放行——"只读写书库根目录"的承诺等于交给调用方决定；配合
+   `novel_import{src, mode:"apply", move:true}` 可把盘上任意目录的 `.md/.markdown/.txt` 复制进书库再读出，
+   `move` 还会删除源文件。README 原文"不访问其他路径"与实现不符。
+   **修法**：`root` 必须落在启动参数 `--root` 指定的书库根之内（越界则回退并记 stderr）；
+   `novel_import` 的 `src` 默认同样限根内，确需导入外部目录时用新增开关 `--allow-external-src`；
+   README 的「权限与外部服务」段落改正为与实现一致的表述。
+
+### 三、P2：逻辑错误 / 契约不一致 / 健壮性（21 处）
+
+**`lib/analysis.js` + `lib/style-metrics.js`（13 处）**
+
+8. `topWords` 与 `scores` 不同源（嵌套词重复计）：`"他悲痛欲绝，悲痛得说不出话。"` 旧版 scores.sorrow=2 而 topWords 合计 3 → 改为复用 `emotionOf` 的命中列表。
+9. `adverbWeight` 用 6 字窗口做子串匹配且跨标点：`"老太太高兴。"` joy 1.5→1、`"策略让他高兴。"` 0.6→1、`"太阳高照她很高兴。"` 1.5→1 → 改为按标点截断取当前小句 + 单字副词需紧邻。
+10. 否定白名单漏字：`X别 + 情感词`（别人/告别/级别…之外的 15 种组合）被整词丢弃 → 内联词素白名单补全。
+11. **分句口径三处不一致**：`TERMINATORS` 缺半角 `?!`，同一句 `"你疯了?我没疯!他走了。"` analysis 得 1 句、style-metrics 得 3 句 → 常量统一为 `"。！？…!?"` 并由两个文件共用（`style-metrics.js` 从 `analysis.js` 导入）。
+12. `splitBlocks` 的 `---` 分割线过滤只在"无空行"分支生效 → 提升到两分支之前（`"第一段。\n\n---\n\n第二段。"` 3 段 → 2 段）。
+13. `delta` 与 `deltaRobust` 采样基不同却共用 ±0.3 阈值（同一文本 -0.305 vs -1.4）→ 统一到全窗口序列并返回 `deltaBasis`。
+14. 空窗口被填成"效价 0"稀释 `adjVariance`（真实跳变 1.6 被算成 0.278）→ 加 `hasHit` 标记，只在相邻两窗均有命中时累加并按有效对数归一（新增 `adjPairs`）。
+15. **implicit 三比率两套分母**（`negative+positive=1` 但 `ambiguousRatio` 用另一分母，渲染出"负 100% / 歧义 50%"）→ 统一三分口径；`explicitImplicitCompare` 改为按已裁决命中判定方向。
+16. 修饰密度把"真的/的确/似的"当修饰语（`他的确走了。`=1、`他说的是真的。`=2）→ 命中后按 2-4 字整体做停用词排除。
+17. 抽象度 `(?![\u4e00-\u9fff])` 使"抽象词只在后随非汉字时才计"（`她的感情很深。`=0 而加逗号=1）→ 去掉后随否定，改最长匹配 + 3-4 字优先，并排除 知道/味道/街道 等假阳性。
+18. 动作密度词表混入名词/形容词且有 29 条重复（`他十分高兴。` actionCount=2、`他很胖。`=1）→ 去重（665→625 条）并清洗非动词条目。
+19. 推荐容差"下限 10%"在默认参数下不可达（σ 被钳到 ≥0.15μ），且钳制值被当"作者自身波动"展示 → 新增 `sigmaMeasured` / `sigmaUsed` / `sigmaClamped` 三个字段（`sigma` 数值与三条既有断言均不变）。
+20. `DI_NOUN_ENDINGS` 55 条里 16 条因 `endsWith("地")` 恒假而永不可达 → 按"地"的位置拆成两张表（39 + 16），39 条全部可达且假阳性消失。
+
+**`lib/core.js`（12 处）**
+
+21. **`atomicWriteJson` 双重失败被静默吞掉**（rename + 直写都失败仍回"已保存"）→ 改为抛 `ENOVELWRITEFAIL`（含 `rename=`/`write=` 原因），`POST /state` 转 500。
+22. **无 BOM 的 UTF-16 永远识别不了**（中文正文 NUL 占比约 1.5%，过不了 5% 阈值，全落 GBK 分支抛错）→ 新增 UTF-16 结构启发式（严格 UTF-8 判定之后、GBK 之前），实测 6 编码 × 3 样本全绿；错误文案区分"缺 BOM 的 UTF-16"与真正无法识别。
+23. **全角数字章号不可解析**（`第０１章.md` 与 `第01章.md` 可并存）→ 入口做定向宽度归一（只映射 `０-９－．／`，**不整串 NFKC**——那会把标题里的 `。` 变成 `.`）。
+24. `upsertCreationSection` 段边界依赖"段内无空行"（用户手写一个空行就只删/改一半）→ 改为以「`#` 标题 / `【…】`段 / 文件尾」为界，remove/replace 双路径幂等。
+25. `readBookAllText` 逐章拼接无分隔符（跨章句子粘连、指纹无谓失效）→ 补 `\n`。
+26. 0 字节章节行数口径矛盾（`novel_chapters` 报 0 行 / `novel_read` 报 1 行）→ core 侧固化为 0 行并抽出 `countTextLines()`，`novel_read` 同步改用（断言用 `Math.max(totalLines,1)` 兜底，空章节仍可读）。
+27. `bookNameFromFileName` 把"中文数字+空格"开头的书名丢掉（`三 体.md` → undefined）→ 章号判定必须有 章/回/话/节 或数字边界（"未分类"12 项回归全绿）。
+28. `novel_outline` 输出 schema 声明了从不产出的 `files`、漏声明真实产出的 `file` → 修正。
+29. `writeSentenceState` 把派生字段 `exists` 固化落盘 → 写盘前剔除（读取侧语义不变，首写返回值不再自相矛盾）。
+30. `detectChapterBridge` 死代码 + 硬编码路径 + 未 `sanitizeSegment`（书名含特殊字符时两类检查静默消失）→ 清理并统一，读取失败透出"衔接·检查跳过"提示。
+31. `buildStyleAnchorPackage` 的"无预读文本就去读盘"兜底在现有调用点永不执行 → 删除并在 try 之外 assert 契约。
+32. `scanWordHits` 对空字符串词条会死循环（沙箱实测旧版挂死）→ 补 `if (wlen <= 0) continue;` 守卫。
+
+**`lib/index.js`（12 处）**
+
+33. **`emotionCaveat=false` 连带杀掉情感量化**（`cropEmotion` 返回体不含 `quantification`，紧随其后的 `emotionComplexity` 判断恒假）→ index.js 侧实现"裁剪前留存 → 按开关回挂"。
+34. **`novel_style_report` 完全不遵守这两个开关**（关掉净化预警仍输出 raw↔clean 对照、Δ/V/C、隐性情绪，与 SKILL.md 承诺冲突）→ 报告、`dimensions`、落盘判断统一套开关裁剪。
+35. 首次 `novel_sentence_config set` 返回值与刚落盘状态相反（首写报 enabled=true / source=默认值）→ 写后重读 state。
+36. `novel_summary` 未清洗脏数据（`[null]` 让 list/get/add/update/delete 全部 TypeError）→ 读取后 `cleanSummaryEntry` 过滤。
+37. 风格判断存盘绕过 `atomicWriteJson`（全文件唯一直接写目标文件处）→ 改原子写。
+38. 语义引擎**瞬时**不可用会清掉已缓存的语义裁决结果（引擎恢复后要重跑 29 次原型推理）→ 区分"用户关闭（应清）"与"引擎波动（不该清）"。
+39. 连贯性审计 4 处候选的章节列表未截断（300 章书上单条 detail 可带 300 个章名）→ 统一 `slice(0,5)` 并补"（共 N 章，仅列前 5）"。
+40. 大纲模式的单一 `try` 把"章节读失败"误报成"该书无创作资料"→ try 缩到大纲读取，循环内单章 try/catch 计数并附"（跳过 N 章读取失败）"。
+41. `brief:true` 对模型侧不省 token（render 从不读 `value.brief`）→ render 内识别 brief（1956 → 196 字）。
+42. 数字口径扫描器字符类缺 `零/两`（"两万"配不上"20000"）→ 对齐为 `[零一二两三四五六七八九十]`。
+43. 43 个"导入后零使用"的死导入 → 121 → 78 个符号（逐个 grep 确认）。
+44. `analysis/` 报告缓存永不清理 → 按书保留最近 20 份（`REPORT_CACHE_KEEP`），`-full.json` / `-chapters-metrics.json` 不误删。
+
+**`lib/client.js`（13 处）**
+
+45. "刷新"白名单漏 `systemPromptMode`（刷新后三档开关显示旧值）→ 补字段 + stale 守卫。
+46. localStorage 降级持久化写读不对称（宿主不可达时切"关闭"，刷新页面又变回"精简"）→ 写入补该字段。
+47. 7 处 fetch 无超时/取消（宿主 `GET /state` 遍历大书库时永久 loading、开关全部 disabled 且无任何提示）→ 统一 `fetchWithTimeout`（8s，`AbortSignal.timeout` → `AbortController` → 退化三级特性检测）+ finally 复位 + 加载期渲染「正在读取开关状态…」。
+48. 宿主可操作错误被丢弃（"报告不存在"/"request body too large (limit 1MB)"/"forbidden: loopback-only" 全被显示成"网络/路由不可用"）→ 新增 `hostError()` 透传。
+49. 受控 `<select>` + confirm 取消分支不重渲染（DOM 停在 B 而表单仍是 A，设定可能存进另一本书）→ 取消分支显式触发同步。
+50. CSS 挂在宿主不存在的属性上（`[data-dsh-frame]` / `[data-pane=…]` 在宿主 968 个源文件中 **0 命中**）→ 折叠规则改用真实的 `[data-sidebar-collapsed]`，删掉死选择器。
+51. `creation.newed` 提示被同 tick 的 `openView` 清空（永不显示）→ 调整顺序。
+52. `nwFlash` 分支不可达（`refreshedAt>0` 与 `revealErr===true` 互斥，v4.0.0 声称的"错误提示也闪烁"没落地）→ 错误分支独立拼 `nwFlashErr`。
+53. 语言切换后面板文案不刷新 → langObserver 顺带触发重渲染，并真接 `ctx.locale` 服务（`inject` 里声明的 `locale` 不再白挂）。
+54. 加载期可保存风格容差（空草稿把宿主已存容差清成 null）→ 输入与按钮补 `disabled: state.loading`，loading 时直接 return。
+55. rev 竞态：在途 POST 与"刷新"回读互相覆盖 → 新增 `pendingWrites` 计数，有在途写入时刷新不回写。
+56. 死代码：`ALL_TOOLS` 死变量、`state.file` 写了 4 处从不读取（改为"数据目录"卡里的 state 文件入口，宿主已支持 reveal `state-file`）、10 个从未渲染的 i18n 词条、设置卡片从未使用的 `props.toggle`。
+57. `test/client-test.mjs` 的 `createRoot` 桩使 React 组件体从不执行 → 实现最小可执行 React 子集，面板/视图/弹窗/设置卡真正渲染（3 组件 / 92 vnode / 12 次渲染）。
+
+**`lib/vibe.js` + `lib/embedding.js` + `lib/update-check.js` + `lib/lexicons/markers.js`（13 处）**
+
+58. **题材联动"加成"实为减分**（写进加权平均，轴均值 > bonus 时被拉低：absurd −0.011、mystery −0.017，可翻转 top3）→ 改为输出期加法 `clamp01(均值+bonus)`；实测"纯标签 Δ=0、有证据 Δ=+bonus"。
+59. `__styleproto.json` 缓存键不含 model/dim 且不自愈（换模型/缓存半损坏后 12 个原型全被静默跳过、永不重建，UI 却报"语义引擎不可用"）→ payload 增写 `{model,dim}`，失配删缓存重算 + 只 warn 一次，并加失败通道 `results.reason`。
+60. 4 个题材 token 永不命中（现言/替身/仙侠/奇幻 与 `THEME_MARKERS` 键值域不交集）→ 改真实键名 / 由证据词覆盖。
+61. "西方词群 N 次"被 8 词证据上限截断（真值 36 报成 24）→ 优先用 `detect.scores`。
+62. nightmare/mystery 轴级题材推送绕过证据门控（纯标签 Δ +0.175/+0.334）→ 移到证据后并与 `linkThemes` 同源门控（Δ=0）。
+63. 同词两种计数口径（重叠 n-gram vs 非重叠 indexOf，"甜甜甜甜甜甜" 5 vs 3）→ `countHits` 改重叠计数。
+64. `fingerprint` 无定界编码（不同分块集合指纹相同，实测 `a\u0000b|c` 与 `a|b\u0000c` 碰撞）→ 长度前缀定界（碰撞 2/6 → 0/6）。
+65. `STYLE_PROTOTYPES` 无消费者却导出 → 去掉 export。
+66. `sampleEvenly(arr,1)` 返回 `[undefined]` → 取中位段。
+67. **失败负缓存会覆盖成功缓存**（成功记录过期后一次离线就把 `latestVersion` 覆盖成 `{error:true}`，5 分钟内无法区分"已是最新"与"检查失败"）→ 负缓存独立成 `update-check-error.json`。
+68. 版本校验 `/\d/` 过弱（`tag_name:"第4版"` 会被当成功写入 24h 缓存）→ 严格整串校验（`v4.3.0` / `dsh-novel-writer-v3.9.6` / `release-3.9.6` / rc / `+build` 仍接受）。
+69. markers 词表重复项（城堡/便利店/朋友圈/点赞）→ 去重（`scanWordHits` 位图消费本就不双计，属卫生问题）。
+
+**`mcp/server.mjs` + 打包 + 文档（18 处）**
+
+70. **`render` 快速路径 16/16 不可达**（插件 16 个 `render` 全返回 `[{type:"text",text}]` 数组，MCP 只认字符串）→ MCP 客户端终于收到精修文本而非整包 JSON。
+71. 非法 JSON 行未回 `-32700` Parse error → 补帧后继续读流。
+72. `notifications/*` 无条件静默（带 id 的请求永不结算，实测 60s 超时）→ 有 id 回 `-32600`，无 id 仍静默；`notifications/cancelled` 现在真取消（stub exec 注入 `AbortSignal`）。
+73. 批量请求零覆盖 → 新增 batch 断言（3 请求 → 2 响应、逐帧校验 `jsonrpc`/id）。
+74. readline 无行长上限 + 忽略写背压（超大报文/写满管道无界涨内存）→ 自实现按 `\n` 切分 + 4 MiB 行长上限（超限整行丢弃）+ `drain` 背压。
+75. stderr 可能泄漏正文（非法行前 200 字符 + 完整堆栈含绝对路径）→ 只记长度/摘要，堆栈仅 `DEBUG=1`。
+76. 插件加载失败直接 `exit(1)`、无 JSON-RPC 错误帧 → stderr 写明原因与逃生口，新增 `--ignore-plugin-load-error`（initialize 正常、tools/list 空清单、其余 `-32603`）。
+77. `mcp-test.mjs` 只在开头断言一次游离响应、不校验 `jsonrpc` → 收尾补断言（测试 35 → **60 项**）。
+78. `mcp/README.md` 数字与说明失实（33 项 → 60 项、漏"疑似人名"、教用户跑不随包发布的 test/）→ 改正并新增「0. 安全边界」章节。
+79. `package-lock.json` 版本停在 3.9.5 且混入 npmmirror registry → 改为 4.3.0 + 统一 npmjs；随后已联网完整重生成并补齐根包 bin 字段（见第九节）。
+80. `package.json` 的 `files` 缺 `smithery.yaml`（CHANGELOG 的承诺不成立）且 `lib/client.js` 冗余 → 修正。
+81. `server.json` 未声明 `runtimeHint` / `packageArguments`（包名 ≠ bin 名，`npx -y dsh-novel-writer` 命不中服务器）→ 补齐，并补两个环境变量。
+82. `cordis.patch.yml` 注释过时（v4.0.0 / 旧入口名）→ 更新（insert 结构一字未动）。
+83. `README.en.md` 与中文版不同步（两段重复安装说明、缺痛点对照表/60 秒上手/输出示例/对比表/MCP 示例/致非中文用户）→ 以中文版为源对齐（142 → 231 行）。
+
+### 四、P3：死代码、无效代码与文档一致性（35 处，节选）
+
+- **死代码/无效代码**：`client.js` 的 `ALL_TOOLS`、`state.file`、10 个未渲染 i18n 词条、`nwFlash` 不可达分支、不可达的 `createRoot` 桩路径；`analysis.js` 两轮无人消费的句级 dominant 循环、`quoted`/`block`/`windowCount`/`hitWindowCount`/`weightedTotal` 五个只写不读的字段；`core.js` 的 `findChapter` 纯数字死分支、`detectChapterBridge` 二次单行化、`buildStyleAnchorPackage` 不可达读盘兜底、`writeSentenceState` 的派生键落盘；`vibe.js` 的 `freqIn`（父代理裁决修复其唯一调用点后成为死函数，已删）与 4 个永不命中的题材 token；`index.js` 的 43 个死导入；`style-metrics.js` 的 16 条不可达地名后缀；`mcp/server.mjs` 的 render 字符串快速路径。以上每项都用全仓库 grep 取证。
+- **口径修正**：DUTIR 词表 853 条 ≥5 字词条（含 9-15 字成语）因窗口上限写死 4 而永不命中 → 提到 8（性能增量 1.3%）；`sampleText` 在截断/未截断两条路径不同源 → 统一；`ACTION_VERBS` 29 条重复；`markers.js` 4 条重复；注释与实现不符 4 处（黑暗猎奇分流、`×`/`\u00d7` 冗余交替、`saveIndex` JSDoc、震惊★归属两张表矛盾）。
+- **文档一致性**：`mcp/README.md` 断言数、缺失参数、`npx` 命令可达性；`README.en.md` 结构同步；`cordis.patch.yml` 注释；`package.json` files 冗余；`server.json` 字段完整性。
+
+### 五、MCP 协议符合性（2 条，按规范原文修正）
+
+1. **未知工具改回协议错误 `-32602`**。依据 MCP《Tools → Error Handling》，*Unknown tools* 属 Protocol Error，
+   规范示例即 `{"code": -32602, "message": "Unknown tool: invalid_tool_name"}`。更早的内部迭代曾以"声明版本是 2024-11-05"
+   为由保留 `isError` 内容响应——现改为规范行为，可读提示移到 `error.data.hint` / `availableToolCount`；
+   同步修正 `test/mcp-test.mjs` 断言与 `mcp/README.md`（原「两处已知偏差」章节改为「规范符合性说明」）。
+2. **批量请求（batching）改为按协商版本门控**。JSON-RPC batching 自 MCP `2025-06-18` 起被移除：
+   协商到该版本及以后 → 回 `-32600`；协商到 `2024-11-05` / `2025-03-26` → 保留实现（向后兼容旧客户端）。
+
+### 六、协议版本协商（新增；原实现违反生命周期规范）
+
+服务端此前固定回 `protocolVersion: "2024-11-05"`，而规范要求"客户端请求的版本若受支持，服务端 **MUST** 原样回"。
+现支持 `2025-11-25` / `2025-06-18` / `2025-03-26` / `2024-11-05`：受支持则原样回，否则回最新支持版本。
+`test/mcp-test.mjs` 新增 6 条断言（含"请求不受支持的版本 → 回最新"与"2025-11-25 会话下批量被拒"），**60 → 67 项**。
+
+### 七、更新检查可区分「已是最新 / 检查失败」
+
+`checkForUpdate()` 返回体升级为稳定形状：新增 `ok` / `stale` / `lastSuccess` / `checkedAt`；
+**失败但有过成功记录时仍返回历史的 `latestVersion`/`releaseUrl`**（此前一律 `null`，调用方无法区分"已是最新"与"检查失败"）。
+成功记录与失败负缓存继续分文件存放（成功记录绝不被失败覆盖），24h / 5min / 3s 超时语义不变。
+侧边栏在 `ok === false` 时显示一行灰字「更新检查失败（上次成功：…）」（新增中英词条各 2 条），不影响面板其它功能。
+
+### 八、语义分析两条残留缺陷
+
+- **`novel_sentence_analysis` 的缓存命中路径不再抹掉语义裁决结果**：更早的内部迭代只修了 `novel_style_report` 一侧，
+  句式分析的命中路径仍会在"引擎瞬时不可用"时把缓存里的 `semanticImplicit` 抹成 null，引擎恢复后必须重跑
+  29 次原型推理 + 全索引检索。现把判据抽成共用的 `semanticGate()`，两条路径逐字一致：
+  只有"用户明确关闭语义功能"才清缓存。
+- **语义风格对比为空时不再一律写"语义引擎不可用"**：`vibe.js` 的 `semanticStyleDistances()` 会在返回的空数组上
+  挂一个非枚举 `reason`（`no-engine` / `no-chunks` / `proto-embed-failed` / `chunk-embed-failed` / `error` / `ok`）；
+  `novel_style_report` 现按 `reason` 输出区分文案（引擎不可用 / 本书太短 / 原型向量失败 / 段落向量失败 / 计算失败 /
+  空表），`reason` 缺失或未知时逐字回退原文案。
+
+### 九、打包与文档
+
+- **`package-lock.json` 已联网重新生成**（`npm install --package-lock-only`，无联网重生成是更早内部迭代的遗留限制）：
+  版本 3.9.5 → **4.3.0**、registry 统一为 `registry.npmjs.org`、补齐根包的 `bin` 字段；
+  依赖树 22 个节点（onnxruntime-web 1.24.3 / @huggingface/tokenizers 0.1.3）。换行风格保持该文件原有的 CRLF。
+- **11 个零消费者导出明确为"有意公开的 API"**：在 `lib/analysis.js` 头部写明名单与理由（纯函数，
+  供 MCP 侧与使用方脚本复用），不再按"疑似死代码"处理；如需收缩公开面请留到下一个大版本。
+
+### 十、窄边界处理结果
+
+- ✅ **`fresh:true` / 未命中路径不再抹掉缓存里的语义结果**：本次若因"引擎瞬时不可用"（用户并未关闭语义功能）
+  而没算出 `semanticImplicit`，会把旧缓存里的同名字段并回**落盘副本**。缓存键含内容指纹，同键即同内容，
+  旧值仍然有效；**本次返回值不受任何影响**（仍是"未算出"，对外输出零变化）。用户关闭该功能时照旧按需求清空。
+- ✅ **`stale` 语义精算**：改为 `!ok && lastSuccess !== null`（即"确实有历史数据可陈旧"，从未成功过时为 false）。
+  任何现有消费方都不读 `stale`（侧边栏只看 `ok` 与 `lastSuccess`），对功能无影响，只是语义更准。
+- ✅ **联调期发现的提示误报：`novel_outline` 的「未回填钩子章节」不再把"大纲已规划但尚未动笔"的章节算进去**。
+  该提示原本拿"大纲里出现过的章号"直接比对钩子记录，而大纲按设计会预先列出下一批章节方向
+  （实测：雨夜灯只写到第 5 章、大纲里已有 `- 6 第6章方向…`，却提示「未回填钩子章节：6」）。现改为只对
+  **磁盘上确实存在**的章节报缺钩子；章节扫描失败时退回旧口径（宁多提醒、不漏提醒）。
+  实测四场景：计划未写→不提示；写了没回填→正常提示；多处缺钩子→按大纲顺序全部列出；大纲列了不存在的章号→不提示。
+- ⏸ **"引擎可用但 enrich 重算失败"保持现状（有意不修）**：它与"越界旧缓存按本章重算后确实没有隐性情感"
+  **在现有代码上不可区分**——后者正是 v3.9.1 修过的正确行为（必须写回清空，否则每次命中都重复重算，
+  且缓存里留下错误作用域的值）。要区分两者必须给 `enrichSemanticImplicit` 增加失败通道（跨 `lib/core.js`），
+  属行为变更，按"不影响功能与准确性才修"的原则不做。
+
+### 十一、行为变更与升级注意（**同一本书的新旧报告不可直接比较**）
+
+| 范围 | 变化 |
+|---|---|
+| 情感/句式 | 嵌套强词不再双计（`悲痛欲绝` sorrow 2→1）；单字副词误命中修正（老太太/策略/太阳）；三类启发式收紧；半角 `?!` 参与分句 → 句数、句式占比、情感强度指标会变 |
+| 段落/节奏 | `---` 分割线不再算一段；`deltaRobust` 采样基改为全窗口；`adjVariance` 不再被空窗口稀释（通常上升）；implicit 三比率统一三分分母（negative/positive 下降） |
+| 六维基线 | μ=0 维度改用绝对尺度判定并披露 `skippedDims`；新增 `sigmaMeasured/sigmaUsed/sigmaClamped`（数值不变）；修饰密度/抽象度/动作密度口径修正 → **基线需重新生成一次** |
+| 氛围 12 轴 | 题材联动改为正向加成（有证据 +bonus、纯标签 0）；nightmare/mystery 轴级标签门控；"西方词群 N 次"变真值；震惊★归 mystery → **带题材的书新旧轴分不可比**；无题材标签的书 12 轴与 confidence 完全不变 |
+| 缓存 | 语义索引（`chunkText`/`fingerprint` 变更）与风格原型缓存（payload 变更）**首次运行会重建一次**，其后正常 |
+| 编码/章号 | 无 BOM 的 UTF-16 现在可读；全角数字章号可解析（`第０１章` = `第01章`）；`剑来 03.md`、`斗破苍穹.01.md` 现在解析出书名 `剑来`/`斗破苍穹`（与末尾章号口径对齐） |
+| 状态文件 | 不再写入派生键 `exists`；`novel_sentence_config` 首次保存即回 `source=state 文件（GUI 开关）` |
+| 安全边界 | MCP 的 `root` 必须落在 `--root` 之内、`novel_import` 的 `src` 默认限根内（`--allow-external-src` 放开） |
+
+**升级后建议**：重新生成一次文笔六维基线（`novel_style_report`）；带题材的书重新出一次氛围光谱；其余功能无需改动。
+
+### 十二、验证结果
+
+（下列结果均在最终代码上实测；两次内部迭代的验证记录合并于此。）
+
+验证
+
+```
+语法   lib/*.js + mcp/server.mjs        → 0 失败
+单元   test/unit-test.mjs               → 20 通过 / 0 失败
+句式   test/pattern-test.mjs            → ALL PATTERN TESTS PASSED
+客户端 test/client-test.mjs             → CLIENT OK
+端到端 test/e2e-test.mjs                → ALL E2E TESTS PASSED
+MCP    test/mcp-test.mjs                → 通过 67 项 / 0 失败（更早内部迭代为 60 项）
+P0/P1  5 支独立探针（重跑）              → 全部通过
+本版新增探针                          → update-check 6 场景 51 断言 / 语义缓存 11 断言 / 文案 12 断言 / fresh 缓存保护与 stale 语义 8 断言 全过
+桌面 zip 解压后重跑全部套件              → 0 失败`n```n`n**安装到本机后的运行态现场验收**（DSH 0.1.5-rc.1 + 已安装副本 4.3.0）：`n`n- 运行期 `currentVersion = 4.3.0`；`update-check` 新字段 ok/stale/lastSuccess/checkedAt 均已生效`n- 内置技能 `novel-writing` 出现在会话技能目录并可被加载（修复前为 unknown）`n- 5 条路由：4×200 + reveal 400（缺参数，预期）`n- 真实书库工具冒烟全通过：books / chapters / sentence_analysis / style_report / style_check / semantic_search / plot / settings / continuity_check / outline`n- 边界用例现场复现：章号键 `第01章` 与 `第1001章` 并存（不再静默覆盖）、`放下刀！/小心点！/赶紧走！` 等 5 句判祈使且感叹 0%、含 200 字 U+2028 行的书正常建索引与检索、μ=0 维度按新文案披露、MCP 越界 root/src 被拦截`n- 另跑：MCP 协议 67 项、端到端 e2e、fixJ 等 9 支探针，全部通过`n```
+```
+
+验证结果（2026-09-13，构建副本）
+
+```
+语法：lib/*.js 与 mcp/server.mjs  node --check        → 0 失败
+单元测试  node test/unit-test.mjs                     → 单元测试: 20 通过 / 0 失败
+句式测试  node test/pattern-test.mjs                  → ALL PATTERN TESTS PASSED
+客户端    node test/client-test.mjs                   → CLIENT OK（面板真实渲染 3 组件 / 92 vnode / 12 次视图渲染）
+端到端    node test/e2e-test.mjs                      → ALL E2E TESTS PASSED
+MCP 协议  node test/mcp-test.mjs                      → 通过 60 项，失败 0 项（原 35 项）
+P0/P1 探针（5 支，独立于测试套件）                     → 全部通过（含修复前对照）
+```
+
+每个修复项都由独立的只读探针做过"修复前 → 修复后"对照，`mcp-test` 的 6 项新断言额外做了**反向验证**（临时打桩使断言真的失败后还原）；所有探针脚本与原始输出留档在包外。
 ## [4.1.1] - 2026-09-08
 
 **修复渲染 + 上架官方 MCP Registry**：

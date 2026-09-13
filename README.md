@@ -191,10 +191,20 @@ npx -y -p dsh-novel-writer dsh-novel-writer-mcp --root /你的小说库路径
 
 **权限与外部服务**：
 
-- 文件系统：只读写用户指定的书库根目录 `novels/` 与其数据目录 `<root>/.novel-writer/`，
-  以及插件自身的开关文件 `~/.dsh/dsh-novel-writer/state.json`；不访问其他路径。
+- 文件系统：读写用户指定的书库根目录 `novels/` 与其数据目录 `<root>/.novel-writer/`，
+  以及插件自身的开关文件 `~/.dsh/dsh-novel-writer/state.json`。**例外一处**：`novel_import` 的 `src`
+  按设计可以指向任意目录（用于把别处的旧稿导入书库），`mode:"apply"` + `move:true` 会**删除源文件**——
+  删改范围由调用方决定，请只在明确知道源目录内容时使用。**例外仅此一处**：MCP 服务器默认把这个 `src`
+  也限制在书库根内（见下方 MCP 一节）。
+- 内置技能：通过 `ctx.skills` 注册自带 `novel-writing` 技能（v4.3.0 起），只读取包内
+  `skills/novel-writing/SKILL.md`，**不写入任何技能目录**、不需要改宿主配置；宿主没有 `skills` 服务时静默跳过。
 - 本地 HTTP：在 DSH Web GUI 内注册 5 条路由（state / reveal / reports / demo / update-check），
   仅回环地址可访问；`allowLanState` 默认关闭，局域网访问默认拒绝。
+- MCP 服务器（`mcp/server.mjs`）：工具参数里的 `root` 必须落在启动时 `--root` 指定的书库根之内，
+  越界会被拒绝并回退；`novel_import` 的 `src` 默认也限根内，确需导入外部目录时用
+  `--allow-external-src` 显式放开（v4.3.0 起）。单行报文上限 4 MiB，超限整行丢弃；stderr 默认只记一行错误摘要，
+  不回显正文与堆栈（需要完整堆栈用 `DEBUG=1`）；长任务可用 `notifications/cancelled` 取消。详见
+  [mcp/README.md 第 0 节](./mcp/README.md#0-安全边界v420-起)。
 - 外部网络：唯一外呼是 GitHub Releases API（`api.github.com`）检查新版本——3 秒超时、24 小时缓存、
   失败静默降级；请求不含任何书籍内容。
 - 子进程：无。唯一例外是打开系统文件管理器（Windows `explorer` / macOS `open` / Linux `xdg-open`），

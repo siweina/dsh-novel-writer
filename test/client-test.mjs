@@ -136,9 +136,129 @@ console.log("注册 id:", loaded.id, "✓");
 if (typeof loaded.factory !== "function") fail("factory 类型应为 function，实际 " + typeof loaded.factory);
 console.log("factory 类型:", typeof loaded.factory);
 
+// ---------------------------------------------------------------------------
+// v4.3.0：React 桩升级——旧桩 createElement 恒返回 {}、createRoot().render() 空转，
+// 导致 PanelView / NovelWriterSettingsCard 的组件体从未执行：面板内容、控制器订阅、
+// 状态同步、各视图分支（main/features/tools/baseline/creation/reports/model/raw 弹窗）
+// 全部零覆盖，组件里任何 TypeError 都测不出来（真机上表现为点开面板白屏）。
+// 这里实现最小可执行的 React 子集：createElement 建 vnode、useState/useEffect 有真实槽位
+// （含依赖数组与清理函数，跨渲染复用实例）、createRoot().render(el) 会真的把组件函数跑一遍
+// 并遍历返回的 vnode 树（组件体里的运行期异常会直接抛出，由调用方 fail）。
+// ---------------------------------------------------------------------------
+let reactRenderDepth = 0; // 渲染期外的 setState 直接忽略（不引入重渲染语义，避免假异步）
+function makeElement(type, props, ...children) {
+  const vnode = { type, props: props === null || props === undefined ? {} : props, children: [] };
+  // React 的 createElement 是可变参数（...children），这里必须照抄，否则多子节点会被丢掉
+  if (children.length === 1) vnode.children = [children[0]];
+  else if (children.length > 1) vnode.children = children;
+  return vnode;
+}
+const hookQueue = []; // 每次 effect 执行返回的清理函数（收尾统一调用，避免订阅泄漏）
+const instances = new Map(); // 组件函数 → 实例（跨多次渲染复用 hooks 槽位与 effect 依赖）
+let currentHooks = null;
+const reactStub = {
+  createElement: makeElement,
+  useState(initial) {
+    if (currentHooks === null) throw new Error("useState 在组件渲染之外被调用");
+    const slot = currentHooks.index;
+    currentHooks.index += 1;
+    if (currentHooks.list[slot] === undefined) {
+      currentHooks.list[slot] = typeof initial === "function" ? initial() : initial;
+    }
+    const setter = (next) => {
+      if (reactRenderDepth <= 0) return; // 渲染期外忽略：本桩不做异步重渲染
+      currentHooks.list[slot] = typeof next === "function" ? next(currentHooks.list[slot]) : next;
+    };
+    return [currentHooks.list[slot], setter];
+  },
+  useEffect(fn, deps) {
+    if (currentHooks === null) throw new Error("useEffect 在组件渲染之外被调用");
+    const slot = currentHooks.index;
+    currentHooks.index += 1;
+    currentHooks.effects.push({ slot, fn, deps: Array.isArray(deps) ? deps.map(String).join("\u0000") : null });
+  }
+};
+/** 执行一个 React 元素：函数组件会被真的调用（带 hooks 上下文），随后递归遍历它的 vnode 树。 */
+function renderElement(element, stats) {
+  if (element === null || element === undefined || typeof element === "boolean") return;
+  if (typeof element === "string" || typeof element === "number") {
+    stats.text += String(element);
+    return;
+  }
+  if (Array.isArray(element)) {
+    for (const item of element) renderElement(item, stats);
+    return;
+  }
+  if (typeof element.type === "function") {
+    stats.components += 1;
+    // 按组件函数复用实例（模拟 React 的组件实例）：hooks 槽位与 effect 依赖跨渲染保持
+    let instance = instances.get(element.type);
+    if (instance === undefined) {
+      instance = { list: [], effects: [] };
+      instances.set(element.type, instance);
+    }
+    const prev = currentHooks;
+    instance.index = 0;
+    instance.effects = []; // 本次渲染声明的 effect（是否执行由 deps 决定）
+    currentHooks = instance;
+    let rendered;
+    try {
+      rendered = element.type(element.props);
+    } finally {
+      currentHooks = prev;
+    }
+    renderElement(rendered, stats);
+    // effect 首次渲染必执行，之后仅在依赖变化时执行（与 React 一致：PanelView 的订阅不会每次渲染都加一个）
+    for (const effect of instance.effects) {
+      const prevDeps = instance.list["eff" + effect.slot];
+      const changed = prevDeps === undefined || prevDeps === null || effect.deps === null || prevDeps !== effect.deps;
+      instance.list["eff" + effect.slot] = effect.deps;
+      if (!changed) continue;
+      const cleanup = effect.fn();
+      if (typeof cleanup === "function") hookQueue.push(cleanup);
+    }
+    return;
+  }
+  stats.nodes += 1;
+  if (typeof element.type === "string" && element.props && typeof element.props.className === "string") {
+    for (const cls of element.props.className.split(/\s+/).filter(Boolean)) stats.classes.add(cls);
+  }
+  for (const child of element.children) renderElement(child, stats);
+}
+/** 驱动一次真实渲染：跑组件函数 + 遍历 vnode 树，返回统计（异常向上抛，由调用方 fail）。 */
+function runRender(element) {
+  const stats = { components: 0, nodes: 0, text: "", classes: new Set() };
+  reactRenderDepth += 1;
+  try {
+    renderElement(element, stats);
+  } finally {
+    reactRenderDepth -= 1;
+  }
+  return stats;
+}
+/** 测试收尾：执行 effect 返回的清理函数（取消订阅/清定时器），避免句柄泄漏。 */
+function cleanupHooks() {
+  while (hookQueue.length > 0) {
+    const cleanup = hookQueue.pop();
+    try { cleanup(); } catch { /* 清理失败不影响断言结果 */ }
+  }
+}
+
+// react-dom/client 桩：把交给 root.render() 的元素真的渲染一遍（PanelView/设置卡片都在这里执行）
+const renderLog = [];
+function createRoot(container) {
+  return {
+    render(element) {
+      const stats = runRender(element);
+      renderLog.push({ container, stats, element });
+    },
+    unmount() {}
+  };
+}
+
 const fakeRequire = (name) => {
-  if (name === "react") return { createElement: () => ({}), useEffect: () => {}, useState: () => [false, () => {}] };
-  if (name === "react-dom/client") return { createRoot: () => ({ render() {}, unmount() {} }) };
+  if (name === "react") return reactStub;
+  if (name === "react-dom/client") return { createRoot };
   throw new Error("意外的 require: " + name);
 };
 
@@ -207,4 +327,53 @@ console.log("面板互斥关闭: ✓");
 
 if (!slotRegistered || typeof slotRegistered.component !== "function") fail("设置槽位未注册（挂载未执行）");
 console.log("设置槽位注册:", slotRegistered.opts?.name, "| id:", slotRegistered.opts?.id, "| 组件:", typeof slotRegistered.component, "✓");
+
+// ---------------------------------------------------------------------------
+// v4.3.0：面板内容必须真的渲染出来（旧桩下组件体从不执行 → 这一段是新增覆盖）
+// 前置条件：上面的面板互斥关闭测试已把面板关回 (view="main", panelOpen=false)
+// ---------------------------------------------------------------------------
+if (renderLog.length === 0) fail("createRoot().render() 从未被调用——面板组件体零执行（桩又空转了）");
+const panelRender = renderLog.find((entry) => entry.stats.classes.has("nwPanel"));
+if (!panelRender) {
+  fail("PanelView 未渲染出 .nwPanel 根节点（components=" + renderLog.map((e) => e.stats.components).join(",")
+    + " classes=" + renderLog.map((e) => [...e.stats.classes].join("|")).join(" ; ") + "）");
+}
+const panelClasses = panelRender.stats.classes;
+if (panelRender.stats.components < 1) fail("面板渲染期间没有执行任何函数组件");
+if (panelRender.stats.nodes < 20) fail("面板 vnode 树节点过少（" + panelRender.stats.nodes + "），组件体可能提前返回");
+if (!panelClasses.has("nwPanelHeader") || !panelClasses.has("nwBanner")) {
+  fail("面板缺少标题栏/状态横幅（className 实际：" + [...panelClasses].join(" ") + "）");
+}
+// enabled 默认 true → 横幅应为「已开启」态（文案随 locale，取不到则退回状态类名断言）
+if (!panelClasses.has("nwBannerOn") && !panelRender.stats.text.includes("已开启")) {
+  fail("面板状态横幅未反映 enabled=true：" + panelRender.stats.text.slice(0, 120));
+}
+if (panelRender.stats.text.length < 20) fail("面板渲染出的文本过少（" + panelRender.stats.text.length + " 字符），内容可能为空");
+console.log("面板组件渲染: 组件数 " + panelRender.stats.components + " | vnode 节点 " + panelRender.stats.nodes
+  + " | 文本 " + panelRender.stats.text.length + " 字符 | 类名 " + [...panelClasses].slice(0, 8).join(" ") + " ✓");
+
+// 视图切换：主面板之外的各分支也必须能渲染（旧桩下这些分支零执行）
+const panelProps = panelRender.element.props;
+const controller = panelProps.controller;
+if (!controller || typeof controller.getSnapshot !== "function") fail("PanelView 未拿到可用的 controller");
+for (const view of ["features", "tools", "baseline", "creation", "reports", "model"]) {
+  controller.set({ view }, { silent: true });
+  if (controller.getSnapshot().view !== view) fail("controller.set 未生效：view=" + view);
+}
+const viewRenders = renderLog.length;
+if (viewRenders <= 1) fail("切换视图未触发任何重渲染（订阅失效）");
+// 弹窗分支（rawModal / rawPromiseOpen）也必须能渲染——真机上这两条是"非净化模式"的必走路径
+const modalRenders = renderLog.length;
+controller.set({ view: "main", rawModal: true, rawCountdown: 3 }, { silent: true });
+controller.set({ rawModal: false, rawPromiseOpen: true, rawPromiseText: "我承诺" }, { silent: true });
+controller.set({ rawPromiseOpen: false }, { silent: true });
+if (renderLog.length <= modalRenders) fail("弹窗状态变更未触发重渲染");
+console.log("视图/弹窗分支渲染: 共 " + renderLog.length + " 次渲染（main/features/tools/baseline/creation/reports/model/rawModal/rawPromiseOpen）✓");
+
+// 设置页卡片组件体同样必须可执行（槽位注册的 component）
+const cardRender = runRender(reactStub.createElement(slotRegistered.component, { controller, toggle: () => {}, onOpenPanel: () => {} }));
+if (cardRender.components < 1 || cardRender.nodes < 3) fail("设置卡片组件体未执行（components=" + cardRender.components + " nodes=" + cardRender.nodes + "）");
+console.log("设置卡片渲染: 组件数 " + cardRender.components + " | vnode 节点 " + cardRender.nodes + " ✓");
+
+cleanupHooks(); // 执行 effect 清理（取消控制器订阅），避免残留句柄影响进程退出
 console.log("CLIENT OK");

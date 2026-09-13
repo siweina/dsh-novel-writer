@@ -1,4 +1,4 @@
-# dsh-novel-writer v4.0.0 bundle patch: 16 tools (incl. novel_semantic_search) + local embedding engine.
+# dsh-novel-writer v4.3.0 bundle patch: 16 tools (incl. novel_semantic_search) + local embedding engine.
 # dsh-novel-writer bundle patch: mounts the novel-writing assistant plugin
 # into the profile's loader tree. The entry's name is the plugin package
 # itself, resolved from the profile's node_modules.
@@ -7,7 +7,7 @@
 # runs in the host process (novel_* tools + /api/dsh-novel-writer/state
 # routes for the UI switch), and the dsh.client declaration in package.json
 # makes the browser half (exports "./client") load in the web GUI, mounting
-# the 「句式分析」 sidebar entry with the enable switch.
+# the 「写作助手功能」 sidebar entry with the enable switch.
 - insert:
     - id: novel-writer
       name: 'dsh-novel-writer'
