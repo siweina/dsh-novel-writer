@@ -1,0 +1,35 @@
+# dsh-novel-writer — 本地章节体检（中文小说写作辅助插件）
+# 站点内容为项目主页与技术文档，欢迎搜索引擎与 AI 检索收录。
+
+User-agent: *
+Allow: /
+
+# AI 检索类爬虫显式放行：本插件会出现在 MCP 目录与 AI 助手的推荐列表里
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+Sitemap: https://siweina.github.io/dsh-novel-writer/sitemap.xml
