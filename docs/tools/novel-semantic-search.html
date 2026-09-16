@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>novel_semantic_search — 语义检索｜dsh-novel-writer 技术文档</title>
+<meta name="description" content="novel_semantic_search 的实现细节：本地 bge-small-zh ONNX 推理、150 字切块与章节标记、内容指纹增量索引、128 维降采样与余弦排序，以及引擎不可用时的降级文案与索引缓存边界。">
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body class="docs">
+
+<header class="docs__top">
+  <a class="docs__brand" href="../index.html">← dsh-novel-writer</a>
+  <span class="docs__crumb">技术文档 / <code>novel_semantic_search</code></span>
+</header>
+
+<div class="docs__layout">
+  <aside class="docs__side" id="docsSide"></aside>
+
+  <main class="docs__main">
+    <article class="doc">
+      <h1>novel_semantic_search</h1>
+      <p class="doc__lead">
+        语义检索。以自然语言描述为查询，在全书的段落向量中按余弦相似度召回最相关段落，返回章节定位、原文片段与相似度分值。<strong>全程本地推理</strong>：模型随包分发，由 <code>onnxruntime-web</code> 的 WASM 后端在宿主进程内运行，不发起网络请求、不消耗在线 token。索引按内容指纹增量构建并落盘缓存，章节改动后只对新段落重算向量。
+      </p>
+
+      <h2>参数</h2>
+      <table>
+        <thead><tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><th><code>book</code></th><td>string</td><td>是</td><td>书名。空串抛「novel_semantic_search 需要 book 参数」；目录解析经 <code>bookDir</code> → <code>sanitizeSegment</code>，路径分隔符与上跳已剥离。</td></tr>
+          <tr><th><code>query</code></th><td>string</td><td>是</td><td>检索用的语义描述。空串抛「novel_semantic_search 需要 query 参数」。自然语言越具体越好；超长查询在分词后按 512 token 截断。</td></tr>
+          <tr><th><code>top</code></th><td>integer</td><td>否</td><td>返回条数。<strong>默认 5，区间 1–10</strong>；由 <code>Math.min(Math.max(Number(top) || 5, 1), 10)</code> 钳制，非数字或 0 回退 5，<strong>不抛错</strong>。</td></tr>
+          <tr><th><code>root</code></th><td>string</td><td>否</td><td>章节库根目录。省略时取插件 <code>config.root</code>，再省略取会话工作目录；MCP 形态下必须落在启动参数 <code>--root</code> 指定的书库根内，越界会被静默回退到该书库根。</td></tr>
+        </tbody>
+      </table>
+
+      <h2>输出结构</h2>
+      <p>契约字段（<code>output.schema.required</code>）：<code>book</code>、<code>query</code>、<code>available</code>、<code>results</code>、<code>message</code>。<code>available:false</code> 时 <code>results</code> 恒为空数组，全部信息在 <code>message</code> 里。</p>
+      <table>
+        <thead><tr><th>字段</th><th>类型</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr><th><code>available</code></th><td>boolean</td><td>本次是否真正执行了检索</td></tr>
+          <tr><th><code>cache</code></th><td>string</td><td>枚举 <code>hit</code>（复用落盘索引）/ <code>built</code>（本次重建或补齐索引）；仅在 <code>available:true</code> 时出现</td></tr>
+          <tr><th><code>indexSize</code></th><td>integer</td><td>参与排序的段落向量条数（可能小于切块总数）</td></tr>
+          <tr><th><code>results</code></th><td>array</td><td>按分值降序，元素为 <code>{id, chapter, text, score}</code></td></tr>
+          <tr><th><code>results[].id</code></th><td>string</td><td>章文件名 + <code>"|"</code> + 块序号（块序号来自 <code>chunkText</code>）</td></tr>
+          <tr><th><code>results[].chapter</code></th><td>string</td><td>章文件名；字段缺失时回退为 id 中 <code>"|"</code> 之前的部分，再回退为「全书」</td></tr>
+          <tr><th><code>results[].text</code></th><td>string</td><td>段落原文，已去除 <code>\r</code> 并截断到 200 字</td></tr>
+          <tr><th><code>results[].score</code></th><td>number</td><td>余弦相似度，保留 4 位小数（<code>round(score × 10000) / 10000</code>）</td></tr>
+          <tr><th><code>message</code></th><td>string</td><td>命中索引时为「使用本地语义索引（缓存）」；本次构建时为「首次建索引完成，已缓存」，并可追加补齐与写盘失败提示</td></tr>
+        </tbody>
+      </table>
+      <p>渲染层输出为「《书名》语义检索「查询」（命中 N 段，索引 M 段）」加逐行 <code>- [score] 章文件名: 段落文本</code>；<code>available:false</code> 时只输出标题加「（不可用）」与 <code>message</code>。检索结果<strong>不做二次重排或去重</strong>：同一章的相邻块可能同时进入前 <code>top</code>，调用方需要按章聚合时应自行处理。</p>
+
+      <h2>计算原理</h2>
+
+      <h3>1 · 模型与推理路径</h3>
+      <div class="formula">模型：lib/models/ 下的 bge-small-zh-v1.5（onnx/model_quantized.onnx 优先，回退 model.onnx）
+分词：@huggingface/tokenizers（WASM，294KB）；tokenizer.json 缺失时读 tokenizer.json.gz 解压
+推理：onnxruntime-web 的 WASM 后端，numThreads = 1，wasmPaths 由 require.resolve 定位
+可用性探测 modelPresent() 要求同时存在：
+  onnx/model_quantized.onnx 或 onnx/model.onnx
+  tokenizer.json 或 tokenizer.json.gz
+  tokenizer_config.json</div>
+      <p>选择 WASM 直连而非子进程或原生 <code>.node</code> 绑定，是为了避免宿主 ABI 冲突与进程崩溃风险：推理在宿主进程内完成，内存安全，无子进程。模型与分词器均为<strong>懒加载单例</strong>，第一次调用才载入。</p>
+
+      <h3>2 · 向量化</h3>
+      <div class="formula">embed(text)：
+  trim 后为空 → 返回 null（确定性跳过，不进重试队列）
+  文本先截到 4000 字符，再按 token 截到 512（bge 上限）
+  input_ids / attention_mask / token_type_ids 三个 int64 张量送入会话
+  取 last_hidden_state 的前 dim 维（CLS 汇聚）→ L2 归一化 → 返回单位向量
+  范数非有限或为 0 时按 1 处理
+
+embedMany(chunks)：并发 4；抛错的块整体重试一轮，仍失败则剔除（返回条数可能少于输入条数）</div>
+      <p>批量推理按 <code>id</code> 回填向量而非按下标——失败项被过滤后会缩短数组，按下标回填会造成向量与段落错位。</p>
+
+      <h3>3 · 切块与章节标记</h3>
+      <div class="formula">chunkText(text)：
+  归一 CRLF / CR / U+2028 / U+2029 / U+0085 为 \n
+  识别章节标题行（整行 ≤ 40 字，且匹配
+    第[零一二三四五六七八九十百千两０-９\d]{1,8}[章节回卷部] / Chapter N / 序章|序言|楔子|引子|尾声|终章|番外）
+    命中则切分当前块并切换 chapter 标记；标题行本身不进正文
+  单行超 150 字按 [\s\S]{1,150} 切片；再按「先切满 150 字、余量留到下一块」累积
+  flush 时机：空行 / 章节切换 / 文本结束
+  过滤：trim 后长度 ≥ 8；但已识别章节内只要有内容就保留（短章节不被吞掉）
+  id = chapter + "#" + 块序号；chapter 无标题时默认为「全书」</div>
+      <p>超长行按 150 字硬切是必要的：PDF 或网页复制的无换行文本若整行进模型，会在 512 token 处静默截断，尾部内容丢失。切块长度上限由「累加后判断」改为「切满再留余量」后恒定 ≤ 150 字。</p>
+
+      <h3>4 · 余弦排序</h3>
+      <div class="formula">cosine(a, b)：长度不等 / 空数组 / 任一范数为 0 / 结果非有限 → 返回 0
+rankIndex(queryVec, index, k)：
+  dim = index 中 vec 长度的众数
+  queryVec 长度 ≠ dim 时先降采样到 128 维
+  对每条算 cosine → 按 score 降序 → 取前 k
+search(query, index, k) = embed(query) 后交给 rankIndex；无向量或索引为空返回 []</div>
+      <p>索引向量的存储维度是 <strong>128</strong>：模型直出 512 维后按「每 4 维取 1」降采样并重新 L2 归一化，落盘时再按 4 位小数取整。<strong>该降采样是有损压缩</strong>，用于缓存瘦身与维度统一，不保证完整语义信息保持；已是 128 维的旧缓存只做归一化，不二次降采样。</p>
+
+      <h3>5 · 索引缓存与增量构建</h3>
+      <div class="formula">缓存路径：&lt;root&gt;/.novel-writer/embedding/&lt;book 清洗后&gt;.json
+内容：{ model: "bge-small-zh-v1.5", dim: 128, fp, items: [{id, t, th, ch, v}] }
+写盘：zstd 压缩（Node 不支持 zstd 时回退纯 JSON）；t 截断 200 字；v 取 4 位小数
+
+fingerprint(chunks) = sha1( 逐块 "id长度:id" + \0 + "text长度:text" + \1 )
+  长度前缀用于消解边界歧义（字段自身含分隔符时不会产生同指纹）
+
+buildIndexIncremental(chunks, oldItems)：
+  逐块计算 th = sha1(text) 前 16 位
+  旧条目 id 相同且 th 相同 → 直接复用旧向量
+  其余（新增或内容变化）→ 送入 embedMany
+  输出统一 128 维，按 id 回填后过滤空项
+
+loadIndexMeta 校验：model 与 dim 必须匹配；任一条目 vec 长度 ≠ 128 视为缓存损坏 → 视为未命中</div>
+      <div class="note">
+        <b>fingerprint 用「实际写入条目」重算。</b> 若部分段落推理失败被剔除，落盘指纹必然与「全量内容指纹」不同，下次调用即判为 <code>cachedFp !== indexFp</code> 并走增量补齐。<code>message</code> 中会带出「（部分段落失败，下次自动补齐 N/M）」或「；索引缓存写入失败（下次会重建）」，使残缺状态对调用方可见，而不是被当作完整缓存永久复用。
+      </div>
+
+      <h2>约束与边界</h2>
+      <ul>
+        <li><strong>文本截断上限 512 token</strong>：<code>embed</code> 先按 4000 字符再按 512 token 截断。单块文本受 <code>chunkText</code> 的 150 字上限约束，正常路径不会触顶；<code>query</code> 是唯一可能触顶的输入，超长查询只有前 512 token 参与匹配，且不会报错。</li>
+        <li><strong><code>top</code> 是钳制而非报错</strong>：<code>top: 50</code> 得到 10 条，<code>top: 0</code> 或 <code>top: "abc"</code> 得到 5 条。调用方无法通过本参数取得 10 条以上的结果，需要更多召回时应换更窄的查询而非扩大 top。</li>
+        <li><strong>两层功能门控</strong>：<code>semanticSearch</code> 未开（或总开关 <code>semanticEmbedding</code> 关闭）时返回 <code>available:false</code>，<code>message</code> 为「「语义检索」已关闭：请在侧边栏「写作助手功能」→ 小模型页开启，或用 novel_sentence_config 设置 semanticSearch:true。」——这是配置状态，不是错误。</li>
+        <li><strong>引擎不可用的降级文案是固定的</strong>：<code>modelPresent()</code> 为假或模型加载失败时返回 <code>available:false</code>，<code>message</code> 形如「语义引擎不可用：&lt;错误前 300 字&gt;。插件已回退纯规则模式，不影响其他功能。 【解决：确认 lib/models/ 含 bge-small-zh 模型文件；首次使用需自动加载，稍后重试】」。失败不是永久态：失败时刻被记录，<strong>30 秒冷却</strong>后允许一次重载尝试，所有入口共享该冷却逻辑。</li>
+        <li><strong>异常一律安全降级</strong>：<code>execute</code> 主体被 try 包裹，任何异常返回 <code>available:false</code> 与「语义检索安全降级：&lt;异常前 120 字&gt;（不影响其他工具）」，绝不向宿主裸抛。但<strong>参数缺失的校验在 try 之外</strong>：<code>book</code> / <code>query</code> 为空会正常抛错，不会被伪装成「引擎不可用」。</li>
+        <li><strong>索引缓存按内容失效，不靠版本号</strong>：章节文本、章节集或切块边界变化都会改变指纹并触发重建；同一轮工具调用内的多次索引读取有进程内读缓存（键为路径 + mtimeMs + size），写盘后立即失效。缓存文件体积随书增长，<code>items[].t</code> 只保留段落前 200 字。</li>
+        <li><strong>索引与检索在同一目录下共享</strong>：普通检索用索引键 <code>&lt;book&gt;</code>；风格对比另有 <code>&lt;book&gt;__style_&lt;章名&gt;</code> 键。两者格式一致、互不覆盖，但<strong>语义引擎的临时索引（如单章范围）不写盘</strong>，以免用局部向量污染全书指纹缓存。</li>
+        <li><strong>可检索范围</strong>：只覆盖 <code>novels/&lt;book&gt;/</code> 下 <code>.md</code> / <code>.markdown</code> / <code>.txt</code> 章节文件，按 <code>scanChapters</code> 的文件名章号排序；<code>创作资料</code>、点号目录与其他扩展名不参与。段落下限 8 字意味着极短的对白碎片不会被索引。</li>
+        <li><strong>分值语义</strong>：<code>score</code> 是 128 维降采样向量的余弦值，取值区间为 [−1, 1]（中文段落向量实际多为正值），<strong>没有绝对阈值</strong>——本工具不判断「是否相关」，只按分值降序返回前 <code>top</code> 条。跨版本比较也不成立：v4.3.0 修改了内容指纹的字段定界，既存索引会一次性失效重建；同一查询在重建前后可能因同一原因取得不同分值与排序，属预期的一次性代价。</li>
+        <li><strong>与在线模型无关</strong>：本工具不调用任何在线大模型，返回体里也不含模型生成的解释性文本；<code>message</code>、<code>query</code>、<code>text</code> 都是本地字符串。查询本身不会写回书库，检索结果不落盘（仅索引缓存落在 <code>.novel-writer/embedding/</code> 下）。</li>
+      </ul>
+
+      <h2>相关工具</h2>
+      <ul>
+        <li><a href="novel-style-check.html">novel_style_check</a> —— 用同一引擎把目标章与全书其他章的段落向量做平均余弦比较，输出语义风格相似度。</li>
+        <li><a href="novel-sentence-analysis.html">novel_sentence_analysis</a> —— 语义隐性情感（情感原型句检索全书索引）依赖同一份索引与切块规则。</li>
+        <li><a href="novel-books.html">novel_books</a> —— 确认 <code>book</code> 的精确取值，避免因书名不匹配而落到空目录。</li>
+        <li><a href="novel-style-report.html">novel_style_report</a> —— 报告中的「语义风格距离」维度由同一引擎提供。</li>
+      </ul>
+
+      <h2>源码位置</h2>
+      <ul>
+        <li><span class="src">lib/index.js</span> —— 工具注册、输出契约与执行（<code>registerNovelSemanticSearch</code>，第 2435 行起；参数校验第 2489–2493 行、<code>execute</code> 主体 2495 行起、<code>render</code> 第 2478 行）</li>
+        <li><span class="src">lib/embedding.js</span> —— 模型探测 <code>modelPresent</code>（第 40 行）、<code>initEngine</code>（第 52 行）、<code>isAvailable</code>（第 104 行）、<code>embed</code>（第 112 行）、<code>embedMany</code>（第 137 行）、<code>cosine</code>（第 179 行）、<code>rankIndex</code>（第 211 行）、<code>search</code>（第 222 行）、<code>fingerprint</code>（第 338 行）、<code>downsample</code>（第 361 行）、<code>readIndexData</code>（第 380 行）、<code>saveIndex</code>（第 408 行）、<code>loadIndexMeta</code>（第 440 行）、<code>buildIndexIncremental</code>（第 463 行）、<code>extractChapterTitle</code>（第 503 行）、<code>chunkText</code>（第 520 行）；常量 <code>MODEL_NAME</code> / <code>EMBED_DIM</code> / <code>ENGINE_RETRY_COOLDOWN_MS</code> 第 28–37 行</li>
+        <li><span class="src">lib/core.js</span> —— <code>bookDir</code>（第 233 行）、<code>scanChapters</code>（第 236 行）、<code>readTextFile</code>（第 258 行）、<code>cleanOutput</code>（第 2308 行）、语义门控 <code>semanticFeatureEnabled</code>（第 852 行）</li>
+        <li><span class="src">mcp/server.mjs</span> —— MCP 形态下的 <code>--root</code> 与 <code>src</code> 越界拒绝（第 130 行、第 259–281 行）</li>
+      </ul>
+    </article>
+
+    <nav class="docs__pager" id="docsPager"></nav>
+  </main>
+
+  <aside class="docs__toc" id="docsToc"></aside>
+</div>
+
+<script src="docs.js"></script>
+</body>
+</html>

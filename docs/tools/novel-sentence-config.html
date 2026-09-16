@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>novel_sentence_config — 开关配置｜dsh-novel-writer 技术文档</title>
+<meta name="description" content="novel_sentence_config 的实现细节：get/set 参数白名单、状态文件字段与默认值、生效值优先级、工具开关与功能开关的语义、风格基线容差的钳制规则，以及 rawWriting 的写入位置。">
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body class="docs">
+
+<header class="docs__top">
+  <a class="docs__brand" href="../index.html">← dsh-novel-writer</a>
+  <span class="docs__crumb">技术文档 / <code>novel_sentence_config</code></span>
+</header>
+
+<div class="docs__layout">
+  <aside class="docs__side" id="docsSide"></aside>
+
+  <main class="docs__main">
+    <article class="doc">
+      <h1>novel_sentence_config</h1>
+      <p class="doc__lead">
+        写作助手开关的查看与修改。读取即返回「总开关 + 16 个工具开关 + 9 个功能开关 + 风格基线容差 + 原创模式设定 + 语义引擎状态」的<strong>生效值</strong>；<code>action: "set"</code> 时把传入字段增量写入状态文件并强制回读。开关落在 <code>~/.dsh/dsh-novel-writer/state.json</code>，与 Web GUI 侧边栏读写同一文件（GUI 走插件自带的 <code>POST /api/dsh-novel-writer/state</code> 路由）。本工具自身<strong>禁止被关闭</strong>。
+      </p>
+
+      <h2>参数</h2>
+      <table>
+        <thead><tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><th><code>action</code></th><td>string</td><td>否</td><td>枚举 <code>get</code> / <code>set</code>。<strong>默认 <code>get</code></strong>：实现为 <code>args.action === "set" ? "set" : "get"</code>，任何非 <code>"set"</code> 的值（含省略）都按查看处理。</td></tr>
+          <tr><th><code>enabled</code></th><td>boolean</td><td>否</td><td>写作助手功能总开关。仅布尔值参与写入，非布尔值静默忽略。</td></tr>
+          <tr><th><code>autoAnalyze</code></th><td>boolean</td><td>否</td><td>分析作品时是否主动使用句式分析。仅布尔值参与写入。</td></tr>
+          <tr><th><code>tools</code></th><td>object</td><td>否</td><td>各工具开关，形如 <code>{ novel_plot: false }</code>。键必须在 <code>ALL_TOOLS</code> 的 16 个名字内，值必须是布尔，其余<strong>静默忽略</strong>；<code>novel_sentence_config</code> 自身的键会被强制剔除。与现有值<strong>浅合并</strong>。</td></tr>
+          <tr><th><code>features</code></th><td>object</td><td>否</td><td>功能开关。合法键仅 9 个（见下表），其余键静默忽略；与现有值浅合并。</td></tr>
+          <tr><th><code>styleTolerance</code></th><td>object</td><td>否</td><td>风格基线容差，每维 <code>{ low, high }</code>（<code>low</code> 为负、<code>high</code> 为正）。<code>low</code> 钳到 <code>[-99, 0]</code>，<code>high</code> 钳到 <code>[0, 99]</code>，两者须同时为数字且 <code>low ≤ high</code>，否则该维被整体丢弃。传 <code>{}</code> 或 <code>null</code> 表示清除（恢复推荐值）。</td></tr>
+          <tr><th><code>creationProfile</code></th><td>object</td><td>否</td><td>全局原创模式设定，六个字符串键：<code>worldview</code> / <code>characters</code> / <code>forbidden</code> / <code>mainConflict</code> / <code>genre</code> / <code>extra</code>。留空项省略。传 <code>{}</code> 或 <code>null</code> 表示清除。</td></tr>
+          <tr><th><code>creationProfiles</code></th><td>object</td><td>否</td><td>按书专属原创设定，键 = 书名，值结构同上。与现有条目<strong>合并</strong>（同键覆盖）；某书的值传 <code>null</code> 表示删除该书条目；传 <code>{}</code> 表示清除全部书的设定。</td></tr>
+        </tbody>
+      </table>
+      <div class="note">
+        <b>参数 schema 不含 <code>book</code> 与 <code>root</code>。</b>本工具是全局开关表，没有书库作用域；参数 schema 声明为 <code>additionalProperties: false</code>，即 schema 之外不存在任何可传字段。唯一的书库相关字段是只读回显的 <code>creationProfiles</code>（键为书名）。
+      </div>
+      <div class="warn">
+        <b>键白名单是静默的。</b><code>tools</code> 与 <code>features</code> 只挑白名单内的键写入，拼错的键名既不报错也不出现在回显里。判断某个键是否被接受，只能读返回体的 <code>tools</code> / <code>features</code>，不能读 <code>updated</code>——只要同一批里有一个合法字段生效，<code>updated</code> 就是 <code>true</code>。
+      </div>
+
+      <h2>输出结构</h2>
+      <p>契约必返字段（<code>output.schema.required</code>）：<code>file</code>、<code>enabled</code>、<code>autoAnalyze</code>、<code>tools</code>、<code>features</code>、<code>embedding</code>、<code>styleTolerance</code>、<code>creationProfile</code>。实现中还会恒定返回 <code>source</code>、<code>updated</code>、<code>creationProfiles</code>。</p>
+      <table>
+        <thead><tr><th>字段</th><th>类型</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr><th><code>file</code></th><td>string</td><td>状态文件的绝对路径，由 <code>stateFilePath()</code> 给出</td></tr>
+          <tr><th><code>enabled</code></th><td>boolean</td><td>生效的总开关（写后回读的结果，非传入值）</td></tr>
+          <tr><th><code>autoAnalyze</code></th><td>boolean</td><td>生效的自动分析开关</td></tr>
+          <tr><th><code>source</code></th><td>string</td><td>生效值来源：<code>state 文件（GUI 开关）</code> / <code>v0.4.0 兼容文件 novel-writer.json</code> / <code>插件 config</code> / <code>默认值</code></td></tr>
+          <tr><th><code>updated</code></th><td>boolean</td><td>本次 <code>set</code> 是否发生了实际写入（patch 为空则为 false）</td></tr>
+          <tr><th><code>tools</code></th><td>object</td><td>16 个 <code>novel_*</code> 工具名到当前开关的映射，逐个由 <code>toolEnabled</code> 求值</td></tr>
+          <tr><th><code>features</code></th><td>object</td><td>9 个功能键到当前开关的映射，逐个由 <code>featureEnabled</code> 求值——<strong>恒有 9 个键</strong>，与文件里实际存了几个无关</td></tr>
+          <tr><th><code>embedding</code></th><td>object</td><td><code>{ available, loaded, error }</code>，语义引擎状态，见下文</td></tr>
+          <tr><th><code>styleTolerance</code></th><td>object</td><td>用户自定义容差；<strong>未设置为 <code>{}</code></strong>（语义：使用推荐值），不是 <code>null</code></td></tr>
+          <tr><th><code>creationProfile</code></th><td>object</td><td>全局原创设定；未设置为 <code>{}</code></td></tr>
+          <tr><th><code>creationProfiles</code></th><td>object</td><td>按书设定；未设置为 <code>{}</code></td></tr>
+        </tbody>
+      </table>
+      <div class="note">
+        <b>没有 brief 精简模式。</b>本工具的参数 schema 为 <code>additionalProperties: false</code>，不含 <code>brief</code>；渲染层也没有精简分支。渲染文本是一份固定格式的开关清单（<code>&lt;path&gt; / &lt;type&gt;novel-sentence-config&lt;/type&gt; / &lt;content&gt;</code>），逐行列出总开关、<code>autoAnalyze</code>、来源、16 个工具开关与全部功能开关，体积由开关数量决定，不可再压缩。
+      </div>
+
+      <h2>计算原理</h2>
+
+      <h3>1 · 状态文件与读取回退</h3>
+      <div class="formula">file = $DSH_NOVEL_WRITER_STATE（非空时）
+       否则 ~/.dsh/dsh-novel-writer/state.json      ← homedir()/.dsh
+
+readSentenceState():
+  文件不存在 或 JSON 解析失败 → { exists:false, ...SENTENCE_ANALYSIS_DEFAULTS }
+  SENTENCE_ANALYSIS_DEFAULTS = { enabled:true, autoAnalyze:true, systemPromptMode:"brief" }
+  存在 → 逐字段类型校验，不符即回退默认：
+    enabled / autoAnalyze : 非 boolean → 默认值
+    systemPromptMode      : 不在 ["off","brief","full"] → 默认值
+    tools / features      : 非对象 → {}
+    styleTolerance / creationProfile : 非对象 → null
+    creationProfiles      : 非对象 → {}
+    lastRoot              : 非字符串 → undefined</div>
+      <p><code>exists</code> 是读取侧由文件是否存在推导出的派生字段，<strong>不落盘</strong>（写盘前被显式剔除）。磁盘上真实的 <code>state.json</code> 字段为 <code>enabled</code>、<code>autoAnalyze</code>、<code>systemPromptMode</code>、<code>tools</code>、<code>features</code>、<code>styleTolerance</code>、<code>creationProfile</code>、<code>creationProfiles</code>、<code>lastRoot</code>。</p>
+
+      <h3>2 · 生效值的优先级</h3>
+      <p>返回体里的 <code>enabled</code> / <code>autoAnalyze</code> 不是文件原值，而是 <code>effectiveSentenceAnalysis</code> 的结果：</p>
+      <div class="formula">state.exists === true:
+    enabled     = state.enabled     ?? true
+    autoAnalyze = state.autoAnalyze ?? true
+    ← 插件 config 与兼容文件全部不再参与
+
+state.exists === false:
+    兼容文件 ~/.dsh/novel-writer.json 的 stylePattern === true  → enabled = true
+    否则 enabled = config.sentenceAnalysis.enabled
+                ?? config.sentenceAnalysis.stylePattern
+                ?? true
+    autoAnalyze = config.sentenceAnalysis.autoAnalyze ?? true
+
+source 文案与之一一对应：
+    exists                     → "state 文件（GUI 开关）"
+    !exists 且 兼容文件为 true → "v0.4.0 兼容文件 novel-writer.json"
+    !exists 且 config 有该字段 → "插件 config"
+    其余                        → "默认值"</div>
+      <div class="note">
+        <b>state 文件一旦存在，插件 config 即被完全屏蔽。</b>该文件由 GUI 或本工具的任意一次 <code>set</code> 创建（<code>writeSentenceState</code> 一律整份落盘），因此「配了 <code>config.sentenceAnalysis</code> 却不生效」是预期行为，不是配置写错。
+      </div>
+
+      <h3>3 · 工具开关（<code>tools</code>）</h3>
+      <div class="formula">toolEnabled(state, name) = state.tools[name] !== false
+    ← 未登记、null、0、"" 都算「开」；只有显式 false 才算关闭
+
+写侧白名单：
+    for (name of ALL_TOOLS) if (typeof args.tools[name] === "boolean") 收下
+    delete toolsPatch.novel_sentence_config      ← 自身禁止被关
+    tools = { ...current.tools, ...toolsPatch }  ← 浅合并</div>
+      <p>16 个 <code>ALL_TOOLS</code> 条目：<code>novel_books</code>、<code>novel_chapters</code>、<code>novel_read</code>、<code>novel_keywords</code>、<code>novel_new_chapter</code>、<code>novel_import</code>、<code>novel_sentence_analysis</code>、<code>novel_sentence_config</code>、<code>novel_style_check</code>、<code>novel_plot</code>、<code>novel_settings</code>、<code>novel_summary</code>、<code>novel_continuity_check</code>、<code>novel_semantic_search</code>、<code>novel_style_report</code>、<code>novel_outline</code>。</p>
+      <p>关闭一个工具的后果并<strong>不统一</strong>：16 个工具的 <code>execute</code> 首行各自调用 <code>assertToolEnabled</code>，关闭时<strong>抛错</strong>（硬拒绝）。两类例外走软降级——<code>novel_sentence_analysis</code> 在总开关 <code>enabled === false</code> 时返回禁用桩（<code>enabled:false</code>、<code>totalChars:0</code>、<code>totalSentences:0</code> 加一段 <code>message</code>）；<code>novel_semantic_search</code> 在 <code>semanticSearch</code> 关闭或引擎不可用时返回 <code>available:false</code> 加 <code>message</code> 的对象。前者的关闭还会让 <code>novel_style_check</code> 直接报错拒绝执行。</p>
+
+      <h3>4 · 功能开关（<code>features</code>，9 键）</h3>
+      <div class="formula">featureEnabled(state, name):
+    v = state.features[name]
+    return typeof v === "boolean" ? v : FEATURE_DEFAULTS[name] !== false
+    ← 未知键也返回 true</div>
+      <table>
+        <thead><tr><th>键</th><th>默认</th><th>作用</th></tr></thead>
+        <tbody>
+          <tr><th><code>emotionCaveat</code></th><td><code>true</code></td><td>情感净化预警</td></tr>
+          <tr><th><code>genreTheme</code></th><td><code>true</code></td><td>题材与流派检测</td></tr>
+          <tr><th><code>emotionComplexity</code></th><td><code>true</code></td><td>情感复杂度量化</td></tr>
+          <tr><th><code>semanticEmbedding</code></th><td><code>true</code></td><td>本地语义增强总闸；关闭后三个 <code>semantic*</code> 子开关一并失效</td></tr>
+          <tr><th><code>semanticSearch</code></th><td><code>true</code></td><td>语义检索（<code>novel_semantic_search</code>）</td></tr>
+          <tr><th><code>semanticStyle</code></th><td><code>true</code></td><td>衔接检查里的语义距离一路</td></tr>
+          <tr><th><code>semanticImplicit</code></th><td><code>true</code></td><td>隐性情感的语义检测</td></tr>
+          <tr><th><code>rawWriting</code></th><td><code>false</code></td><td>非净化直白模式；<strong>默认关闭</strong>，是唯一默认 false 的键</td></tr>
+          <tr><th><code>webnovelVibe</code></th><td><code>true</code></td><td>网文信号检测</td></tr>
+        </tbody>
+      </table>
+      <p>三个 <code>semantic*</code> 子开关与总闸是<strong>与</strong>关系（<code>semanticFeatureEnabled</code> 先看 <code>semanticEmbedding</code> 再查子键）。</p>
+
+      <h3>5 · <code>styleTolerance</code> 与六个维度</h3>
+      <div class="formula">clampStyleTolerance(tol):
+    for [key, value] of Object.entries(tol):
+        非对象 → 该键丢弃
+        low  = typeof value.low  === "number" ? clamp(value.low,  -99, 0) : undefined
+        high = typeof value.high === "number" ? clamp(value.high,   0, 99) : undefined
+        low 或 high 缺失，或 low &gt; high → 该键整体丢弃
+        否则收下 { low, high }</div>
+      <p>合法维度键为 <code>METRIC_ORDER</code> 六项：<code>complexity</code>（句法复杂度）、<code>modifierDensity</code>（修饰密度）、<code>abstractDensity</code>（抽象度）、<code>actionDensity</code>（动作密度）、<code>hedgeDensity</code>（不确定性）、<code>gapIndex</code>（留白指数）。写侧不校验键名，未知维度会落盘但没有任何消费点；读取侧未设置时返回 <code>{}</code>。</p>
+      <div class="formula">// 消费点：novel_style_check
+for (key of METRIC_ORDER):
+    rt = typeof allBaseline[key].recTol === "number" ? allBaseline[key].recTol : 15
+    tol[key] = { low: -rt, high: rt }
+for (key of METRIC_ORDER):
+    ut = state.styleTolerance[key]
+    若 ut.low 与 ut.high 都是 number → tol[key] = { low: ut.low, high: ut.high }
+judgeAgainstBaseline(本章指标, 排除本章后的基线, tol)</div>
+      <p>推荐容差底取「<strong>含</strong>目标章的全书每维 <code>recTol</code>」（约作者自身波动 1.5σ，四舍五入到 5 的倍数、下限 10、上限 100），用户自定义<strong>只覆盖被点名的维度</strong>，未配置的维度不受「排除目标章后样本变少」影响。</p>
+
+      <h3>6 · 写入路径</h3>
+      <div class="formula">writeSentenceState(patch):
+    stateWriteChain 串行化 → 读现状 → 合并 → 剔除派生键 exists
+    enabled / autoAnalyze / systemPromptMode : 覆盖
+    tools / features   : 浅合并 { ...current, ...patch }
+    styleTolerance     : 非 null 对象 → clampStyleTolerance()；null → 置 null
+    creationProfile    : 非 null 对象 → 覆盖；null → 置 null
+    creationProfiles   : 空对象或 null → 清除全部；
+                         非空对象 → 合并，值为 null/undefined 的键删除
+    atomicWriteJson(file, persisted)
+    返回 { ...next, exists: true }        ← 写完必然存在
+
+atomicWriteJson(file, obj):
+    写 file + ".tmp-" + pid + "-" + Date.now()
+    rename(tmp, file)
+    rename 失败 → 直写 file（跨设备 / 被占用 / 只读的回退）
+    直写也失败 → 抛 Error，code = "ENOVELWRITEFAIL"</div>
+      <p><code>set</code> 成功后<strong>强制重读</strong>状态文件再计算生效值与 <code>source</code>，避免首写时返回写前快照（旧版曾出现盘上 <code>enabled:false</code> 而返回值仍是 config 的 <code>true</code>）。若本次 patch 含 <code>creationProfiles</code>，还会同步 <code>novels/创作资料/&lt;书名&gt;/</code> 下 <code>创作设定.md</code> 与 <code>主要人物设定.md</code> 的用户段（含空壳目录清理）；同步失败不影响设定保存。</p>
+
+      <h3>7 · <code>rawWriting</code> 的语义与写入位置</h3>
+      <div class="formula">写入位置：state.json 的 features.rawWriting      （默认 false）
+生效位置：DSH 系统提示词 section "novel-writing:raw-writing"，order = 151
+    读 readSentenceStateSync().features.rawWriting === true 时注入 RAW_WRITING_PROMPT
+    否则返回空串（宿主丢弃空段落，等于不注入）</div>
+      <p><code>RAW_WRITING_PROMPT</code> 的文本为「非净化模式已开启（用户已确认）」加四条要求：照原文的细节密度与露骨程度描写血腥 / 暴力 / 成人场景、不回避不委婉化、保持原文用词与动作细节、仅限用户个人创作。GUI 中开启该开关需经过双重确认与承诺输入；<strong>通过本工具直接传 <code>{ features: { rawWriting: true } }</code> 会跳过这套确认流程</strong>，因此只应在用户明确要求时使用。</p>
+      <p>与之相邻但不属于本工具参数的是系统提示词档位 <code>systemPromptMode</code>（枚举 <code>off</code> / <code>brief</code> / <code>full</code>，默认 <code>brief</code>）：它同样落在状态文件里，但只能由 GUI 的 <code>POST /state</code> 写入。三档分别对应不注入、<code>BRIEF_TEXT</code>、<code>WORKFLOW_TEXT</code>。</p>
+
+      <h3>8 · 语义引擎状态（<code>embedding</code>）</h3>
+      <div class="formula">st = embedding.status()
+   ← { modelPresent, loaded, error, lastCacheError }，只探测文件与已加载标志，不加载模型
+
+available = features.semanticEmbedding 为真 且 (st.loaded 或 st.modelPresent)
+loaded    = st.loaded
+error     = features.semanticEmbedding 为真 ? (st.error ?? "") : "semanticEmbedding 已关闭"</div>
+      <div class="warn">
+        <b><code>available: true</code> 不等于「推理可用」。</b>它只表示开关打开且模型文件在位（或已加载）。真正完成 ONNX 会话加载要看 <code>loaded</code>；加载失败时 <code>error</code> 为失败原因的前 300 字，且有 30 秒冷却后自动重试。
+      </div>
+
+      <h2>约束与边界</h2>
+      <ul>
+        <li><strong>本工具不能被关闭。</strong>两条写入路径都强制剔除该键：工具侧写入前 <code>delete toolsPatch.novel_sentence_config</code>，GUI 路由侧同样在写入前删除。因此它通常<strong>不出现在 <code>state.json</code> 的 <code>tools</code> 里</strong>，读取时按 <code>!== false</code> 判定为开。这一设计是为避免「关掉开关后连开启的工具都调不到」的死锁。</li>
+        <li><strong>白名单之外的一切静默忽略。</strong><code>tools</code> 只认 16 个工具名，<code>features</code> 只认 9 个键；非布尔值、非对象、拼错的键都不会报错也不会回显。<code>updated</code> 只表示「发生过写入」，不能用来确认某个具体键被接受。</li>
+        <li><strong>非法容差维度是整体丢弃，不是钳到边界。</strong><code>low &gt; high</code>、只给一侧、非数字都会让该维<strong>不写入</strong>（保持此前磁盘值或推荐值）；<code>low</code> / <code>high</code> 本身的越界值会被钳到 <code>[-99, 0]</code> / <code>[0, 99]</code>。未知维度键会落盘但无消费点。</li>
+        <li><strong><code>{}</code> 与 <code>null</code> 都是「清除」。</strong><code>styleTolerance</code> / <code>creationProfile</code> 传空对象或 null 即清空；<code>creationProfiles</code> 传空对象或 null 表示清除全部书的设定（并触发创作资料里的用户段移除与空壳目录清理）。宿主的 JSON Schema 若不支持 null 类型，一律用 <code>{}</code>。</li>
+        <li><strong><code>set</code> 是增量而非整份替换。</strong>未传字段保持原值；<code>tools</code> / <code>features</code> / <code>creationProfiles</code> 为浅合并。<code>creationProfiles</code> 不提供「只删某键但保留该书其余字段」的语义——按书整体替换，值传 <code>null</code> 是删除该书。</li>
+        <li><strong>生效值与磁盘值可能不同。</strong><code>source</code> 反映的是生效值从哪来：state 文件一旦存在，插件 <code>config.sentenceAnalysis</code> 与 v0.4.0 兼容文件都不再影响 <code>enabled</code> / <code>autoAnalyze</code>，但 <code>styleTolerance</code> 等其余字段本来也只从 state 文件读。</li>
+        <li><strong>开关的关闭后果不统一。</strong>工具开关关闭 → 该工具 <code>execute</code> 抛错（硬拒绝）；总开关 <code>enabled=false</code> → <code>novel_sentence_analysis</code> 返回禁用桩、<code>novel_style_check</code> 抛错；<code>semanticSearch</code> 关闭 → 语义检索返回 <code>available:false</code> 的软降级对象。调用方不能假设「关闭 = 报错」或「关闭 = 空结果」。</li>
+        <li><strong><code>autoAnalyze</code> 只影响提示词，不影响任何工具返回值。</strong>它被写进系统提示词第 4 条（<code>false</code> 时要求「仅在用户明确要求时调用」句式分析）；插件本身不据此改变输出。</li>
+        <li><strong>跨进程写入不是事务。</strong>写入串行化（<code>stateWriteChain</code>）只在单个进程内生效。MCP 服务器是独立进程，它与 DSH 宿主内的 GUI 同时写同一文件时，读-合并-写可能互相覆盖；需要并发写入时应串行化调用而非并行。</li>
+        <li><strong>写入失败与参数错误可区分。</strong>磁盘写不进去时抛出的错误带 <code>code = "ENOVELWRITEFAIL"</code>，GUI 路由据此返回 500；其余写入异常在路由层返回 400。首次 <code>set</code> 的返回值取自写后重读，因此不会出现「返回值与盘上状态相反」。</li>
+        <li><strong>无 brief / 精简模式。</strong>参数 schema 为 <code>additionalProperties: false</code> 且不含 <code>brief</code>；需要控制 token 时应减少调用频次，而不是指望该工具压缩输出。</li>
+        <li><strong>跨版本差异。</strong><code>systemPromptMode</code> 为 v4.0.0 引入的字段，更早的状态文件没有该键，读取侧按默认 <code>brief</code> 处理；<code>rawWriting</code> 在明确设置前按 <code>FEATURE_DEFAULTS</code> 的 <code>false</code> 处理（旧版曾把它误报为 <code>true</code>）。</li>
+      </ul>
+
+      <h2>相关工具</h2>
+      <ul>
+        <li><a href="novel-sentence-analysis.html">novel_sentence_analysis</a> —— 受 <code>enabled</code> 与 <code>autoAnalyze</code> 直接约束的分析工具；<code>enabled=false</code> 时返回禁用桩。</li>
+        <li><a href="novel-style-check.html">novel_style_check</a> —— <code>styleTolerance</code> 的唯一消费点，逐维覆盖推荐容差后做基线判定。</li>
+        <li><a href="novel-style-report.html">novel_style_report</a> —— 六维基线与 <code>recTol</code> 的来源；未自定义容差时本工具回显 <code>{}</code>，即使用该推荐值。</li>
+      </ul>
+
+      <h2>源码位置</h2>
+      <ul>
+        <li><span class="src">lib/index.js</span> —— 工具注册与实现 <code>registerNovelSentenceConfig</code>：参数白名单（<code>tools</code> / <code>features</code> 的合法键列表）、写入分支、<code>source</code> 推导与返回体组装</li>
+        <li><span class="src">lib/core.js</span> —— <code>SENTENCE_ANALYSIS_DEFAULTS</code>、<code>ALL_TOOLS</code>、<code>FEATURE_DEFAULTS</code>、<code>featureEnabled</code>、<code>toolEnabled</code>、<code>assertToolEnabled</code>、<code>stateFilePath</code>、<code>readSentenceState</code>、<code>writeSentenceState</code>、<code>atomicWriteJson</code>、<code>clampStyleTolerance</code>、<code>effectiveSentenceAnalysis</code>、<code>makeStateRoutes</code>（GUI 侧 GET/POST <code>/api/dsh-novel-writer/state</code>）</li>
+        <li><span class="src">lib/style-metrics.js</span> —— <code>METRIC_ORDER</code> / <code>METRIC_LABELS</code> / <code>computeBaselineFromPerChapter</code> 的 <code>recTol</code></li>
+        <li><span class="src">lib/prompts.js</span> —— <code>RAW_WRITING_PROMPT</code> / <code>WORKFLOW_TEXT</code> / <code>BRIEF_TEXT</code>（三档系统提示词文本）</li>
+        <li><span class="src">lib/embedding.js</span> —— <code>status</code> / <code>isAvailable</code>（<code>embedding</code> 字段的来源）</li>
+        <li><span class="src">mcp/server.mjs</span> —— MCP 侧只注入 <code>root</code>，不读写状态文件；因此 MCP 调用与本工具共享同一份 <code>state.json</code></li>
+      </ul>
+    </article>
+
+    <nav class="docs__pager" id="docsPager"></nav>
+  </main>
+
+  <aside class="docs__toc" id="docsToc"></aside>
+</div>
+
+<script src="docs.js"></script>
+</body>
+</html>

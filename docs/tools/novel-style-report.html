@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>novel_style_report — 风格画像报告｜dsh-novel-writer 技术文档</title>
+<meta name="description" content="novel_style_report 的实现细节：六维文笔指标的公式、词表与阈值，基线带 μ±σ 的计算与钳制规则，偏离判定分支，以及对调用方模型的约束。">
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body class="docs">
+
+<header class="docs__top">
+  <a class="docs__brand" href="../index.html">← dsh-novel-writer</a>
+  <span class="docs__crumb">技术文档 / <code>novel_style_report</code></span>
+</header>
+
+<div class="docs__layout">
+  <aside class="docs__side" id="docsSide"></aside>
+
+  <main class="docs__main">
+    <article class="doc">
+      <h1>novel_style_report</h1>
+      <p class="doc__lead">
+        风格画像报告。对全书逐章测量六个文笔维度，汇总为基线带 μ±σ，并聚合文风指纹、高频词、题材流派、情感量化、氛围 12 维与语义风格距离，作为「测量数据」交给调用方模型做风格判断。<strong>插件只报数、不下结论</strong>：模型的判断可通过 <code>aiJudgment</code> 回传存盘，供后续续写时复用。
+      </p>
+
+      <h2>参数</h2>
+      <table>
+        <thead><tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><th><code>book</code></th><td>string</td><td>是</td><td>书名，即 <code>novels/</code> 下的子目录名。经 <code>sanitizeSegment</code> 过滤，拒绝路径分隔符与上跳。</td></tr>
+          <tr><th><code>root</code></th><td>string</td><td>否</td><td>章节库根目录。MCP 形态下必须落在启动参数 <code>--root</code> 指定范围内，越界会被静默回退。</td></tr>
+          <tr><th><code>action</code></th><td>string</td><td>否</td><td><code>report</code>（默认）生成测量报告；<code>get</code> 只读取已保存的 AI 判断，不重算。</td></tr>
+          <tr><th><code>brief</code></th><td>boolean</td><td>否</td><td><code>true</code> 返回一句话精简结论，用于省 token 的场景。</td></tr>
+          <tr><th><code>aiJudgment</code></th><td>string</td><td>否</td><td>模型给出的风格气质判断。传入后与测量数据一同写入 <code>style-reports/&lt;book&gt;.json</code>。</td></tr>
+        </tbody>
+      </table>
+
+      <h2>输出结构</h2>
+      <p>契约字段（<code>output.schema</code>）：<code>book</code> 与 <code>report</code> 为必返；其余按需出现。渲染层会在正文之后追加「风格锚·原著段落」与「句式骨架」两段，供生成端照样例写，而不是只盯数字。</p>
+      <table>
+        <thead><tr><th>字段</th><th>类型</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr><th><code>report</code></th><td>string</td><td>人类可读的完整报告文本</td></tr>
+          <tr><th><code>baseline</code></th><td>object</td><td>六维基线与每章测量值，见下文「基线带」</td></tr>
+          <tr><th><code>baselineChapterCount</code></th><td>integer</td><td>实际参与基线统计的章数（已剔除过短章节）</td></tr>
+          <tr><th><code>dimensions</code></th><td>object</td><td>指纹 / 词汇 / 题材 / 情感 / 氛围 12 维 / 语义距离</td></tr>
+          <tr><th><code>anchors</code> / <code>skeletons</code></th><td>array</td><td>原著代表性段落与句式骨架样例</td></tr>
+          <tr><th><code>brief</code></th><td>string</td><td>精简模式下的单句结论</td></tr>
+          <tr><th><code>savedJudgment</code></th><td>string</td><td><code>action:"get"</code> 时返回的历史判断</td></tr>
+        </tbody>
+      </table>
+
+      <h2>六个维度的定义与公式</h2>
+      <p>全部维度<strong>零依赖、纯规则统计</strong>，不做模型推理。所有计数先按千字归一，量纲统一：</p>
+      <div class="formula">per1000(n) = n / totalChars × 1000</div>
+      <p>测量前先剥离 Markdown 标题行（<code>^#{1,6}[ \t]+[^\n]*</code>），章节标题不参与任何统计。</p>
+
+      <h3>1 · 句法复杂度 <code>complexity</code></h3>
+      <div class="formula">complexity = Σ max(小句数ᵢ, 1) / 句数</div>
+      <p>切句用与 <code>analysis.js</code> <strong>共用</strong>的句末符集合（<code>。！？…!?</code>），正则为「句末符后紧跟非句末符处切分，或遇换行切分」；句末符后的闭合引号会被吞掉（<code>她说：「走吧。」</code> 不产生孤儿引号句），纯标点残片（<code>！！！</code>）丢弃。小句按 <code>[，,；;：:]</code> 切分后计非空段。该维度是「平均每句由几个小句构成」，近似嵌套深度。</p>
+
+      <h3>2 · 修饰密度 <code>modifierDensity</code></h3>
+      <div class="formula">modifierDensity = per1000(adjMods + advMods)
+
+adjMods：/[\u4e00-\u9fff]{1,3}(?&lt;!目)(?&lt;!的)的/g   → 再按 2 字窗口排除词尾/词首假阳性
+advMods：/[\u4e00-\u9fff]{1,4}地/g                      → 再排除「地」结尾与「地X」名词</div>
+      <p>「的」作为词尾（真的 / 似的 / 目的 / 有的 / 是的）或词首（的确 / 的士）时都不是修饰助词，用两张停用词表按命中位置的 2 字窗口排除；刻意<strong>不</strong>收录「中的 / 的话」——它们在「梦中的场景」「他的话很多」里是真修饰语。X地 侧按「地」的位置分两张名词表：以「地」结尾的（土地 / 原地 / 目的地…）用后缀判定，以「地」开头的（地上 / 地下 / 地方…）用命中之后的 2 字窗口判定。</p>
+
+      <h3>3 · 抽象度 <code>abstractDensity</code></h3>
+      <div class="formula">abstractDensity = per1000(abstractCount)
+
+逐位扫描：对每个未消费位置，按 4 → 3 → 2 字尝试最长匹配
+命中条件：整词为纯汉字 且 末字 ∈ 抽象后缀表（57 项：感/性/度/情/绪/念/命/运/缘/罪/魂/魄…）
+排除：假阳性停用词 12 项（知道/味道/街道/心里/哪里/事情/睡觉/地道/门道/过道/生意/注意）
+命中后按命中长度做区间消费，避免同一段文字被重复计数</div>
+      <p>采用「最长匹配 + 区间消费」而非正则前瞻：旧写法要求抽象词后必须是非汉字，导致「她的感情很深。」计 0 而「她的感情，很深。」计 1——同词只因后随标点不同而结果相反。已知取舍：相邻两个抽象词若被一个 4 字窗口跨越（如「感情和理性」），只计 1 个。</p>
+
+      <h3>4 · 动作密度 <code>actionDensity</code></h3>
+      <div class="formula">actionDensity = per1000(actionCount)
+
+单字动作词表 625 条（去重 29 条 + 清洗 11 条名词/形容词后）
+2 字搭配黑名单 28 项（十分/高兴/不行/行李/方法/瓶子/太阳/平静/安静/墙壁…）
+
+对每个命中位置依次尝试：
+① 后接动态助词「了着过起住上下进出开完掉得」→ actionCount++；
+   若其后仍是动作词，视为动补合并（走出去 / 跑回来）整体跳 3 字
+② 后接名词性汉字（排除 的了着过在是把被给跟从向对于和与以及就都也很又再）→ actionCount++，跳 2 字
+③ 位于句末（后接标点/空白/文本结尾）→ actionCount++，跳 1 字</div>
+      <p>词表本身是文档：单字表无法区分「分（分开）」与「十分」、「行（行走）」与「行李」，因此用 2 字黑名单在命中处兜底，窗口取命中字的前一字与后一字两种组合。第 ③ 条修的是越过文本末位与句末动词的漏检。</p>
+
+      <h3>5 · 不确定性 <code>hedgeDensity</code></h3>
+      <div class="formula">hedgeDensity = per1000(hedgeCount)
+
+模糊限制语表 20 项：似乎 仿佛 好像 大概 也许 或许 可能 像是 隐约 依稀
+                差不多 八成 兴许 恍若 貌似 如同 好似 疑似 感觉 像是要
+匹配策略：按词长降序，命中后用占位符消费该区间</div>
+      <p>最长优先 + 占位符是为了避免重叠计数：<code>像是要</code> 不再被算成 <code>像是</code> 两次加 <code>像是要</code> 两次。</p>
+
+      <h3>6 · 留白指数 <code>gapIndex</code></h3>
+      <div class="formula">gapIndex = per1000(省略号数 × 2 + 破折号数 × 2) + per1000(未完句数)
+
+省略号 = 「……」+「...」出现次数；破折号 = 「——」出现次数
+未完句判定：以省略号/破折号结尾 → 是；以 。！？!? 结尾 → 否；
+           否则其后不是换行/结尾 → 是（行末无标点按排版分行处理，不计）</div>
+      <p>两项都按千字归一是硬性要求：早期版本把千字密度与「未完句百分比」（0–100 量级）直接相加，15 字文本能算出 222.22，量纲不可比。未完句定位用顺序游标推进，重复文本不会误判。</p>
+
+      <h2>基线带 μ±σ 的计算</h2>
+      <p>逐章测量后汇总，<strong>跳过正文长度不足 40 字的章节</strong>（不足则不参与统计，也不计入 <code>baselineChapterCount</code>）：</p>
+      <div class="formula">μ       = Σ vᵢ / n
+σ_measured = sqrt( Σ (vᵢ − μ)² / n )          ← 总体标准差
+minSigma   = max( μ × 0.15 , μ = 0 ? 0 : 1e-4 )
+σ_used     = max( σ_measured , minSigma )       ← 小书容差带过窄的保护
+low / high = μ ∓ σ_used
+recTol     = clamp( round(1.5 × σ_used / μ × 100 / 5) × 5 , 10 , 100 )</div>
+      <p><code>minSigmaRatio</code> 默认 0.15，即 σ 下限为均值的 15%。推荐容差取「作者自身章节波动的 1.5 倍 σ」，四舍五入到 5 的倍数，下限 10%、上限 100%；μ=0 时回退 15 以避免除零。</p>
+      <div class="note">
+        <b>σ 为什么要分两个字段。</b>返回体同时给出 <code>sigmaMeasured</code>（原始样本标准差）、<code>sigmaUsed</code>（参与 low/high/recTol 的钳制值）与 <code>sigmaClamped</code>（是否发生钳制）。早期版本只返回钳制后的值，展示层把 0.15μ 的下限当成「作者自身波动」念给用户——实测真实 σ=0.0084 被报成 0.15，差 18 倍。
+      </div>
+
+      <h2>偏离判定</h2>
+      <p>给新章指标 <code>v</code> 与基线 <code>μ</code>：</p>
+      <div class="formula">devPct = round( (v − μ) / μ × 1000 ) / 10        ← 相对均值的百分比
+
+μ ≠ 0：status = devPct &lt; tol.low ‖ devPct &gt; tol.high            → "out"
+                devPct &lt; tol.low/2 ‖ devPct &gt; tol.high/2      → "warn"
+                否则                                            → "ok"
+
+μ = 0：σ &gt; 0 且 |v| &gt; 1.5σ → "out"（basis: "absolute"，devPct 记 null）
+        否则整维登记进 skippedDims，由 summary 披露</div>
+      <p><code>tol</code> 默认取 <code>{ low: −recTol, high: +recTol }</code>，也接受调用方逐维自定义。容差语义有明确区分：<strong>显式 0 表示零容差</strong>（任何偏差都判 out），只有缺失 / <code>null</code> / 空串 / 非有限值才回退推荐值——早期用 <code>Number(x) || -recT</code> 把 null 也当 0，单侧缺失时那一侧会退化成零容差。</p>
+
+      <h2>约束与边界（对调用方模型）</h2>
+      <ul>
+        <li><strong>book 必填</strong>，且经 <code>sanitizeSegment</code> 过滤；<code>root</code> 在 MCP 形态下必须落在启动时的 <code>--root</code> 之内——越界时由 MCP 层<strong>静默回退</strong>到 <code>--root</code> 并只写 stderr 日志，调用方不会收到错误，因此不要把 <code>root</code> 当作可靠的越权探测手段。</li>
+        <li><strong>测量与判断分离</strong>：本工具不返回风格结论。需要「这本书的文风是什么气质」这类判断时，由模型阅读报告后给出，并通过 <code>aiJudgment</code> 回传，插件负责存盘与复用。</li>
+        <li><strong>过短章节被排除</strong>：正文 &lt; 40 字的章节不参与基线；<code>baselineChapterCount</code> 会小于实际章数，这是预期行为。</li>
+        <li><strong>维度可能被跳过</strong>：当某维基线 μ=0 且 σ=0 时无法做相对判定，该维进入 <code>skippedDims</code>，<code>summary</code> 会写明「另有 N 个维度基线均值为 0、未做相对判定」。调用方不应把「无维度超出容差带」读成「全部维度合格」。</li>
+        <li><strong>数值不可跨版本横比</strong>：v4.3.0 统一了句末符口径（省略号单独成句）、清洗了动作词表（去重 29 + 剔除 11 个非动词）、抽象度改为最长匹配、修饰密度增加停用词表——同一本书在新旧版本下的报告数值不可直接比较。</li>
+        <li><strong>落盘位置</strong>：报告写入 <code>&lt;root&gt;/.novel-writer/style-reports/&lt;book&gt;.json</code>；<code>action:"get"</code> 只读取该文件，不重算。</li>
+      </ul>
+
+      <h2>相关工具</h2>
+      <ul>
+        <li><a href="novel-style-check.html">novel_style_check</a> —— 用同一套维度做「新章 vs 全书基线」的对照判定；基线会先剔除目标章再计算。</li>
+        <li><a href="novel-sentence-analysis.html">novel_sentence_analysis</a> —— 九类句式分布、情感曲线与风格指纹，是本报告「维度」部分的原始来源。</li>
+        <li><a href="novel-semantic-search.html">novel_semantic_search</a> —— 语义风格距离所依赖的本地向量引擎。</li>
+      </ul>
+
+      <h2>源码位置</h2>
+      <ul>
+        <li><span class="src">lib/style-metrics.js</span> —— 六维测量、基线计算、偏离判定（<code>measureStyleMetrics</code> / <code>computeBaselineFromPerChapter</code> / <code>judgeAgainstBaseline</code>）</li>
+        <li><span class="src">lib/analysis.js</span> —— <code>TERMINATORS</code> 句末符常量、句式与情感分析</li>
+        <li><span class="src">lib/index.js</span> —— 工具注册：参数、输出契约与 <code>execute</code> 实现</li>
+        <li><span class="src">lib/vibe.js</span> —— 氛围光谱 12 维</li>
+      </ul>
+    </article>
+
+    <nav class="docs__pager" id="docsPager"></nav>
+  </main>
+
+  <aside class="docs__toc" id="docsToc"></aside>
+</div>
+
+<script src="docs.js"></script>
+</body>
+</html>

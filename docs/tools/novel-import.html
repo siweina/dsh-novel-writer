@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>novel_import — 批量导入｜dsh-novel-writer 技术文档</title>
+<meta name="description" content="novel_import 的实现细节：文件收集与扩展名白名单、章号与书名的双通道识别、分组优先级、异名同书提示、apply 落盘的同号改名规则、move 模式的源文件删除语义，以及 MCP 下的 src 根目录限制。">
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body class="docs">
+
+<header class="docs__top">
+  <a class="docs__brand" href="../index.html">← dsh-novel-writer</a>
+  <span class="docs__crumb">技术文档 / <code>novel_import</code></span>
+</header>
+
+<div class="docs__layout">
+  <aside class="docs__side" id="docsSide"></aside>
+
+  <main class="docs__main">
+    <article class="doc">
+      <h1>novel_import</h1>
+      <p class="doc__lead">
+        批量导入原稿件。递归扫描一个文件夹，按「文件名 → 文件头内容 → 未分类」的优先级自动识别书名并把章节文件分组，默认处于 <code>scan</code> 预览模式——只返回分组建议、不写盘；显式传 <code>mode:"apply"</code> 才按分组复制（或移动）到 <code>novels/&lt;书名&gt;/</code>。目标目录中已占用同名文件或同章号时自动改名为空闲章号，<strong>绝不覆盖既有章节</strong>。
+      </p>
+      <div class="warn">
+        <b>destructive 行为。</b><code>mode:"apply"</code> 与 <code>move:true</code> 同时成立时，每个文件复制成功后会用 <code>rm(..., { force: true })</code> 删除源文件：<strong>不进回收站、无备份、无撤销</strong>。批量中途出错会使源目录处于「部分文件已被删除」的状态。默认 <code>move:false</code>，未显式传真值绝不删除任何源文件。
+      </div>
+
+      <h2>参数</h2>
+      <table>
+        <thead><tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><th><code>src</code></th><td>string</td><td>是</td><td>待导入的原稿件文件夹路径，可含多本小说、可含子文件夹。<strong>MCP 形态下默认必须位于启动参数 <code>--root</code> 书库根之内</strong>，越界时整次调用被拒；确需导入外部目录须用 <code>--allow-external-src</code> 启动服务器。</td></tr>
+          <tr><th><code>mode</code></th><td>string</td><td>否</td><td>枚举 <code>scan</code> / <code>apply</code>。判定写为 <code>args.mode === "apply" ? "apply" : "scan"</code>：<strong>只有字面量 <code>"apply"</code> 才执行导入</strong>，其余任何取值（含拼写错误与缺省）都按 <code>scan</code> 处理。</td></tr>
+          <tr><th><code>book</code></th><td>string</td><td>否</td><td><code>apply</code> 时可选：把所有（或 <code>files</code> 指定的）文件强制归入该书名的组，用于合并异名同书，或为未分类文件指定归属。</td></tr>
+          <tr><th><code>files</code></th><td>array&lt;string&gt;</td><td>否</td><td><code>apply</code> 时可选白名单，元素为相对 <code>src</code> 的路径。匹配前统一把反斜杠转成 <code>/</code> 并剥掉前导 <code>./</code> 或 <code>/</code>。省略或传空数组则处理全部扫描到的文件。</td></tr>
+          <tr><th><code>move</code></th><td>boolean</td><td>否</td><td>判定写为 <code>args.move === true</code>。仅在 <code>apply</code> 下有意义：为真时先复制再删除源文件。默认 <code>false</code>（源文件保留）。</td></tr>
+          <tr><th><code>recursive</code></th><td>boolean</td><td>否</td><td>判定写为 <code>args.recursive !== false</code>，因此默认递归；只有显式传 <code>false</code> 才只扫顶层。</td></tr>
+          <tr><th><code>root</code></th><td>string</td><td>否</td><td>章节库根目录（含 <code>novels</code> 子目录）。MCP 形态下由服务器注入，越界回退书库根。</td></tr>
+        </tbody>
+      </table>
+      <p>参数对象声明 <code>additionalProperties: false</code>，多传的键会被宿主拒绝。</p>
+
+      <h2>输出结构</h2>
+      <p>契约字段（<code>output.schema.required</code>）：<code>src</code> / <code>mode</code> / <code>groups</code> / <code>skipped</code> / <code>imported</code> 五项<strong>恒返</strong>，<code>scan</code> 与 <code>apply</code> 返回体同构——<code>scan</code> 模式下 <code>imported</code> 为空数组。</p>
+      <table>
+        <thead><tr><th>字段</th><th>类型</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr><th><code>src</code></th><td>string</td><td><strong>必返</strong>。原样回显的 <code>src</code> 参数</td></tr>
+          <tr><th><code>mode</code></th><td>string</td><td><strong>必返</strong>。实际生效的模式（<code>"scan"</code> 或 <code>"apply"</code>），可用于校验调用方的意图是否被识别</td></tr>
+          <tr><th><code>groups</code></th><td>array</td><td><strong>必返</strong>。分组结果；两种模式下都返回完整分组，是 <code>scan</code> 预览的全部价值所在</td></tr>
+          <tr><th><code>groups[].book</code></th><td>string</td><td>组名（未分类组的组名固定为 <code>"未分类"</code>）；<code>apply</code> 落盘时另经 <code>sanitizeSegment</code> 清洗</td></tr>
+          <tr><th><code>groups[].from</code></th><td>string</td><td>枚举 <code>file</code> / <code>content</code> / <code>forced</code> / <code>unclassified</code>，标明该组名的来源通道</td></tr>
+          <tr><th><code>groups[].maybe</code></th><td>array</td><td>可选。可能同书的其他组名（供调用方判断是否用 <code>book</code> 合并），见「异名同书提示」</td></tr>
+          <tr><th><code>groups[].files</code></th><td>array</td><td><strong>必返</strong>（每组必有）。元素为 <code>{ file }</code>，可选带 <code>chapter</code>（解析出的章号）与 <code>title</code>（从正文头部《》解析出的书名候选）</td></tr>
+          <tr><th><code>skipped</code></th><td>array&lt;string&gt;</td><td><strong>必返</strong>。被跳过的文件；元素是相对路径，<code>apply</code> 下未分类项还带原因文案。读取失败、内容为空白、未分类三种情形共用此字段</td></tr>
+          <tr><th><code>imported</code></th><td>array</td><td><strong>必返</strong>。元素为 <code>{ book, file, path }</code>：清洗后的书名、<strong>最终落盘文件名</strong>（可能与源文件名不同）、绝对路径；<code>scan</code> 下为空数组</td></tr>
+        </tbody>
+      </table>
+
+      <h2>行为与实现</h2>
+
+      <h3>1 · 文件收集</h3>
+      <div class="formula">collectTextFiles( src, recursive, out = [], prefix = "" ):
+  entries = readdir( dir, { withFileTypes: true } )
+  readdir 失败（路径不存在 / 无权限）→ 直接返回已收集结果，不抛错
+  entries 按 name.localeCompare 升序
+  对每个条目：
+    目录 且 recursive 为真 → 递归进入，相对前缀 + "/"
+    文件 且 extname(小写) ∈ { .md, .markdown, .txt } → 收集
+返回相对 src 的路径数组（分隔符统一为 "/"）</div>
+      <p>扩展名白名单是硬边界：<code>.docx</code> / <code>.json</code> / 无扩展名文件不进入扫描结果，因此也不会出现在 <code>skipped</code> 中。目录不可读时返回空数组而不报错，调用方会看到「0 个文件 → 0 组」的正常返回体。</p>
+
+      <h3>2 · 章号与书名的双通道识别</h3>
+      <div class="formula">chapter         = parseChapterNumber( basename(rel) )
+nameFromFile    = bookNameFromFileName( basename(rel) )
+nameFromContent = bookNameFromContent( text )
+
+parseChapterNumber 支持（入口先做全角宽度归一）：
+  第1章 / 第01章 / 第一章 / 书名-01-标题 / 书名 01 / 01-标题
+bookNameFromFileName：只取章号标记「之前的书名前缀」，并把 IMPORT_NOISE
+  停用词（原稿件 单章 调教计划 未命名 新建文档 草稿 无题 正文 手稿）剔除；
+  文件名以章号开头且无书名前缀时返回 undefined
+bookNameFromContent：只看前 12 行；优先取《》包裹的 2–30 字书名；
+  命中章号标记的行跳过；无《》且无书名则返回 undefined</div>
+
+      <h3>3 · 分组优先级</h3>
+      <div class="formula">isChapterFile = ( chapter !== undefined ) 或 ( nameFromContent !== undefined )
+
+若 forcedBook 已给出                  → book = forcedBook,     from = "forced"
+否则若 isChapterFile 且 nameFromFile  → book = nameFromFile,   from = "file"
+否则若 isChapterFile 且 nameFromContent → book = nameFromContent, from = "content"
+否则                                  → book = "未分类",        from = "unclassified"
+
+组内排序：chapter 升序（无章号视为 +∞，排在最后），同章号再按 file 的 localeCompare</div>
+      <p>先判 <code>isChapterFile</code> 再取书名，是为了避免把「聚会的照片.md」这类非章节文件按文件名误判成书名。<code>file</code> 通道优先于 <code>content</code> 通道：文件名里的书名前缀被认为比正文头部的《》更可靠。</p>
+
+      <h3>4 · 异名同书提示 <code>maybe</code></h3>
+      <div class="formula">对每两组 (A, B)，组名先去空白；任一长度小于 2 则跳过：
+  包含关系：a.includes(b) 或 b.includes(a)                → 列入
+  字符集合重合率：common / max( |A|, |B|, 1 ) ≥ 0.6        → 列入</div>
+      <p>该字段只是提示，<strong>不会自动合并</strong>。调用方若确认同书，应带 <code>book</code> 参数重新调用（<code>from</code> 会变成 <code>forced</code>）以合并为一组，否则同名书会被拆成两个目录。</p>
+
+      <h3>5 · apply 落盘与改名规则</h3>
+      <div class="formula">for group of groups:
+  if ( group.book === "未分类" ):
+      每个文件 → skipped += file + "（未分类，未导入——请用 book 参数指定归属书名后重试）"
+      continue
+
+  safeBook = sanitizeSegment( group.book, "book" )
+  destDir  = &lt;root&gt;/novels/&lt;safeBook&gt;          mkdir -p
+
+  for row of group.files:
+    rawName = basename( row.file )
+    rawNum  = parseChapterNumber( rawName )
+    if ( rawNum 已定义 ):
+        if ( destDir 内存在解析出同一章号的文件 ) → destFile = nextFreeChapterFile( destDir, rawName )
+    elif ( destDir 内已存在同名文件 )            → destFile = nextFreeChapterFile( destDir, rawName )
+    else                                          destFile = rawName
+
+    copyFile( src/row.file → destDir/destFile )
+    if ( move === true ) rm( src/row.file, { force: true } )
+    imported += { book: safeBook, file: destFile, path: destFull }
+
+if ( mode === "apply" 且 imported 非空 ) → noteRoot( root )   ← 记录书库根供后续工具复用</div>
+      <p><code>nextFreeChapterFile</code> 生成空闲章号时会<strong>沿用原文件名的章号格式</strong>：阿拉伯数字保持原有补零宽度（<code>第007章</code> 递增为 <code>第008章</code>）；中文数字用中文数字生成（<code>第十章</code> → <code>第十一章</code>，支持到 9999）；<code>书名-01-标题</code> 与 <code>01-标题</code> 保持分隔符位置；格式无法识别时退化为 <code>第NN章 原名</code>。占用判定按 <code>parseChapterNumber</code> 的<strong>数值</strong>比较，因此 <code>第一章.md</code> 与 <code>第01章.md</code> 被视为同一章号。</p>
+
+      <h3>6 · 渲染文本</h3>
+      <div class="formula">&lt;path&gt;{src}&lt;/path&gt;
+&lt;type&gt;novel-import-{mode}&lt;/type&gt;
+&lt;content&gt;
+
+扫描结果：N 个文件 → M 组（跳过 K 个文件：无法读取或未分类）
+[组名] (来自文件名|文件头内容|未分类|强制指定, N 个文件)
+  - 第N章 相对路径
+跳过：
+  - 相对路径
+已导入 N 个文件：
+  - novels/&lt;书名&gt;/&lt;落盘文件名&gt;
+&lt;/content&gt;</div>
+
+      <h2>约束与边界</h2>
+      <ul>
+        <li><strong>删除行为（最高优先级）。</strong><code>mode:"apply"</code> + <code>move:true</code> 会对每个成功复制的源文件执行 <code>rm(..., { force: true })</code>：永久删除、不进回收站、无备份、无撤销。删除按文件逐个发生在复制成功之后，因此批量中途失败（磁盘满、权限、路径过长）会使源目录处于部分删除的状态，且没有回滚。不需要清理源目录时应保持默认 <code>move:false</code>。</li>
+        <li><strong>MCP 下的 src 路径边界。</strong><code>src</code> 默认必须位于启动参数 <code>--root</code> 书库根之内（含根本身）；越界时服务器<strong>不执行工具</strong>，直接返回 <code>isError</code> 文本并提示用 <code>--allow-external-src</code> 重启。该限制用于阻断「文档注入 → 复制任意目录的 .md/.txt 进书库再读出」的路径。参数中的 <code>root</code> 同样必须先落在书库根内，越界时被静默回退到书库根而非报错。</li>
+        <li><strong>被静默跳过的情形</strong>（不报错、也不一定出现在 <code>skipped</code> 中）：
+          <ul>
+            <li><code>src</code> 不存在或不可读 → <code>collectTextFiles</code> 吞掉 <code>readdir</code> 错误并返回空列表，返回体为「0 个文件 → 0 组」，<code>skipped</code> 为空。</li>
+            <li><code>files</code> 白名单里列举了不存在的相对路径 → 该条目被无声忽略。</li>
+            <li>条目不是普通文件（<code>stat</code> 失败或 <code>isFile()</code> 为假）→ <code>continue</code>，<strong>不计入 <code>skipped</code></strong>。</li>
+            <li>扩展名不在白名单 → 从未进入扫描结果，也不计入 <code>skipped</code>。</li>
+            <li>读取或编码解码失败（<code>readTextFile</code> 抛错）→ 计入 <code>skipped</code>（原始相对路径，无原因文案）。</li>
+            <li>内容为纯空白（<code>text.trim() === ""</code>）→ 计入 <code>skipped</code>。</li>
+          </ul>
+        </li>
+        <li><strong>未分类文件在两种模式下处理不一致。</strong><code>apply</code> 时「未分类」组整体不导入，逐文件写入 <code>skipped</code> 并附「请用 <code>book</code> 参数指定归属书名后重试」；<code>scan</code> 时这些文件留在 <code>groups</code> 的未分类组里、<strong>不写入 <code>skipped</code></strong>。因此 <code>scan</code> 与 <code>apply</code> 的 <code>skipped</code> 长度不可直接对比。</li>
+        <li><strong>绝不覆盖既有章节。</strong>目标目录已占用同名文件或同章号时自动改用空闲章号，源文件按原名继续保留（<code>move:false</code> 下）。目标文件名可能不等于源文件名，应以 <code>imported[].file</code> / <code>imported[].path</code> 为准。</li>
+        <li><strong>书名会被清洗。</strong>组名经 <code>sanitizeSegment</code> 剥离 <code>\ / : * ? " &lt; &gt; |</code> 与首尾点空白、为 Windows 保留名加下划线前缀；清洗后为空则报错。<code>imported[].book</code> 是清洗后的目录名，可能与 <code>groups[].book</code> 不同。</li>
+        <li><strong>部分写入无事务。</strong>复制循环未包裹 <code>try</code>：单个 <code>copyFile</code> 失败会让整个 <code>execute</code> 抛错，此前已导入的文件保留在目标目录中，返回体不再产生（调用方只拿到错误信息，无法得知哪些文件已导入）。<code>scan</code> 模式不受此影响。</li>
+        <li><strong>分组与排序是纯启发式。</strong>书名识别没有任何模型参与，全部依赖文件名与正文头部 12 行的字面规则；命名混乱的稿件会落入「未分类」或产生错误的组名。落盘前应先用 <code>scan</code> 复核 <code>groups</code>，必要时用 <code>book</code> 强制归属。</li>
+        <li><strong>章号缺失不等于非章节文件。</strong>文件名无章号但正文头部含《书名》时仍会进组（<code>from:"content"</code>），其 <code>files[]</code> 元素没有 <code>chapter</code> 字段，排序时排在组末。</li>
+        <li><strong>工具开关</strong>：<code>execute</code> 首行执行 <code>assertToolEnabled</code>，若该工具在「写作助手功能」UI 中被关闭，调用直接报错。</li>
+      </ul>
+
+      <h2>相关工具</h2>
+      <ul>
+        <li><a href="novel-books.html">novel_books</a> —— 导入后核对书目列表，确认分组是否合并成预期目录。</li>
+        <li><a href="novel-chapters.html">novel_chapters</a> —— 逐个作品核对章号连续性，发现自动改名产生的章号偏移。</li>
+        <li><a href="novel-new-chapter.html">novel_new_chapter</a> —— 单章创建通道，与批量导入共用同一套章号查重与防覆盖规则。</li>
+        <li><a href="novel-read.html">novel_read</a> —— 抽查导入后正文是否完整、编码是否正确。</li>
+      </ul>
+
+      <h2>源码位置</h2>
+      <ul>
+        <li><span class="src">lib/index.js</span> —— 工具注册与 <code>execute</code>：参数 schema、输出契约、分组、<code>maybe</code> 判定、apply 落盘循环（<code>registerNovelImport</code>，约 175 行）</li>
+        <li><span class="src">lib/core.js</span> —— <code>collectTextFiles</code> 文件收集与扩展名白名单 <code>CHAPTER_EXTENSIONS</code>、<code>parseChapterNumber</code> 章号解析、<code>bookNameFromFileName</code> / <code>bookNameFromContent</code> 书名识别、<code>IMPORT_NOISE</code> 停用词、<code>nextFreeChapterFile</code> 空闲章号生成、<code>sanitizeSegment</code>、<code>formatImport</code> 渲染</li>
+        <li><span class="src">mcp/server.mjs</span> —— <code>isInsideRoot</code> 根目录边界判定、<code>--allow-external-src</code> 开关、<code>src</code> 越界时的 <code>isError</code> 应答（约 141 行与 283 行）</li>
+      </ul>
+    </article>
+
+    <nav class="docs__pager" id="docsPager"></nav>
+  </main>
+
+  <aside class="docs__toc" id="docsToc"></aside>
+</div>
+
+<script src="docs.js"></script>
+</body>
+</html>

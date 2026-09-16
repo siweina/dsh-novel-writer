@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>技术文档总览｜dsh-novel-writer</title>
+<meta name="description" content="dsh-novel-writer 的 16 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body class="docs">
+
+<header class="docs__top">
+  <a class="docs__brand" href="../index.html">← dsh-novel-writer</a>
+  <span class="docs__crumb">技术文档</span>
+</header>
+
+<div class="docs__layout">
+  <aside class="docs__side" id="docsSide"></aside>
+
+  <main class="docs__main">
+    <article class="doc">
+      <h1>技术文档</h1>
+      <p class="doc__lead">
+        <code>dsh-novel-writer</code> 的 16 个工具全部在本地运行，<strong>不使用在线大模型</strong>：所有指标由规则统计与本地 ONNX 推理得出。本组页面面向二次开发与集成方，逐工具说明参数契约、计算原理、约束边界与源码位置。
+      </p>
+
+      <h2>阅读约定</h2>
+      <p>每个工具页固定按以下顺序组织，可以跳读：</p>
+      <ul>
+        <li><strong>参数</strong>：名称、类型、是否必填、语义与校验方式；</li>
+        <li><strong>输出结构</strong>：返回体字段与渲染层行为；</li>
+        <li><strong>计算原理</strong>：公式、词表、阈值与取舍，尽量给出可直接对照源码的表达式；</li>
+        <li><strong>约束与边界</strong>：对调用方模型的限制、被静默跳过的情形，以及跨版本不可比之处；</li>
+        <li><strong>源码位置</strong>：<code>lib/*.js</code> 中的对应实现。</li>
+      </ul>
+      <div class="note">
+        <b>关于数值。</b>从 v4.3.0 起，本插件做了一轮口径整修（统一句末符、清洗动作词表、抽象度改最长匹配、修饰密度增加停用词、六维基线 μ=0 改绝对尺度判定等）。<strong>同一本书在新旧版本下的报告数值不可直接比较</strong>，涉及具体差异的页面会单独标注。
+      </div>
+
+      <h2>工具总览</h2>
+
+      <h3>章节与文稿</h3>
+      <div class="tools__grid">
+        <a class="tools__card" href="novel-books.html"><b>novel_books</b><span>列出章节库中的全部作品，含章节数与总字数。</span></a>
+        <a class="tools__card" href="novel-chapters.html"><b>novel_chapters</b><span>列出某部作品的章节清单：章号、标题、字数、行数、更新时间。</span></a>
+        <a class="tools__card" href="novel-read.html"><b>novel_read</b><span>按行号分段读取章节正文，返回带行号的内容与字数统计。</span></a>
+        <a class="tools__card" href="novel-new-chapter.html"><b>novel_new_chapter</b><span>创建新章节文件，章号可显式指定或自动取下一个。</span></a>
+        <a class="tools__card" href="novel-import.html"><b>novel_import</b><span>扫描目录自动识别书名与章号并分组，支持复制或移动到书库。</span></a>
+        <a class="tools__card" href="novel-keywords.html"><b>novel_keywords</b><span>统计中文相邻二字组、三字组与英文词的高频项。</span></a>
+      </div>
+
+      <h3>分析与测量</h3>
+      <div class="tools__grid">
+        <a class="tools__card" href="novel-style-report.html"><b>novel_style_report</b><span>风格画像报告：六维基线 μ±σ、指纹、题材、情感、氛围 12 维与语义距离。</span></a>
+        <a class="tools__card" href="novel-style-check.html"><b>novel_style_check</b><span>新章与全书风格指纹对照，输出相似度与可执行的偏差清单。</span></a>
+        <a class="tools__card" href="novel-sentence-analysis.html"><b>novel_sentence_analysis</b><span>九类句式分布、排列规律、句长节奏、情感曲线与风格指纹。</span></a>
+        <a class="tools__card" href="novel-semantic-search.html"><b>novel_semantic_search</b><span>本地向量检索：用自然语言定位全书语义相关段落。</span></a>
+      </div>
+
+      <h3>设定、剧情与创作资料</h3>
+      <div class="tools__grid">
+        <a class="tools__card" href="novel-plot.html"><b>novel_plot</b><span>伏笔与剧情钩子登记：open / done 状态，scan 自动标注被提及的章节。</span></a>
+        <a class="tools__card" href="novel-settings.html"><b>novel_settings</b><span>人物、地点、道具、时间线、世界观用语规范五张表的增删改查。</span></a>
+        <a class="tools__card" href="novel-summary.html"><b>novel_summary</b><span>章节摘要按章管理，供长篇续写时快速回忆前情。</span></a>
+        <a class="tools__card" href="novel-outline.html"><b>novel_outline</b><span>创作资料维护：创作设定、人物、大纲、钩子记录与创作状态卡。</span></a>
+      </div>
+
+      <h3>审计与配置</h3>
+      <div class="tools__grid">
+        <a class="tools__card" href="novel-continuity-check.html"><b>novel_continuity_check</b><span>三路审计：衔接、OOC 与大纲走偏，输出带原文引用的问题清单。</span></a>
+        <a class="tools__card" href="novel-sentence-config.html"><b>novel_sentence_config</b><span>查看与修改工具开关、功能开关与风格基线容差。</span></a>
+      </div>
+
+      <h2>共同约定</h2>
+      <h3>书库根目录与路径</h3>
+      <p>所有工具接受可选的 <code>root</code>（含 <code>novels</code> 子目录的目录）。解析优先级：调用参数 <code>root</code> → 插件配置项 → MCP 启动参数 <code>--root</code> → 环境变量 <code>DSH_NOVEL_WRITER_ROOT</code> → 当前工作目录。MCP 形态下，参数里的 <code>root</code> 必须落在启动时 <code>--root</code> 指定范围内；<strong>越界时由 MCP 层静默回退到 <code>--root</code>，只写入 stderr 日志，调用方不会收到错误</strong>（插件层 <code>resolveRoot</code> 本身不做范围校验，范围校验只在 MCP 层 <code>isInsideRoot</code> 进行）。书名、分类等片段经 <code>sanitizeSegment</code> 过滤，防止路径穿越。</p>
+
+      <h3>数据落盘</h3>
+      <p>所有派生数据集中写在 <code>&lt;书库根&gt;/.novel-writer/</code> 下：<code>plots</code>（伏笔）、<code>settings</code>（设定）、<code>summaries</code>（摘要）、<code>analysis</code>（分析报告）、<code>audits</code>（审计）、<code>embedding</code>（语义索引）、<code>style-reports</code>（风格画像）。写盘采用临时文件 + 原子替换；失败会抛出 <code>ENOVELWRITEFAIL</code> 而不是静默丢弃。</p>
+
+      <h3>语义引擎的可用性</h3>
+      <p>语义检索、语义风格距离与语义隐性情感依赖随包分发的 <code>bge-small-zh-v1.5</code> 量化模型（约 24MB）与 <code>onnxruntime-web</code>（WASM）。引擎不可用时这些能力自动降级为纯规则模式，其余功能不受影响；返回体会以 <code>skippedDims</code> 或专用文案说明降级原因，而非返回空结果。</p>
+
+      <h3>MCP 形态的边界</h3>
+      <p>包内 <code>mcp/server.mjs</code> 把同样 16 个工具暴露为 stdio MCP 服务器（可用 Streamable HTTP 传输）。协议侧：未知工具返回 <code>-32602</code>（Protocol Error）；支持 2025-11-25 / 2025-06-18 / 2025-03-26 / 2024-11-05 版本协商并原样回显；JSON-RPC 批量请求自 2025-06-18 起按规范拒绝；单行报文上限 4 MiB；<code>novel_import</code> 的 <code>src</code> 默认限制在书库根内，需显式加 <code>--allow-external-src</code> 才能放开。</p>
+    </article>
+
+    <nav class="docs__pager" id="docsPager"></nav>
+  </main>
+
+  <aside class="docs__toc" id="docsToc"></aside>
+</div>
+
+<script src="docs.js"></script>
+</body>
+</html>

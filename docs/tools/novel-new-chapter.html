@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>novel_new_chapter — 新建章节｜dsh-novel-writer 技术文档</title>
+<meta name="description" content="novel_new_chapter 的实现细节：章号解析与文件名归一、wx 独占写入的防覆盖语义、标题与正文的合成文本口径、强制风格基线与风格锚包的生成规则，以及对调用方模型的约束。">
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body class="docs">
+
+<header class="docs__top">
+  <a class="docs__brand" href="../index.html">← dsh-novel-writer</a>
+  <span class="docs__crumb">技术文档 / <code>novel_new_chapter</code></span>
+</header>
+
+<div class="docs__layout">
+  <aside class="docs__side" id="docsSide"></aside>
+
+  <main class="docs__main">
+    <article class="doc">
+      <h1>novel_new_chapter</h1>
+      <p class="doc__lead">
+        新建章节。为指定作品创建一个章节文件，章号可显式指定或自动取下一个，可同时写入 Markdown 一级标题与初始正文。<strong>同号章节一律拒绝创建，绝不覆盖既有稿件</strong>；创建成功后返回体自带全书六维风格基线 μ 摘要与「风格锚包」（原著代表性段落 + 句式骨架），使调用方模型在动笔前即可拿到测量数据与可照样写的样例，无需先调用风格报告工具。
+      </p>
+
+      <h2>参数</h2>
+      <table>
+        <thead><tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><th><code>book</code></th><td>string</td><td>是</td><td>书名，即 <code>novels/</code> 下的子目录名。经 <code>sanitizeSegment</code> 清洗：剥离 <code>\ / : * ? " &lt; &gt; |</code>、首尾点与空白，Windows 保留名（CON / NUL 等）加下划线前缀；清洗后为空则报错。目录不存在时自动创建。</td></tr>
+          <tr><th><code>chapter</code></th><td>integer</td><td>否</td><td>显式章号，须为 <strong>1–99999 的整数</strong>。省略时取现有最大可解析章号 + 1。</td></tr>
+          <tr><th><code>title</code></th><td>string</td><td>否</td><td>章节标题，写为正文首行 <code># 标题</code>。空串或纯空白视为未提供。</td></tr>
+          <tr><th><code>content</code></th><td>string</td><td>否</td><td>初始正文。空串或纯空白视为未提供。</td></tr>
+          <tr><th><code>root</code></th><td>string</td><td>否</td><td>章节库根目录。缺省回退顺序：<code>args.root</code> → <code>config.root</code> → 会话工作目录。MCP 形态下必须落在启动参数 <code>--root</code> 之内。</td></tr>
+        </tbody>
+      </table>
+      <p>参数对象声明 <code>additionalProperties: false</code>，多传的键会被宿主拒绝。</p>
+
+      <h2>输出结构</h2>
+      <p>契约字段（<code>output.schema.required</code>）：<code>book</code> / <code>number</code> / <code>file</code> / <code>path</code> / <code>chars</code> 五项必返；其余字段按条件出现。返回前经 <code>cleanOutput</code> 处理，值为 <code>undefined</code> 的键会被整体剔除。</p>
+      <table>
+        <thead><tr><th>字段</th><th>类型</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr><th><code>book</code></th><td>string</td><td><strong>必返</strong>。清洗后的书名</td></tr>
+          <tr><th><code>number</code></th><td>integer</td><td><strong>必返</strong>。本次实际使用的章号</td></tr>
+          <tr><th><code>file</code></th><td>string</td><td><strong>必返</strong>。文件名，固定为 <code>第NN章.md</code>（章号左补零到至少 2 位）</td></tr>
+          <tr><th><code>path</code></th><td>string</td><td><strong>必返</strong>。落盘绝对路径</td></tr>
+          <tr><th><code>chars</code></th><td>integer</td><td><strong>必返</strong>。写入文本的字符数（合成文本整体长度，含标题行与结尾换行）</td></tr>
+          <tr><th><code>baseline</code></th><td>string</td><td>全书六维基线 μ 摘要，形如「标签 值 / 标签 值 …」，无法计算时为缺失</td></tr>
+          <tr><th><code>reminder</code></th><td>string</td><td>强制流程提示：动笔前对照 baseline 与锚包、写完后必须调用 <code>novel_style_check</code> 对照。当前实现下恒有值</td></tr>
+          <tr><th><code>anchors</code></th><td>array</td><td>风格锚·原著段落，元素 <code>{ label, text }</code>，<strong>最多 5 条</strong></td></tr>
+          <tr><th><code>skeletons</code></th><td>array</td><td>句式骨架，元素 <code>{ type, text }</code>，<strong>最多 4 条</strong></td></tr>
+        </tbody>
+      </table>
+
+      <h2>行为与实现</h2>
+      <p>本工具不涉及统计模型，全部为确定性文件操作与规则抽取。执行顺序：校验 → 建目录 → 扫描现有章节 → 定章号 → 查重 → 合成文本 → 独占写入 → 计算基线 → 构建锚包 → 记录书库根。</p>
+
+      <h3>1 · 章号解析与文件名</h3>
+      <div class="formula">number   = chapter ?? ( max( 现有章节的可解析章号 ) + 1 )
+           ← 无任何可解析章号时 max 取 0，即自动落到第 1 章
+fileName = "第" + String(number).padStart(2, "0") + "章.md"</div>
+      <p>现有章节由 <code>scanChapters</code> 收集：<strong>只认书目录顶层的 <code>.md</code> / <code>.markdown</code> / <code>.txt</code></strong>（扩展名小写比较），子目录中的文件不参与，排序为「章号升序（不可解析者排最后）＋ 文件名 localeCompare」。章号解析入口先做全角宽度归一（<code>第０１章</code> → <code>第01章</code>），因此下列写法都解析为同一章号：<code>第1章.md</code>、<code>第01章.md</code>、<code>第一章.md</code>、<code>书名-01-标题.md</code>、<code>书名 01.md</code>。中文数字支持到「千」位（如 <code>第一千零一章</code> 解析为 1001）。</p>
+
+      <h3>2 · 防覆盖与独占写入</h3>
+      <div class="formula">mkdir( bookDir, { recursive: true } )          ← 目录缺失不抛错，空目录按零章处理
+chapters = scanChapters( bookDir )
+sameNo   = chapters.find( c => (c.number ?? -1) === number )
+if (sameNo) → 抛错：第 N 章已存在（旧文件名）——不会覆盖旧稿
+
+parts = []
+if (title   已提供) parts.push("# " + title, "")
+if (content 已提供) parts.push(content, "")
+text = parts.join("\n")
+
+writeFile( filePath, text, { encoding: "utf8", flag: "wx" } )   ← O_EXCL 独占创建
+EEXIST → 抛错：第 N 章刚被并发创建，本次写入已放弃；请重试或指定其他章号</div>
+      <p>查重（按解析出的章号）与写入（按文件名是否存在）是两套口径，两者之间存在竞态窗口；<code>wx</code> 标志把该窗口收敛为一次可上报的失败，而不是静默互相覆盖。已知取舍：建目录发生在查重之前，因此同号创建失败时书目录仍可能已被创建。</p>
+
+      <h3>3 · 文本合成与字符数口径</h3>
+      <div class="formula">仅 title          → "# 标题" + "\n"
+仅 content        → 正文 + "\n"
+title 与 content  → "# 标题" + "\n" + "\n" + 正文 + "\n"
+两者皆无          → ""（空文件，chars = 0）
+
+chars = text.length        ← UTF-16 码元数，不是纯正文长度</div>
+      <p>标题行与正文之间由数组 join 产生的空行是格式的一部分，会一并计入 <code>chars</code>。该字段用于核对「是否真的写入了内容」，不代表正文字数。</p>
+
+      <h3>4 · 强制风格基线</h3>
+      <div class="formula">bTexts  = 重扫目录后的全部章节（含刚创建的新章，其文本直接复用内存中的 text）
+perCh   = metricChaptersCached( root, book, bTexts )      ← 按内容哈希缓存六维测量
+excluding = perCh.filter( pc => pc.file !== 新章文件名 )
+if ( excluding.length > 0 )
+    baseline = METRIC_ORDER.map( k => 标签[k] + " " + ( 有 mu ? mu : "-" ) ).join(" / ")</div>
+      <p>基线测量集合<strong>包含新章</strong>，以与风格报告、风格自检的「全章集合」保持同一缓存键（否则三者交替调用会全部缓存 miss）；但摘要本身<strong>排除新章</strong>，因为新章不能作为自己的基线。无其它章节时不输出 μ=0 的假基线。<code>novel_style_report</code> 基线计算中「正文不足 40 字的章节不参与统计」的规则由测量层统一执行。整段被 <code>try/catch</code> 包裹：失败静默，不影响章节创建。</p>
+
+      <h3>5 · 风格锚包</h3>
+      <div class="formula">语料 = 创建前的既有章节文本拼接（新章不作为「原著样例」）
+段落 = 按 /\n+/ 切分、trim、保留长度 ≥ 40 字的段；抽样方式为全书等距
+        （首尾保留、均匀取 n 条；n=1 取中位段）
+  [对话] 含引号且 ≤ 200 字            → 2 条
+  [心理] 含 想|觉得|心|怕|慌|记忆 且无引号且 ≤ 200 字 → 1 条
+  [描写] 无引号且 80–200 字           → 2 条
+  以上全空 → 退化为 [原文] 3 条
+每条截断至 200 字；合计 slice(0, 5)
+
+骨架 = 按 /[。！？…]+/ 切句、去空白、长度 20–45 字、去重后等距取 4 条
+  类型判定：含引号 → 对话；以 ？/? 结尾 → 疑问；含 想|觉得|仿佛|好像|似乎 → 心理；否则 陈述
+骨架全空 → 退化为 4 条 ≥ 15 字的陈述型段落（截 60 字）</div>
+      <p>锚包是「照样例写」的载体，数字基线只用于事后校验。整段同样被 <code>try/catch</code> 包裹，失败时返回空锚包。</p>
+
+      <h3>6 · 渲染文本</h3>
+      <div class="formula">&lt;path&gt;…&lt;/path&gt;
+&lt;type&gt;novel-chapter-created&lt;/type&gt;
+&lt;content&gt;
+已创建 第NN章（N 字）
+[可选] 【风格基线 μ】…
+[可选] 【风格锚·原著段落】动笔照此味道写（数字基线只做事后校验）：
+         [标签] 段落…
+[可选] 【句式骨架】按此形状造句：
+         [类型] 句子…
+reminder
+&lt;/content&gt;</div>
+
+      <h2>约束与边界</h2>
+      <ul>
+        <li><strong>同号即失败，不覆盖</strong>：<code>第1章.md</code> / <code>第01章.md</code> / <code>第一章.md</code> 都按章号 1 拦截。需要改写既有章节时应另选章号或先由调用方删除旧文件——本工具不提供任何覆盖或更新通道。</li>
+        <li><strong>chapter 的取值范围是硬断言</strong>：非整数（浮点、数字字符串）、0、负数、大于 99999 一律被拒绝并报错，而不是截断到边界。</li>
+        <li><strong>并发只报错不重试</strong>：独占创建失败时返回「刚被并发创建」，需调用方自行重试或改用其它章号。</li>
+        <li><strong>建目录是前置副作用</strong>：即使后续因同号失败，书目录也已被创建。</li>
+        <li><strong>基线/锚包均为可选增强</strong>：任一环节抛错都被吞掉，返回体中相应字段缺失或为空数组。调用方不应假定 <code>baseline</code> 恒有值——单章作品、基线计算失败、锚包抽取失败都会导致缺失。</li>
+        <li><strong>只统计顶层文件</strong>：<code>scanChapters</code> 不递归，放在子目录里的章节文件对本书「不可见」，既不计入章号也不参与基线。</li>
+        <li><strong>自动章号依赖可解析章号</strong>：目录内若存在无法解析章号的文件（命名完全不含数字或中文数字），它们被排到末尾且不参与 <code>max</code>；此时「下一个章号」由可解析的最大值决定，可能与文件名视觉顺序不一致。</li>
+        <li><strong>章号解析的已知缺口</strong>：中文数字解析器识别 <code>十</code> / <code>百</code> / <code>千</code>，但<strong>不识别「万」</strong>——<code>第一万章.md</code> 解析不出章号，会被当作不可解析文件排到列表末尾，既不参与自动章号计算，也不阻止同号冲突检测（该文件不占用任何章号）。四位以内的阿拉伯章号不受此影响。</li>
+        <li><strong>root 与 MCP 边界</strong>：MCP 形态下服务器为未显式提供 <code>root</code> 的调用注入 <code>--root</code> 书库根；显式传入越界路径会被静默回退书库根。</li>
+        <li><strong>工具开关</strong>：<code>execute</code> 首行执行 <code>assertToolEnabled</code>，若该工具在「写作助手功能」UI 中被关闭，调用直接报错（可用 <code>novel_sentence_config</code> 重新开启）。</li>
+        <li><strong>写盘编码固定为 UTF-8</strong>，不写 BOM，换行为 <code>\n</code>；不生成备份文件与临时文件。</li>
+      </ul>
+
+      <h2>相关工具</h2>
+      <ul>
+        <li><a href="novel-chapters.html">novel_chapters</a> —— 创建前查看现有章号，避免显式 <code>chapter</code> 撞号。</li>
+        <li><a href="novel-read.html">novel_read</a> —— 按章号或标题读回刚创建的正文。</li>
+        <li><a href="novel-style-check.html">novel_style_check</a> —— <code>reminder</code> 规定的写后对照判定，用同一套六维基线与目标章比对。</li>
+        <li><a href="novel-import.html">novel_import</a> —— 已有整批原稿件时的入库入口，替代逐章创建。</li>
+      </ul>
+
+      <h2>源码位置</h2>
+      <ul>
+        <li><span class="src">lib/index.js</span> —— 工具注册与 <code>execute</code>：参数 schema、输出契约、基线摘要、提醒文案（<code>registerNovelNewChapter</code>，约 2879 行）</li>
+        <li><span class="src">lib/core.js</span> —— <code>sanitizeSegment</code> 路径段清洗、<code>resolveRoot</code> 根目录回退、<code>bookDir</code> / <code>novelsDir</code> 路径拼接、<code>scanChapters</code> 章节扫描、<code>parseChapterNumber</code> 章号解析、<code>cleanOutput</code> 输出清理</li>
+        <li><span class="src">lib/core.js</span> —— <code>buildStyleAnchorPackage</code> 风格锚包抽样与分类（约 2071 行）、<code>metricChaptersCached</code> 六维测量缓存（约 1864 行）</li>
+        <li><span class="src">lib/style-metrics.js</span> —— <code>computeBaselineFromPerChapter</code> / <code>METRIC_ORDER</code> / <code>METRIC_LABELS</code>，基线 μ 的计算与维度顺序</li>
+      </ul>
+    </article>
+
+    <nav class="docs__pager" id="docsPager"></nav>
+  </main>
+
+  <aside class="docs__toc" id="docsToc"></aside>
+</div>
+
+<script src="docs.js"></script>
+</body>
+</html>

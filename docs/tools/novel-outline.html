@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>novel_outline — 创作资料｜dsh-novel-writer 技术文档</title>
+<meta name="description" content="novel_outline 的实现细节：创作资料六个 Markdown 文件的路径与模板、init/read/bible/character/chapter/hook/status 七个动作、段级 upsert 的边界正则、行级去重与未回填钩子判定。">
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body class="docs">
+
+<header class="docs__top">
+  <a class="docs__brand" href="../index.html">← dsh-novel-writer</a>
+  <span class="docs__crumb">技术文档 / <code>novel_outline</code></span>
+</header>
+
+<div class="docs__layout">
+  <aside class="docs__side" id="docsSide"></aside>
+
+  <main class="docs__main">
+    <article class="doc">
+      <h1>novel_outline</h1>
+      <p class="doc__lead">
+        原创小说创作资料的维护工具。在 <code>novels/创作资料/&lt;书名&gt;/</code> 下管理六个 Markdown 文件：创作设定、主要人物设定、次要人物设定、剧情大纲、钩子记录、创作状态卡。<code>init</code> 铺模板，<code>read</code> 读回全文，其余五个动作分别做权威设定覆盖、人物登记、逐章方向行追加、逐章钩子回填与状态卡刷新。<strong>落盘物是纯 Markdown，可被作者直接手改</strong>；工具用标题与「<code>- 章号 </code>」行首标记来识别结构，不依赖额外索引文件。
+      </p>
+
+      <h2>参数</h2>
+      <table>
+        <thead><tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><th><code>book</code></th><td>string</td><td>是</td><td>书名（<code>novels/创作资料</code> 下的子目录名）。经 <code>sanitizeSegment</code> 过滤。</td></tr>
+          <tr><th><code>action</code></th><td>string</td><td>是</td><td>枚举七值，见下表。<strong>本工具是四个页面中唯一把 <code>action</code> 列入 <code>required</code> 的</strong>（实现内另有 <code>args?.action ?? "read"</code> 兜底）。</td></tr>
+          <tr><th><code>file</code></th><td>string</td><td>否</td><td><code>read</code> 时指定要读的文件：<code>bible</code> / <code>characters-main</code> / <code>characters-minor</code> / <code>outline</code> / <code>hooks</code> / <code>status</code>；省略默认 <code>status</code>。</td></tr>
+          <tr><th><code>content</code></th><td>string</td><td>否</td><td><code>bible</code>（创作设定全文）与 <code>status</code>（状态卡全文）时<strong>必需</strong>。</td></tr>
+          <tr><th><code>role</code></th><td>string</td><td>否</td><td>枚举 <code>main</code> / <code>minor</code>。<code>character</code> 时使用；非 <code>main</code> 的一切取值（含省略）按 <code>minor</code> 处理。</td></tr>
+          <tr><th><code>name</code></th><td>string</td><td>否</td><td><code>character</code> 时<strong>必需</strong>：人物名。</td></tr>
+          <tr><th><code>description</code></th><td>string</td><td>否</td><td><code>character</code> 时：人物简介（目标 / 动机 / 弱点 / 说话方式）。</td></tr>
+          <tr><th><code>number</code></th><td>number</td><td>否</td><td><code>chapter</code> / <code>hook</code> 时<strong>必需</strong>：章节号。</td></tr>
+          <tr><th><code>title</code></th><td>string</td><td>否</td><td><code>chapter</code> 时：本章标题 / 方向，单行化后写入。</td></tr>
+          <tr><th><code>body</code></th><td>string</td><td>否</td><td><code>hook</code> 时<strong>必需</strong>：本章结尾钩子（状态 / 悬念 / 时间场景）。</td></tr>
+          <tr><th><code>root</code></th><td>string</td><td>否</td><td>章节库根目录。</td></tr>
+        </tbody>
+      </table>
+
+      <h3><code>action</code> 取值</h3>
+      <table>
+        <thead><tr><th>取值</th><th>语义</th><th>前置要求</th><th>写入对象</th></tr></thead>
+        <tbody>
+          <tr><th><code>init</code></th><td>初始化创作资料（缺文件建模板，已存在的做段级同步）</td><td>无</td><td>六个文件</td></tr>
+          <tr><th><code>read</code></th><td>读回指定文件全文</td><td><code>file</code> 必须是六个键之一且文件已存在</td><td>不写盘</td></tr>
+          <tr><th><code>bible</code></th><td>写入创作设定</td><td><code>content</code></td><td><code>创作设定.md</code>（整文件覆盖）</td></tr>
+          <tr><th><code>character</code></th><td>登记人物（行级追加，同名不重复登记）</td><td><code>name</code></td><td><code>主要人物设定.md</code> 或 <code>次要人物设定.md</code></td></tr>
+          <tr><th><code>chapter</code></th><td>补一行大纲方向行</td><td><code>number</code> 可解析为整数</td><td><code>剧情大纲.md</code></td></tr>
+          <tr><th><code>hook</code></th><td>回填 / 覆盖某章结尾钩子</td><td><code>number</code>、非空 <code>body</code></td><td><code>钩子记录.md</code></td></tr>
+          <tr><th><code>status</code></th><td>刷新创作状态卡</td><td><code>content</code></td><td><code>创作状态卡.md</code>（整文件覆盖）</td></tr>
+        </tbody>
+      </table>
+
+      <h2>输出结构</h2>
+      <p>输出 schema 是四个工具中唯一使用 <code>additionalProperties: true</code> 且<strong>未声明任何 <code>required</code> 字段</strong>的：</p>
+      <table>
+        <thead><tr><th>字段</th><th>类型</th><th>出现条件</th></tr></thead>
+        <tbody>
+          <tr><th><code>book</code></th><td>string</td><td>恒返</td></tr>
+          <tr><th><code>action</code></th><td>string</td><td>恒返（原样回填 <code>args.action</code>，不做枚举归一）</td></tr>
+          <tr><th><code>file</code></th><td>string</td><td>仅 <code>read</code>：实际读取的键名（<code>bible</code> / <code>hooks</code> / …），不是文件路径</td></tr>
+          <tr><th><code>content</code></th><td>string</td><td>仅 <code>read</code>：文件全文，可能追加未回填钩子警告</td></tr>
+          <tr><th><code>message</code></th><td>string</td><td>其余动作：结果文案</td></tr>
+        </tbody>
+      </table>
+      <p>渲染层只打印其中一段：<code>action === "read"</code> 且 <code>content</code> 非空时输出 <code>content</code>，否则输出 <code>message</code>。</p>
+
+      <h2>数据模型与落盘</h2>
+      <pre><code>&lt;root&gt;/novels/创作资料/&lt;书名&gt;/
+├── 创作设定.md          # 世界观规则 / 主线冲突 / 分卷目的 / 禁忌
+├── 主要人物设定.md      # 目标→动机→弱点→说话方式→关系
+├── 次要人物设定.md      # 谁 / 作用 / 特征；不再出场标注
+├── 剧情大纲.md          # 每章方向行
+├── 钩子记录.md          # 每章结尾钩子
+└── 创作状态卡.md        # 进度 / 上一章结尾 / 时间线 / 活跃角色 / 下章方向 / 未回填钩子</code></pre>
+      <p>键名与文件名的固定映射（<code>CREATION_FILES</code>）是工具内唯一的路径来源，目录名常量 <code>CREATION_DIR = "创作资料"</code>，与作品目录同级挂在 <code>novels/</code> 下：</p>
+      <table>
+        <thead><tr><th><code>file</code> / 键名</th><th>文件名</th></tr></thead>
+        <tbody>
+          <tr><th><code>bible</code></th><td><code>创作设定.md</code></td></tr>
+          <tr><th><code>characters-main</code></th><td><code>主要人物设定.md</code></td></tr>
+          <tr><th><code>characters-minor</code></th><td><code>次要人物设定.md</code></td></tr>
+          <tr><th><code>outline</code></th><td><code>剧情大纲.md</code></td></tr>
+          <tr><th><code>hooks</code></th><td><code>钩子记录.md</code></td></tr>
+          <tr><th><code>status</code></th><td><code>创作状态卡.md</code></td></tr>
+        </tbody>
+      </table>
+      <p>行级数据的两条约定格式：大纲方向行为 <code>- &lt;章号&gt; &lt;标题&gt;</code>，钩子记录行为 <code>- &lt;章号&gt; &lt;钩子文本&gt;</code>。未回填钩子的判定只认这两种行首标记。</p>
+
+      <h3>init：模板铺设与段级同步</h3>
+      <ul>
+        <li>目录以 <code>recursive</code> 方式创建；六个文件<strong>不存在才写模板</strong>，已存在的一律不覆盖正文。</li>
+        <li><code>bible</code> 已存在时，只对「<code>【用户原创设定】</code>」段做 upsert：用侧边栏填写的原创设定（世界观 / 角色设定 / 不允许的事件 / 主线目的 / 题材偏好 / 额外要求）重建该段；侧边栏为空则删除该段。作者手写的其余部分原样保留。</li>
+        <li><code>characters-main</code> 无论新建还是已存在，都会对「<code>【用户角色设定】</code>」段做同样的 upsert。</li>
+        <li>返回文案为「创作资料已初始化（6 个文件）」，计数是模板条目数，不是实际新建的文件数。</li>
+      </ul>
+
+      <h3>段级 upsert 的边界</h3>
+      <p><code>upsertCreationSection(text, section, marker)</code> 用固定正则在整篇 Markdown 里定位一个「<code>【…】</code>」段：</p>
+      <div class="formula">(?:\\r?\\n){0,2}MARKER[\\s\\S]*?(?=\\r?\\n\\s*#|\\r?\\n\\s*【|\\s*$)
+
+MARKER = 段标记（如【用户原创设定】），正则元字符先转义
+段尾 = 下一个 # 标题 / 下一个【…】段 / 文件尾
+section === "" 且有该段 → 整段删除后压缩连续空行，并在末尾补一个换行
+有该段且 section 非空   → 函数式替换，写入 "\\n\\n" + section.trimEnd()
+无该段                  → 追加 "\\n\\n" + section</div>
+      <div class="note">
+        <b>v4.3.0 修正：段尾不能认空行。</b>旧前瞻把「空行」也算作段尾，段内一旦出现空行就只覆盖到第一个空行——删除时残留（<code>- 额外：B</code> 留在文件里）、替换时新旧两段并存（标记出现两次）。现在只认真正的段尾标记，前缀容忍空行与 CRLF（记事本编辑过的文件），标记本身做转义。替换一律使用函数式回调，避免用户文本里的 <code>$&amp;</code> / <code>$1</code> 被当作替换模式展开。
+      </div>
+
+      <h3>read：白名单、初始化检查与钩子提醒</h3>
+      <ul>
+        <li><code>file</code> 省略时取 <code>status</code>。键名用 <code>Object.prototype.hasOwnProperty</code> 判定：<code>constructor</code> / <code>__proto__</code> 这类原型链上的名字不再被当成合法文件，而是抛「未知文件：…（可用 bible/characters-main/characters-minor/outline/hooks/status）」。</li>
+        <li>文件读取失败（目录未建或文件缺失）时抛「创作资料尚未初始化，请先 novel_outline init（或在创作文件夹自行创建）」。</li>
+        <li>读 <code>status</code> 或 <code>outline</code> 时额外做未回填钩子检查：从大纲提取全部 <code>^[-*] (\d+)</code> 行首章号（读 <code>status</code> 时会另外读大纲文件，因为状态卡只有快照、不含章节行），从钩子记录提取同样的章号集合，取「在大纲、不在钩子」的差集。</li>
+        <li>差集再与<strong>磁盘上确实存在的章节号</strong>求交——大纲按设计会预先列出尚未动笔的章节方向，若不求交就会把没写的章也算成「写完却没回填」。章节扫描失败时退回不求交的旧口径（宁可多提醒）。</li>
+        <li>差集非空时在 <code>content</code> 末尾追加「⚠ 未回填钩子章节：N、M——写完的章节必须回填钩子（novel_outline hook），下一章开头从钩子接续」。<strong>返回的 <code>content</code> 因此不等于磁盘原文</strong>。</li>
+      </ul>
+
+      <h3>character / chapter / hook 的行级写法</h3>
+      <table>
+        <thead><tr><th>动作</th><th>写入行</th><th>去重判定</th><th>重复时的行为</th></tr></thead>
+        <tbody>
+          <tr><th><code>character</code></th><td><code>- 名字：简介</code></td><td>行首锚定正则 <code>^[-*] 名字(：|$)</code>（多行模式，名字做正则转义）</td><td>不写盘，返回「人物“X”已存在（未重复登记）」</td></tr>
+          <tr><th><code>chapter</code></th><td><code>- 章号 标题</code></td><td>全文子串 <code>- 章号␠</code></td><td>不写盘，返回「第 N 章已在纲（未重复追加）」</td></tr>
+          <tr><th><code>hook</code></th><td><code>- 章号 钩子文本</code></td><td>行级正则 <code>^- 章号 [^\n]*(?:\n|$)</code>（多行模式）</td><td>整行替换为新钩子</td></tr>
+        </tbody>
+      </table>
+      <p>三者都会在文件缺失时按需重建（带上 <code># 主要人物设定</code> / <code># 剧情大纲</code> / <code># 钩子记录</code> 一级标题与空行）；文件存在但缺少对应标题时不报错，只在文件头补一行标题再追加内容。文本规范化：<code>character</code> 的 <code>description</code> 把换行折叠成「；」，<code>chapter</code> 的 <code>title</code> 与 <code>hook</code> 的 <code>body</code> 折叠成空格（单行化，防止换行伪造出一条新条目）；<code>hook</code> 额外剥离 <code>body</code> 行首可能被误传的「<code>- 章号 </code>」前缀。而 <code>bible</code> / <code>status</code> 的 <code>content</code> <strong>不做任何规范化</strong>，原样整文件写入。</p>
+
+      <h2>约束与边界</h2>
+      <ul>
+        <li><strong><code>book</code> 与 <code>action</code> 都必填</strong>。action 不在七个枚举值内时<strong>抛出</strong>「未知 action：xxx」——这是本工具与 <code>novel_plot</code> / <code>novel_settings</code> / <code>novel_summary</code> 的显著差异：三者对非法 action 静默退化为 <code>list</code>，本工具直接失败。</li>
+        <li><strong>action 不做归一</strong>：返回的 <code>action</code> 是传入值原文，调用方不能靠它判断「实际执行了什么」——不存在的动作根本不会返回。</li>
+        <li><strong><code>read</code> 需要文件已存在</strong>：目录未初始化时抛错并提示先 <code>init</code>，不会返回空字符串。</li>
+        <li><strong><code>bible</code> / <code>status</code> 是整文件覆盖</strong>：不做增量合并，调用方必须提交<strong>全文</strong>。分两次只传局部会把前一次的正文抹掉。两者都要求 <code>content</code> 为<strong>非空字符串</strong>（纯空白视同未传）。</li>
+        <li><strong><code>status</code> 与 <code>bible</code> 没有段级保护</strong>：与 <code>init</code> 的「只动【用户原创设定】段」不同，直接调 <code>bible</code> 会覆盖作者手写的全部内容。</li>
+        <li><strong>人物与章号只能增改、不能删</strong>：本工具没有删除人物的动作；<code>chapter</code> 不会删除已有方向行，<code>hook</code> 只能整行覆盖已有钩子。清理只能由作者手改 Markdown（手改是受支持的用法，重号判重与标题补全都会容忍）。</li>
+        <li><strong><code>number</code> 以 <code>parseInt</code> 解析</strong>：schema 声明为 number，实现按 <code>parseInt(args.number, 10)</code> 处理，因此 <code>"3章"</code> 会被截取成 3；只有解析结果为 <code>NaN</code> 才抛「chapter 需要 number」/「hook 需要 number」。</li>
+        <li><strong><code>hook</code> 的 <code>body</code> 不能为空</strong>：单行化后为空的 <code>body</code> 抛「hook 需要 body（本章结尾状态/悬念/时间场景）」。<code>chapter</code> 的 <code>title</code> 可以为空，此时写入的是「<code>- N </code>」这样一条只有章号的方向行（行尾保留一个空格）。</li>
+        <li><strong><code>role</code> 静默退化</strong>：<code>role:"supporting"</code> 不会报错，会写入次要人物设定。</li>
+        <li><strong>人名判重是行首锚定的</strong>：<code>阿</code> 不会因文件里已有 <code>阿澈</code> 而被判重复（旧实现按子串判重，会把「阿」误判为已存在）。反过来，同一人物换个名字登记会产生两条记录，本工具没有别名合并。</li>
+        <li><strong><code>chapter</code> 的判重是全文子串</strong>，粒度比 <code>hook</code> 的行首正则更粗：正文或注释里出现「<code>- N </code>」这样的片段也会让本次追加被跳过。需要精确控制时应改成 <code>hook</code> 式的行首锚定路径或手改文件。</li>
+        <li><strong>未回填钩子的判定依赖磁盘章节号</strong>：作品目录下没有任何章节文件时，<code>existing</code> 为空集合，提醒列表随之为空（不会提示「大纲里的章都没回填」）。</li>
+        <li><strong>没有事务与原子写</strong>：与其余三个工具不同，本工具的写入是「读全文 → 拼接 / 替换 → <code>writeFile</code> 整文件覆盖」，未使用 <code>withFileTx</code>，也未使用临时文件 + <code>rename</code> 的原子替换。<strong>同一文件的并发写可能互相覆盖</strong>，且进程在写入中途终止会留下半截文件。批量登记时建议串行调用。</li>
+        <li><strong>跨版本口径</strong>：v4.3.0 修正段级 upsert 的段尾判定（旧版遇段内空行会截断，导致删除残留、替换双段并存）、修正未回填钩子口径（只报磁盘上存在的章节，旧版把大纲里预排的下一批章节也算成未回填）、<code>read</code> 的 <code>file</code> 改为 <code>hasOwnProperty</code> 判定并删除了从不产出的 <code>files</code> 字段、补上真实返回的 <code>file</code> 字段；v3.1.0 起 <code>description</code> / <code>title</code> / <code>body</code> 做单行化。旧版写下的文件在段结构上可能与新版的 upsert 结果不同，重新 <code>init</code> 会就地重整对应段。</li>
+        <li><strong>MCP 形态下的 root 限制</strong>：参数 <code>root</code> 必须落在服务器启动参数 <code>--root</code> 的书库根之内，越界会被静默回退，同时记 stderr。</li>
+        <li><strong>参数表禁止额外字段</strong>：<code>parameters.additionalProperties = false</code>。</li>
+      </ul>
+
+      <h2>相关工具</h2>
+      <ul>
+        <li><a href="novel-continuity-check.html">novel_continuity_check</a> —— 大纲对照模式直接读本工具的 <code>剧情大纲.md</code>，取 <code>^- \d+ </code> 方向行与正文开头做二元组重合率比对。</li>
+        <li><a href="novel-settings.html">novel_settings</a> —— 五张设定表（人物 / 地点 / 道具 / 时间线 / 世界观用语规范），与本工具的 Markdown 人物设定是两套并行资料。</li>
+        <li><a href="novel-plot.html">novel_plot</a> —— 伏笔登记表，与「钩子记录」分别追踪长线伏笔与逐章结尾钩子。</li>
+        <li><a href="novel-summary.html">novel_summary</a> —— 逐章摘要，与「创作状态卡」的进度快照互补。</li>
+      </ul>
+
+      <h2>源码位置</h2>
+      <ul>
+        <li><span class="src">lib/core.js</span> —— <code>createOutlineTool</code>（约 1669–1860 行）：七个动作的完整实现。</li>
+        <li><span class="src">lib/core.js</span> —— <code>CREATION_DIR</code> / <code>CREATION_FILES</code> / <code>CREATION_TEMPLATE_TITLES</code>（约 1605–1610 行）、<code>creationDir</code>（约 1611 行）。</li>
+        <li><span class="src">lib/core.js</span> —— <code>upsertCreationSection</code> / <code>upsertCreationUserSection</code>（约 1634–1657 行）、<code>buildCreationUserSection</code> / <code>buildCreationCharacterSection</code>（约 1614–1668 行）。</li>
+        <li><span class="src">lib/index.js</span> —— <code>registerNovelOutline</code>（约 2876–2878 行）：仅把 <code>createOutlineTool(config)</code> 注册给宿主。</li>
+        <li><span class="src">mcp/server.mjs</span> —— <code>buildArgs</code> / <code>isInsideRoot</code>（约 259–289 行）。</li>
+      </ul>
+    </article>
+
+    <nav class="docs__pager" id="docsPager"></nav>
+  </main>
+
+  <aside class="docs__toc" id="docsToc"></aside>
+</div>
+
+<script src="docs.js"></script>
+</body>
+</html>

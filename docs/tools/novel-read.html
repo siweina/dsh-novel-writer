@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>novel_read — 阅读正文｜dsh-novel-writer 技术文档</title>
+<meta name="description" content="novel_read 的实现细节：章节定位的三级查找、offset/limit 分段与 20000 字上限、单行 3000 字裁剪、行号口径与编码探测，以及纯数字参数不下探子串等关键约束。">
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body class="docs">
+
+<header class="docs__top">
+  <a class="docs__brand" href="../index.html">← dsh-novel-writer</a>
+  <span class="docs__crumb">技术文档 / <code>novel_read</code></span>
+</header>
+
+<div class="docs__layout">
+  <aside class="docs__side" id="docsSide"></aside>
+
+  <main class="docs__main">
+    <article class="doc">
+      <h1>novel_read</h1>
+      <p class="doc__lead">
+        阅读某部作品的某个章节，返回带行号的正文与字数统计，支持 <code>offset</code> / <code>limit</code> 分段读取长章节。章节标识可用<strong>章号、文件名或标题子串</strong>三种形态，内部走同一套章号解析与定位逻辑。返回体带 <code>truncated</code> 标志与 <code>totalLines</code>，调用方可据此用 <code>offset = 上一段末行 + 1</code> 续读。
+      </p>
+
+      <h2>参数</h2>
+      <table>
+        <thead><tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><th><code>book</code></th><td>string</td><td>是</td><td>书名，即 <code>novels/</code> 下的子目录名。空串或纯空白被拒绝；值经 <code>sanitizeSegment</code> 清洗。</td></tr>
+          <tr><th><code>chapter</code></th><td>string</td><td>是</td><td>章节标识：章号（<code>1</code> 或 <code>01</code>）、文件名（<code>第01章.md</code>）或标题子串。定位规则见下文。</td></tr>
+          <tr><th><code>offset</code></th><td>integer</td><td>否</td><td>起始行号，从 1 开始。取值区间 1 – 9007199254740991，默认 1。</td></tr>
+          <tr><th><code>limit</code></th><td>integer</td><td>否</td><td>最多返回行数。取值区间 1 – <code>READ_LIMIT</code>（400），默认 400。<strong>上限是硬约束，超限报错而非自动截到上限。</strong></td></tr>
+          <tr><th><code>root</code></th><td>string</td><td>否</td><td>章节库根目录。省略时按 <code>config.root</code> → 会话工作目录回退。</td></tr>
+        </tbody>
+      </table>
+
+      <h2>输出结构</h2>
+      <p>契约字段（<code>output.schema</code>）的 <code>required</code> 覆盖全部九个顶层字段，缺一不可；<code>lines</code> 的元素必须同时含 <code>number</code> 与 <code>text</code>。</p>
+      <table>
+        <thead><tr><th>字段</th><th>类型</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr><th><code>book</code></th><td>string</td><td>清洗后的书名</td></tr>
+          <tr><th><code>chapter</code> / <code>file</code></th><td>string</td><td>命中的章节文件名，二者取值相同；<strong>不含</strong>标题字段</td></tr>
+          <tr><th><code>path</code></th><td>string</td><td>章节文件的拼接路径（形状取决于传入的 <code>root</code>）</td></tr>
+          <tr><th><code>offset</code></th><td>integer</td><td>回显本次生效的起始行号</td></tr>
+          <tr><th><code>totalLines</code></th><td>integer</td><td>该章总行数，空文件为 0</td></tr>
+          <tr><th><code>chars</code></th><td>integer</td><td><strong>已返回部分</strong>的字数（含行间换行符），不是本章总字数</td></tr>
+          <tr><th><code>truncated</code></th><td>boolean</td><td>是否未读到文件尾或被上限中断</td></tr>
+          <tr><th><code>lines</code></th><td>array</td><td><code>&#123; number, text &#125;</code> 数组，<code>number</code> 为 1 起的绝对行号</td></tr>
+        </tbody>
+      </table>
+      <p>渲染层（<code>formatRead</code>）输出 <code>&lt;path&gt;</code> / <code>&lt;type&gt;</code> / <code>&lt;content&gt;</code> 包裹的文本，正文行格式为 <code>行号: 文本</code>。页脚按 <code>truncated</code> 二选一：截断时为 <code>(输出截断。本章共 N 行，已显示 a-b 行 / M 字。用 offset=b+1 继续阅读。)</code>，否则为 <code>(本章共 N 行 / M 字)</code>。<strong>续读指令由渲染层给出，非截断分支不提供 <code>offset</code> 建议。</strong></p>
+
+      <h2>行为与实现</h2>
+
+      <h3>1 · 章节定位 <code>findChapter</code></h3>
+      <p>先 <code>scanChapters</code> 取该作品的全部章节（按章号升序、无章号者置末），再按下列顺序查找，命中即返回：</p>
+      <div class="formula">needle = String(chapter).trim()
+
+① asNumber = parseChapterNumber(needle)
+   asNumber !== undefined → chapters.find(c =&gt; c.number === asNumber)
+② 文件名精确匹配（忽略大小写）：c.file.toLowerCase() === needle.toLowerCase()
+③ /^\d+$/.test(normalizeChapterWidth(needle)) → 返回 undefined（纯数字不再下探子串）
+④ 标题或文件名的子串匹配（忽略大小写，含文件名扩展名）
+⑤ 全部未命中 → 抛错「在作品 "X" 中找不到章节 "Y"（可用 novel_chapters 查看章节列表）」</div>
+      <p>章号解析复用 <code>parseChapterNumber</code>，与 <a href="novel-chapters.html">novel_chapters</a> 完全同源：入口先做字符宽度归一（全角 <code>０-９</code> / <code>－．／</code> 按 <code>−0xFEE0</code> 映射为半角），再依次尝试阿拉伯数字章号、中段数字、行首数字、末尾数字与中文章号（<code>cjkToNumber</code>，支持十 / 百 / 千，不含「万」）。因此参数写 <code>1</code>、<code>01</code>、<code>０１</code>、<code>第1章</code> 都能解析为同一章号。</p>
+      <div class="warn note">
+        <b>纯数字参数的下探守卫。</b>第 ③ 步是承重逻辑：若章号匹配失败后继续走子串兜底，参数 <code>"1"</code> 会经标题匹配命中 <code>第11章.md</code>。故凡参数整体为纯数字（宽度归一后），解析失败即直接判定「找不到章节」，不做子串尝试。
+      </div>
+
+      <h3>2 · 分段与截断（计算原理）</h3>
+      <div class="formula">text       = readTextFile(&lt;book&gt;/&lt;file&gt;)      ← 已做编码探测
+allLines   = text.split(/\r?\n/)
+totalLines = countTextLines(text) = text.length === 0 ? 0 : allLines.length
+
+chars = 0; lines = []; hitCharCap = false
+for (i = offset − 1; i &lt; allLines.length 且 lines.length &lt; limit; i += 1)：
+    line = allLines[i]
+    if (line.length &gt; 3000) line = line.slice(0, 3000) + "…（行过长已裁剪）"
+    addChars = line.length + (lines.length &gt; 0 ? 1 : 0)      ← 换行符只算行与行之间
+    if (chars + addChars &gt; READ_MAX_CHARS 且 lines.length &gt; 0)：
+        hitCharCap = true; break
+    chars += addChars
+    lines.push(&#123; number: i + 1, text: line &#125;)
+
+truncated = hitCharCap ‖ (offset − 1 + lines.length) &lt; totalLines</div>
+      <p>常量：<code>READ_LIMIT = 400</code> 行、<code>READ_MAX_CHARS = 20000</code> 字符、单行裁剪阈值 3000。三个限制的语义各不相同：<code>limit</code> 是<strong>调用方可控</strong>的行数上限（默认即上限）；20000 字符是<strong>不可调</strong>的输出预算；3000 是<strong>单行</strong>保护，防止首行超长绕过字符预算。截断判定在累加<strong>之前</strong>完成，被中断的行不计入 <code>chars</code>，故 <code>chars</code> 与 <code>lines.join("\n").length</code> 严格一致。</p>
+      <div class="note">
+        <b>第一行不受 20000 字预算约束。</b>判断式带 <code>lines.length &gt; 0</code> 条件，保证至少返回一行，避免 <code>limit</code> 与预算互相卡死产生空结果；该行的规模由 3000 字单行裁剪兜住。截断时渲染层给出的续读 <code>offset</code> 为「末行号 + 1」，恰好是下一段起点。
+      </div>
+
+      <h3>3 · 行号口径</h3>
+      <p><code>totalLines</code> 经 <code>countTextLines</code> 计算（<strong>空文件为 0 行</strong>），而分段循环的边界取 <code>allLines.length</code>（<code>split</code> 对空串仍返回 <code>[""]</code>，长度为 1）。两者在空文件上不一致，实现用断言 <code>offset &lt;= Math.max(totalLines, 1)</code> 兜底：<code>offset = 1</code> 时仍能读到那一条空行，返回 <code>lines = [&#123; number: 1, text: "" &#125;]</code>。这是 v4.3.0 统一行数口径时保留的既有行为。行号是<strong>绝对行号</strong>，不随 <code>offset</code> 重新编号。</p>
+
+      <h3>4 · 编码探测 <code>decodeTextBuffer</code></h3>
+      <p>读取原始字节后按序判定，目的是让中文 Windows 环境下的 GBK 稿件与无 BOM 的 UTF-16 稿件都能读，且<strong>不静默返回乱码</strong>：</p>
+      <div class="formula">① BOM：EF BB BF → UTF-8（剥离 3 字节）
+        FF FE → UTF-16LE（剥离 2 字节）；FE FF → UTF-16BE
+② 无 BOM，NUL 占比 &gt; 5% → 按奇偶下标 NUL 分布判 UTF-16LE / UTF-16BE
+③ TextDecoder("utf-8", &#123; fatal: true &#125;) 严格解码，成功即返回
+④ 长度 ≥ 8 且为偶数：分别试解 LE/BE，用「高字节结构占比 ≥ 0.9 且可打印率 ≥ 0.9
+   且另一字节序结构占比 &lt; 0.9」双阈值确认无 BOM UTF-16（中文正文 NUL 占比仅约 1.5%，过不了 ②）
+⑤ TextDecoder("gbk") 解码，结果不含 U+FFFD → 采用
+⑥ 全部失败 → 抛错，并区分「疑似缺 BOM UTF-16」与「无法识别」两种文案</div>
+
+      <h2>约束与边界</h2>
+      <ul>
+        <li><strong><code>book</code> 与 <code>chapter</code> 均必填</strong>：空串或纯空白被拒绝；<code>book</code> 经 <code>sanitizeSegment</code> 清洗（剥离 <code>\ / : * ? " &lt; &gt; |</code> 与首尾点、空白），清洗后为空报错。</li>
+        <li><strong><code>offset</code> / <code>limit</code> 必须是整数且在区间内</strong>：非整数、<code>null</code>、字符串数字（如 <code>"10"</code>）都会触发 <code>参数 "limit" 必须是 1 到 400 之间的整数</code> 一类错误。缺省值只在参数<strong>完全缺省</strong>时生效，传 <code>null</code> 不会回退默认值。</li>
+        <li><strong><code>limit</code> 超限即报错</strong>：请求 <code>limit: 1000</code> 不会静默截到 400，调用方需自行分批。</li>
+        <li><strong><code>offset</code> 超界报错</strong>：断言式为 <code>offset &lt;= max(totalLines, 1)</code>，错误文案含文件名与总行数。空文件允许 <code>offset = 1</code>（见行号口径）。</li>
+        <li><strong>纯数字 <code>chapter</code> 不做子串兜底</strong>：<code>chapter: "1"</code> 只匹配章号等于 1 的章节，命中失败直接报「找不到章节」，不会退化到 <code>第11章.md</code>。</li>
+        <li><strong>章号优先于文件名与标题</strong>：解析出数值时先按数值查找，故同一 <code>chapter</code> 值可能命中与字面文件名不同的章节；需要精确定位时用完整文件名。</li>
+        <li><strong>子串匹配取首个命中</strong>：④ 步用的是 <code>includes</code> 且按章号升序列表 <code>find</code> 第一个，短子串（如「序」）可能命中并非目标的那一章。</li>
+        <li><strong>三类上限各自独立，且会叠加触发</strong>：单行 &gt; 3000 字先被裁剪并追加 <code>…（行过长已裁剪）</code>（<strong>该后缀也算入 <code>chars</code></strong>），再受 20000 字预算与 <code>limit</code> 行数约束；任一触发都使 <code>truncated = true</code>。</li>
+        <li><strong><code>chars</code> 是「已显示部分」</strong>：v3.7.0 起文案已明确区分，调用方不得把截断响应里的 <code>chars</code> 当作章节总字数；总字数需用 <a href="novel-chapters.html">novel_chapters</a> 的 <code>chars</code>。</li>
+        <li><strong>不做 Markdown 清洗、不剥离标题行</strong>：<code>lines[].text</code> 是文件原始行文本（含 <code>#</code> 标题、空行），行号即物理行号。</li>
+        <li><strong>无缓存</strong>：每次调用都重新枚举目录、重新读全文；文件被外部修改后立即反映。</li>
+        <li><strong>编码不可识别时整次调用失败</strong>：工具实现内没有 try/catch，异常直接冒泡，不会返回部分内容；MCP 形态下由协议层转成 <code>isError: true</code> 的文本帧（正文以「错误：」开头），而非 JSON-RPC 协议错误码。</li>
+        <li><strong>MCP 形态的 <code>root</code> 越界静默回退</strong>：越界值被替换为启动参数 <code>--root</code> 指定的书库根并只记 stderr 日志；返回体的 <code>path</code> 反映真实生效路径。</li>
+        <li><strong>可被总开关关闭</strong>：执行前经 <code>assertToolEnabled</code> 校验状态文件（<code>~/.dsh/dsh-novel-writer/state.json</code>），关闭后直接抛错。</li>
+      </ul>
+
+      <h2>相关工具</h2>
+      <ul>
+        <li><a href="novel-chapters.html">novel_chapters</a> —— 获取章节清单与全章字数 / 行数，二者共用章号解析与行数口径。</li>
+        <li><a href="novel-keywords.html">novel_keywords</a> —— 按全书或单章统计高频关键词，接受同样的章节标识形态。</li>
+        <li><a href="novel-summary.html">novel_summary</a> —— 章节摘要的读写，按 <code>normalizeChapterKey</code> 归一化键对齐槽位。</li>
+        <li><a href="novel-continuity-check.html">novel_continuity_check</a> —— 逐章审计，需要读取正文时走同一套文本解码路径。</li>
+      </ul>
+
+      <h2>源码位置</h2>
+      <ul>
+        <li><span class="src">lib/index.js</span> —— 工具注册与 <code>execute</code> 实现（<code>registerNovelRead</code>：参数校验、分段循环、3000 字单行裁剪、20000 字预算、<code>truncated</code> 判定）</li>
+        <li><span class="src">lib/core.js</span> —— <code>findChapter</code>、<code>parseChapterNumber</code>、<code>cjkToNumber</code>、<code>normalizeChapterWidth</code>、<code>scanChapters</code>、<code>readTextFile</code></li>
+        <li><span class="src">lib/core.js</span> —— <code>decodeTextBuffer</code> / <code>scoreUtf16</code> / <code>isTextHighByte</code> / <code>isPlausibleTextCode</code>（编码探测四步）</li>
+        <li><span class="src">lib/core.js</span> —— <code>countTextLines</code>（行数唯一出口）、<code>optionalInt</code>（参数区间校验）、<code>READ_LIMIT</code> / <code>READ_MAX_CHARS</code> 常量、<code>formatRead</code>（渲染）</li>
+        <li><span class="src">mcp/server.mjs</span> —— <code>buildArgs</code>（<code>root</code> 注入与越界回退）、<code>renderToolText</code>（渲染文本优先于 JSON 回退）</li>
+      </ul>
+    </article>
+
+    <nav class="docs__pager" id="docsPager"></nav>
+  </main>
+
+  <aside class="docs__toc" id="docsToc"></aside>
+</div>
+
+<script src="docs.js"></script>
+</body>
+</html>

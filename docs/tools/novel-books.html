@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>novel_books — 列出作品｜dsh-novel-writer 技术文档</title>
+<meta name="description" content="novel_books 的实现细节：目录枚举与过滤规则、章节扫描与字数累加口径、排序策略，以及静默返回空列表等对调用方模型的关键约束。">
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body class="docs">
+
+<header class="docs__top">
+  <a class="docs__brand" href="../index.html">← dsh-novel-writer</a>
+  <span class="docs__crumb">技术文档 / <code>novel_books</code></span>
+</header>
+
+<div class="docs__layout">
+  <aside class="docs__side" id="docsSide"></aside>
+
+  <main class="docs__main">
+    <article class="doc">
+      <h1>novel_books</h1>
+      <p class="doc__lead">
+        列出章节库中的全部作品：枚举 <code>novels/</code> 下的子目录，逐本调用章节扫描与逐章统计，返回书名、章节数与总字数。<strong>无必填参数</strong>（仅可选 <code>root</code>），是章节库的入口查询。<strong>只读</strong>、不落盘任何文件，但每本书都要逐章读取全文才能给出字数，IO 量随全库章节总数线性增长。
+      </p>
+
+      <h2>参数</h2>
+      <table>
+        <thead><tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><th><code>root</code></th><td>string</td><td>否</td><td>章节库根目录（含 <code>novels</code> 子目录）。省略时按 <code>config.root</code> → 会话工作目录的顺序回退。</td></tr>
+        </tbody>
+      </table>
+      <p>参数 schema 声明 <code>additionalProperties: false</code>，即只接受 <code>root</code> 一项；不存在按书名过滤的参数，单本查询应改用 <a href="novel-chapters.html">novel_chapters</a>。</p>
+
+      <h2>输出结构</h2>
+      <p>契约字段（<code>output.schema</code>）：<code>root</code> 与 <code>books</code> 为必返；<code>books</code> 的每个元素必须同时含 <code>name</code>、<code>chapters</code>、<code>chars</code>，三者均为必返字段。</p>
+      <table>
+        <thead><tr><th>字段</th><th>类型</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr><th><code>root</code></th><td>string</td><td>本次实际生效的章节库根目录</td></tr>
+          <tr><th><code>books</code></th><td>array</td><td>作品列表，元素见下三行</td></tr>
+          <tr><th><code>books[].name</code></th><td>string</td><td>书名，即 <code>novels/</code> 下的目录名原文（未做清洗）</td></tr>
+          <tr><th><code>books[].chapters</code></th><td>integer</td><td>该目录下通过扩展名过滤的章节文件数量</td></tr>
+          <tr><th><code>books[].chars</code></th><td>integer</td><td>逐章字数累加值，见下文口径说明</td></tr>
+        </tbody>
+      </table>
+      <p>渲染层（<code>output.render</code> → <code>formatBooks</code>）输出为 <code>&lt;path&gt;</code> / <code>&lt;type&gt;</code> / <code>&lt;content&gt;</code> 包裹的纯文本，每行格式为 <code>- 书名: N 章, M 字</code>；列表为空时写入「（暂无作品。请在 novels/&lt;书名&gt;/ 下存放章节文件，如 第01章.md）」。</p>
+
+      <h2>行为与实现</h2>
+
+      <h3>1 · 根目录解析</h3>
+      <p><code>resolveRoot</code> 按三级回退确定根目录：参数 <code>root</code>（非空字符串）→ <code>config.root</code> → 会话工作目录 <code>exec.agent.session.header.cwd</code>，最后兜底 <code>process.cwd()</code>。工具自身<strong>不校验</strong>根目录范围；越界限制由 MCP 层承担（见「约束与边界」）。</p>
+
+      <h3>2 · 一级目录枚举与过滤</h3>
+      <p>对 <code>novelsDir(root)</code>（即 <code>&lt;root&gt;/novels</code>）执行 <code>readdir(&#123; withFileTypes: true &#125;)</code>，随后按序过滤：不是目录的条目跳过（普通文件直接忽略）；目录名以 <code>.</code> 开头的跳过（v3.5.0 #27，排除 <code>.git</code> 与备份目录）；目录名恰为 <code>创作资料</code> 的跳过（v3.1.0，该目录归 <a href="novel-outline.html">novel_outline</a> 使用）。<strong>此目录枚举失败（目录缺失、无读权限）时不抛错，直接返回 <code>&#123; root, books: [] &#125;</code>。</strong></p>
+
+      <h3>3 · 章节扫描与字数累加</h3>
+      <p>每本候选作品调用 <code>scanChapters</code>：仅收录扩展名属于 <code>.md</code> / <code>.markdown</code> / <code>.txt</code> 的文件，章节数即为该列表长度。字数按章累加：</p>
+      <div class="formula">chapters(book) = |scanChapters(&lt;root&gt;/novels/&lt;book&gt;)|
+chars(book)    = Σ chapterStats(book, chᵢ).chars        ← chars = 该章全文的 text.length
+
+逐章 try/catch：统计失败的章节静默跳过（不中止整本）</div>
+      <p>两处失败路径的粒度不同，必须区分：<code>scanChapters</code> 抛错（目录无法读取）时<strong>整本跳过</strong>，该书不出现在结果中；而单章 <code>chapterStats</code> 抛错时<strong>只跳过该章的字数</strong>，<code>chapters</code> 计数不变。因此 <code>chapters</code>（列表长度）与 <code>chars</code>（逐章读取成功之和）不同源，个别章读取失败会让两者口径不一致。</p>
+
+      <h3>4 · 排序</h3>
+      <div class="formula">books.sort((a, b) =&gt; b.chars - a.chars || a.name.localeCompare(b.name))</div>
+      <p>总字数降序为主键，同字数时用 <code>localeCompare</code> 比较书名。后者依赖宿主 locale，排序结果不保证跨环境一致。</p>
+
+      <h2>约束与边界</h2>
+      <ul>
+        <li><strong>无必填参数，但 schema 封闭</strong>：只接受 <code>root</code>，多余参数违反 <code>additionalProperties: false</code> 的声明。</li>
+        <li><strong>空结果不可区分原因</strong>：<code>novels/</code> 不存在、无权限、或确实没有作品目录，三种情形都返回 <code>books: []</code>，没有错误码或提示字段。调用方不得据「空列表」判定「库是空的」，更不能判定路径正确。</li>
+        <li><strong>两处静默排除</strong>：以 <code>.</code> 开头的目录与名为 <code>创作资料</code> 的目录不会出现在 <code>books</code> 中；在这两个位置存放的章节文本无法经本工具发现。</li>
+        <li><strong>无分页、无数量上限</strong>：<code>books</code> 数组与所有整型字段都没有上限或截断规则，返回体大小随作品数线性增长。</li>
+        <li><strong>成本等价于全文读取</strong>：每本书都要逐章 <code>stat</code> + 读全文以计算 <code>chars</code>，IO 量为全库章节文件总数；库越大耗时越长，且除了宿主取消信号外没有增量或缓存机制。宿主取消信号会经 <code>exec.signal</code> 传入 <code>readFile</code>。</li>
+        <li><strong><code>chars</code> 是 UTF-16 码元长度</strong>，等于 <code>String.prototype.length</code>，不是汉字个数：Markdown 标题行、空行、标点、ASCII 字符都计入，且以换行符分隔。它只是字数近似值，不可当作出版字数口径。</li>
+        <li><strong><code>chapters</code> 含 0 也可能出现</strong>：目录存在但无合法扩展名文件时，该书仍被列出且 <code>chapters</code> 为 0——「作品存在」与「有章节」是两件事。</li>
+        <li><strong>MCP 形态的 root 越界是静默回退</strong>：调用方给的 <code>root</code> 必须落在启动参数 <code>--root</code>（缺省读 <code>DSH_NOVEL_WRITER_ROOT</code>，再缺省 <code>process.cwd()</code>）之内；越界时<strong>回退到书库根并只记 stderr 日志</strong>，返回体里的 <code>root</code> 才是真实生效值。应以后者为准，不要用 <code>root</code> 参数探测文件系统。</li>
+        <li><strong>可被总开关关闭</strong>：执行前先经 <code>assertToolEnabled</code> 读取状态文件（<code>~/.dsh/dsh-novel-writer/state.json</code>，或环境变量 <code>DSH_NOVEL_WRITER_STATE</code> 指定的路径）；在写作助手 UI 中关闭后本工具直接抛错，不返回结果。</li>
+      </ul>
+
+      <h2>相关工具</h2>
+      <ul>
+        <li><a href="novel-chapters.html">novel_chapters</a> —— 取单本作品的章节清单（章号、标题、字数、行数、更新时间）。</li>
+        <li><a href="novel-read.html">novel_read</a> —— 按章号 / 文件名 / 标题定位并阅读正文。</li>
+        <li><a href="novel-import.html">novel_import</a> —— 批量导入外部稿件并按书名分组落到 <code>novels/&lt;书名&gt;/</code>。</li>
+        <li><a href="novel-keywords.html">novel_keywords</a> —— 按全书或单章统计高频关键词。</li>
+      </ul>
+
+      <h2>源码位置</h2>
+      <ul>
+        <li><span class="src">lib/index.js</span> —— 工具注册与 <code>execute</code> 实现（<code>registerNovelBooks</code>，参数 schema、输出契约、枚举与排序）</li>
+        <li><span class="src">lib/core.js</span> —— <code>novelsDir</code>（根下 <code>novels</code> 拼接）、<code>scanChapters</code>（扩展名过滤与章号解析）、<code>chapterStats</code>（<code>chars</code> / <code>lines</code> / <code>size</code> / <code>updated</code>）、<code>resolveRoot</code>、<code>formatBooks</code>（渲染）</li>
+        <li><span class="src">lib/core.js</span> —— <code>CHAPTER_EXTENSIONS</code>（<code>.md</code> / <code>.markdown</code> / <code>.txt</code> 常量）</li>
+        <li><span class="src">mcp/server.mjs</span> —— <code>resolveLibraryRoot</code> / <code>isInsideRoot</code> / <code>buildArgs</code>（书库根三级来源与 root 越界回退）</li>
+      </ul>
+    </article>
+
+    <nav class="docs__pager" id="docsPager"></nav>
+  </main>
+
+  <aside class="docs__toc" id="docsToc"></aside>
+</div>
+
+<script src="docs.js"></script>
+</body>
+</html>

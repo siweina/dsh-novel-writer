@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>novel_summary — 章节摘要｜dsh-novel-writer 技术文档</title>
+<meta name="description" content="novel_summary 的实现细节：章号键归一 normalizeChapterKey 的规则与 v4.3.0 修正、摘要条目的白名单清洗、add 与 update 的覆盖语义、落盘结构与排序口径。">
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body class="docs">
+
+<header class="docs__top">
+  <a class="docs__brand" href="../index.html">← dsh-novel-writer</a>
+  <span class="docs__crumb">技术文档 / <code>novel_summary</code></span>
+</header>
+
+<div class="docs__layout">
+  <aside class="docs__side" id="docsSide"></aside>
+
+  <main class="docs__main">
+    <article class="doc">
+      <h1>novel_summary</h1>
+      <p class="doc__lead">
+        章节摘要存储。<strong>摘要文本由调用方模型生成，插件只负责按章存取</strong>：<code>add</code> / <code>update</code> 把一段摘要连同关键事件、关键设定写入单部作品的 JSON 文件，<code>list</code> / <code>get</code> 按章号读回，<code>delete</code> 移除。<strong>章号是存储键</strong>，写入与查询都先经 <code>normalizeChapterKey</code> 归一，因此「2」「第02章」「第02章.md」「第二章」指向同一个槽位。
+      </p>
+
+      <h2>参数</h2>
+      <table>
+        <thead><tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><th><code>book</code></th><td>string</td><td>是</td><td>书名，即 <code>novels/</code> 下的子目录名。经 <code>sanitizeSegment</code> 过滤。</td></tr>
+          <tr><th><code>action</code></th><td>string</td><td>否</td><td>枚举 <code>list</code> / <code>get</code> / <code>add</code> / <code>update</code> / <code>delete</code>。非枚举取值与省略一律按 <code>list</code> 处理。</td></tr>
+          <tr><th><code>chapter</code></th><td>string</td><td>否</td><td>章节标识（章号 / 文件名 / 标题子串）。<strong>非 <code>list</code> 动作必需</strong>。</td></tr>
+          <tr><th><code>summary</code></th><td>string</td><td>否</td><td><code>add</code> / <code>update</code> 必需：本章摘要。参数文档建议 200–500 字，覆盖剧情走向 / 关键事件 / 结尾状态。</td></tr>
+          <tr><th><code>keyEvents</code></th><td>string[]</td><td>否</td><td>可选：关键事件列表。</td></tr>
+          <tr><th><code>keySettings</code></th><td>string[]</td><td>否</td><td>可选：本章出现的关键设定 / 信息。</td></tr>
+          <tr><th><code>root</code></th><td>string</td><td>否</td><td>章节库根目录。</td></tr>
+        </tbody>
+      </table>
+
+      <h3><code>action</code> 取值</h3>
+      <table>
+        <thead><tr><th>取值</th><th>语义</th><th>前置要求</th><th>是否写盘</th><th>返回体形态</th></tr></thead>
+        <tbody>
+          <tr><th><code>list</code></th><td>列出全部摘要（默认值），无 <code>message</code></td><td>无</td><td>否</td><td>全量</td></tr>
+          <tr><th><code>get</code></th><td>取指定章的摘要</td><td><code>chapter</code></td><td>否</td><td>全量（命中 1 条或空数组），无 <code>message</code></td></tr>
+          <tr><th><code>add</code></th><td>新增 / 覆盖指定章的摘要</td><td><code>chapter</code>、<code>summary</code></td><td>是</td><td>单条 + <code>message</code></td></tr>
+          <tr><th><code>update</code></th><td>修改指定章的摘要（与 <code>add</code> 同一分支）</td><td><code>chapter</code>、<code>summary</code></td><td>是</td><td>单条 + <code>message</code></td></tr>
+          <tr><th><code>delete</code></th><td>删除指定章的摘要</td><td><code>chapter</code>，且该章摘要已存在</td><td>是</td><td>全量 + <code>message</code></td></tr>
+        </tbody>
+      </table>
+
+      <h2>输出结构</h2>
+      <p>契约字段（<code>required: ["book","action","summaries"]</code>）恒返；<code>message</code> 仅在写操作的收尾路径出现。</p>
+      <table>
+        <thead><tr><th>字段</th><th>类型</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr><th><code>book</code></th><td>string</td><td>净化后的书名</td></tr>
+          <tr><th><code>action</code></th><td>string</td><td>归一后的动作</td></tr>
+          <tr><th><code>summaries</code></th><td>object[]</td><td>摘要条目数组</td></tr>
+          <tr><th><code>message</code></th><td>string</td><td>「已保存 第03章 的摘要」「已删除 第03章 的摘要」等</td></tr>
+        </tbody>
+      </table>
+      <p><code>summaries</code> 的元素契约（<code>required: ["chapter","summary"]</code>，<code>additionalProperties:false</code>）：</p>
+      <table>
+        <thead><tr><th>字段</th><th>类型</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr><th><code>chapter</code></th><td>string</td><td><strong>归一键</strong>（如 <code>第03章</code>、<code>第1001章</code>），不是调用方传入的原文</td></tr>
+          <tr><th><code>summary</code></th><td>string</td><td>摘要正文，原样保存、不截断</td></tr>
+          <tr><th><code>keyEvents</code></th><td>string[]</td><td>仅当传入的是数组时写入</td></tr>
+          <tr><th><code>keySettings</code></th><td>string[]</td><td>仅当传入的是数组时写入</td></tr>
+          <tr><th><code>updatedAt</code></th><td>string</td><td>ISO 8601，<strong>只在真正写入时</strong>取时间戳</td></tr>
+        </tbody>
+      </table>
+
+      <h2>数据模型与落盘</h2>
+      <pre><code>{
+  "book": "雨夜灯",
+  "summaries": [
+    {
+      "chapter": "第03章",
+      "summary": "沈砚回到西市当铺，用半枚铜钱换得掌柜的旧账本；账本末页夹着一张写着沈家旧宅地址的纸条，他决定连夜出城。",
+      "keyEvents": ["沈砚以铜钱换账本", "账本夹页暴露沈家旧宅地址"],
+      "keySettings": ["半枚铜钱可换旧账本", "沈家旧宅在西市之外"],
+      "updatedAt": "2026-09-13T02:11:07.412Z"
+    }
+  ]
+}</code></pre>
+      <p>落盘路径 <code>&lt;root&gt;/.novel-writer/summaries/&lt;book&gt;.json</code>，写入时固定为 <code>{ book, summaries }</code>，2 空格缩进。读取时只认 <code>parsed.summaries</code> 为数组的情形，文件缺失或 JSON 损坏一律返回空数组，不抛错。</p>
+
+      <h3>章号键归一 <code>normalizeChapterKey</code></h3>
+      <p>归一是存储键的唯一来源：写入时把 <code>chapter</code> 参数归一后存为 <code>chapter</code> 字段，查询 / 删除时把入参与每条已存键都归一后比较。步骤：</p>
+      <div class="formula">① 宽度归一：全角数字与全角连字符类（０-９ － ． ／）映射为半角
+② trim，去掉结尾的 .md / .MD，去掉行首的 # 与空白
+③ 匹配 /第?(\d{1,4}|[零一二三四五六七八九十百千万两]+)[章回话节]/
+   命中且能解析为整数 → "第" + String(n).padStart(2, "0") + "章"
+④ 否则匹配 /^(\d{1,4})[-._\s]/  → 同上格式
+⑤ 否则匹配 /^(\d{1,4})$/        → 同上格式
+⑥ 都不命中 → 返回第 ② 步处理后的原始字符串</div>
+      <table>
+        <thead><tr><th>输入</th><th>归一键</th></tr></thead>
+        <tbody>
+          <tr><th><code>2</code></th><td><code>第02章</code></td></tr>
+          <tr><th><code>第02章.md</code></th><td><code>第02章</code></td></tr>
+          <tr><th><code>第二章</code></th><td><code>第02章</code></td></tr>
+          <tr><th><code>第０１章</code></th><td><code>第01章</code></td></tr>
+          <tr><th><code>第一千零一章</code></th><td><code>第1001章</code></td></tr>
+          <tr><th><code>07-陨落</code></th><td><code>第07章</code>（命中的是行首数字 + 分隔符规则）</td></tr>
+          <tr><th><code>番外·雨夜</code></th><td><code>番外·雨夜</code>（原样保留）</td></tr>
+        </tbody>
+      </table>
+      <div class="note">
+        <b>v4.3.0 修正：中文章号漏「千」导致摘要静默覆盖。</b>旧版 <code>normalizeChapterKey</code> 的字符类缺「千」，正则从「千」之后开始匹配，把「第一千零一章」归一成 <code>第01章</code>，而 <code>parseChapterNumber("第一千零一章.md")</code> 得 1001——同一输入两种口径。由于摘要以该键存取，给第 1001 章写摘要会<strong>覆盖第 1 章的摘要并回复「已保存」</strong>。同版本一并修正：5 处章号正则的字符类统一补「千万」（<code>normalizeChapterKey</code> / <code>cleanChapterTitle</code> / <code>nextFreeChapterFile</code> / <code>bookNameFromFileName</code> / <code>bookNameFromContent</code>），并给 <code>normalizeChapterKey</code> 与 <code>parseChapterNumber</code> 入口都加了宽度归一，避免全角章号绕过重号防护。
+      </div>
+      <div class="warn">
+        <b>「万」仍是未实现单位。</b>字符类允许「万」，但 <code>cjkToNumber</code> 只实现「十 / 百 / 千」三档与 0–9 数字，遇到「万」返回 <code>undefined</code>，归一步骤 ③ 落空后一路走到 ⑥，最终把原文（如「第一万章」）原样作为键。这类章号不会与数字形式的键合并，也不会报错。
+      </div>
+
+      <h3>读 - 改 - 写流程</h3>
+      <ul>
+        <li>全部动作先经 <code>withFileTx(summariesFile(root, book), …)</code> 串行化同一文件的读改写，不同书互不阻塞。</li>
+        <li>读盘后<strong>立即</strong>套用 <code>cleanSummaryEntry</code> 白名单并过滤空值，后续的 <code>findIndex</code> 与排序只面对结构完整的条目。</li>
+        <li><code>list</code> / <code>get</code> 不写盘。<code>add</code> / <code>update</code> / <code>delete</code> 在变更后 <code>mkdir</code> 目标目录、<code>atomicWriteJson</code> 整文件覆盖，并把书库根记入全局状态。</li>
+        <li>收尾块（<code>list</code> 与 <code>delete</code> 走此路径）在返回前按章号数值排序：<code>parseChapterNumber(chapter) ?? 999</code> 升序，同号再按字符串字典序。因此「第02章」排在「第10章」之前，无法解析章号的条目（含标题式键）统一沉到末尾。<code>get</code> / <code>add</code> / <code>update</code> 在排序之前就已返回（结果至多一条），不受该排序影响。</li>
+      </ul>
+
+      <h3>add 与 update 是同一分支</h3>
+      <p>两个动作走完全相同的代码路径，仅 <code>action</code> 字段原样回填：</p>
+      <div class="formula">index = summaries.findIndex(s =&gt; normalizeChapterKey(s.chapter) === normalizeChapterKey(chapter))
+index !== -1 → summaries[index] = 新条目（整条替换）
+index === -1 → summaries.push(新条目)</div>
+      <p>没有「仅更新摘要正文」的增量语义：<code>keyEvents</code> / <code>keySettings</code> 未传时新条目里就是 <code>undefined</code>（序列化后不出现），<strong>旧值不会被保留</strong>。要保留原有列表就必须在调用时重新传全。</p>
+
+      <h2>约束与边界</h2>
+      <ul>
+        <li><strong>book 是唯一 schema 必填项</strong>（<code>required: ["book"]</code>）；<code>action</code> 非枚举值静默退化为 <code>list</code>，调用方应以返回体的 <code>action</code> 判断实际执行的动作。</li>
+        <li><strong>非 <code>list</code> 动作必须传 <code>chapter</code></strong>，否则报「<code>novel_summary &lt;action&gt; 需要 chapter 参数</code>」。</li>
+        <li><strong><code>add</code> / <code>update</code> 必须传 <code>summary</code></strong>，且<strong>空字符串与纯空白视为未提供</strong>（<code>optionalString</code> 会把它归一成 <code>undefined</code>），报「需要 summary 参数」。<code>chapter</code> 同理，传空串等同没传。</li>
+        <li><strong><code>get</code> 与 <code>delete</code> 对「不存在」的处置不同</strong>：<code>get</code> 返回 <code>summaries: []</code> 且不报错；<code>delete</code> 抛「尚未保存 X 的摘要，无需删除」并终止。v3.9.5 之前 <code>delete</code> 会假报「已删除」并空写盘。</li>
+        <li><strong>写入是覆盖语义，没有版本历史</strong>：同一归一键的第二次写入直接替换旧条目，旧的 <code>updatedAt</code> 与文本都不保留。</li>
+        <li><strong>章号归一只作用于键</strong>：<code>summary</code> 正文里写「第 1001 章」与否都不影响存取；但反过来说，标题式章号（如「番外·雨夜」）不会与任何数字章号合并，同一章用两种写法登记会产生两条记录。</li>
+        <li><strong>数组字段的类型门槛</strong>：<code>keyEvents</code> / <code>keySettings</code> 只在传入为数组时写入。<strong>空数组是合法值</strong>（会写成 <code>[]</code> 并在返回体中出现），非数组（如字符串）则静默忽略。</li>
+        <li><strong><code>summary</code> 不做长度限制与截断</strong>：参数文档的「200–500 字」是给调用方模型的写作建议，实现层不校验、不裁剪，超长摘要原样落盘并原样返回。</li>
+        <li><strong>白名单清洗会丢弃未知字段</strong>：磁盘上被手改加入的额外键（例如 <code>tags</code>）在读取时被 <code>cleanSummaryEntry</code> 剥掉，下次写入即从文件中消失；同时 <code>null</code> / 字符串 / 数字这类脏元素整体被过滤，不再让整次调用抛 <code>TypeError</code>。</li>
+        <li><strong>返回体的 <code>chapter</code> 是归一键</strong>：调用方传入 <code>第02章.md</code>，返回与落盘的 <code>chapter</code> 都是 <code>第02章</code>。需要显示原标题时不能依赖该字段。</li>
+        <li><strong>动作分支与返回形态的对应</strong>：<code>add</code> / <code>update</code> 早返回单条；<code>delete</code> 落到收尾块返回全表；<code>get</code> 早返回且不带 <code>message</code>。</li>
+        <li><strong>并发按文件串行</strong>：同书的并发写被 <code>withFileTx</code> 排序；<code>atomicWriteJson</code> 另有一层按文件路径的写队列，临时文件命名为 <code>&lt;文件&gt;.tmp-&lt;pid&gt;-&lt;时间戳&gt;</code>，<code>rename</code> 失败回退直写，两者都失败抛 <code>ENOVELWRITEFAIL</code>。</li>
+        <li><strong>跨版本口径</strong>：v4.3.0 修正中文章号归一（见上文 note）与读盘白名单清洗；v4.0.0 起 <code>updatedAt</code> 只在真正写入时取时间戳（旧版 <code>list</code> / <code>get</code> / <code>delete</code> 也算了但没用），且 <code>get</code> 与 <code>list</code> 共用同一套白名单（旧版 <code>get</code> 透传磁盘原文，脏键会让宿主拒绝整次调用）；v3.5.0 起按章号数值排序。因此旧版本写下的文件在新版本读取时可能<strong>键已经被重新归一</strong>——若旧文件里存在「第一千零一章」这类历史脏键，读回后返回的 <code>chapter</code> 显示为新归一键，但磁盘内容要到下次写入才改变。</li>
+        <li><strong>MCP 形态下的 root 限制</strong>：参数 <code>root</code> 必须落在服务器启动参数 <code>--root</code> 的书库根之内，越界会被静默回退，同时记 stderr。</li>
+        <li><strong>参数表禁止额外字段</strong>：<code>parameters.additionalProperties = false</code>。</li>
+      </ul>
+
+      <h2>相关工具</h2>
+      <ul>
+        <li><a href="novel-read.html">novel_read</a> —— 读章节正文；与摘要配合构成「摘要回忆前情 → 需要细节时翻原文」的工作流。</li>
+        <li><a href="novel-chapters.html">novel_chapters</a> —— 章节清单（章号 / 标题 / 字数 / 行数），是摘要章的权威章号来源。</li>
+        <li><a href="novel-outline.html">novel_outline</a> —— 创作资料里的「创作状态卡」承担「进度 / 上一章结尾 / 下章方向」的快照角色，与逐章摘要互补。</li>
+        <li><a href="novel-continuity-check.html">novel_continuity_check</a> —— 连贯性审计；其衔接检查直接读章节正文而非摘要。</li>
+      </ul>
+
+      <h2>源码位置</h2>
+      <ul>
+        <li><span class="src">lib/index.js</span> —— 工具注册与 <code>execute</code>：<code>registerNovelSummary</code>（约 1760–1878 行），含五个动作分支、排序与单条返回逻辑。</li>
+        <li><span class="src">lib/core.js</span> —— <code>summariesFile</code> / <code>readSummaries</code> / <code>cleanSummaryEntry</code>（约 2164–2182 行）。</li>
+        <li><span class="src">lib/core.js</span> —— <code>normalizeChapterKey</code>（约 158–177 行）、<code>normalizeChapterWidth</code>（约 134 行）、<code>cjkToNumber</code>（约 100 行）、<code>parseChapterNumber</code>（约 137 行）。</li>
+        <li><span class="src">lib/core.js</span> —— <code>withFileTx</code>（约 969 行）、<code>atomicWriteJson</code>（约 942 行）、<code>sanitizeSegment</code>（约 211 行）。</li>
+        <li><span class="src">mcp/server.mjs</span> —— <code>buildArgs</code> / <code>isInsideRoot</code>（约 259–289 行）。</li>
+      </ul>
+    </article>
+
+    <nav class="docs__pager" id="docsPager"></nav>
+  </main>
+
+  <aside class="docs__toc" id="docsToc"></aside>
+</div>
+
+<script src="docs.js"></script>
+</body>
+</html>

@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>novel_style_check — 风格自检｜dsh-novel-writer 技术文档</title>
+<meta name="description" content="novel_style_check 的实现细节：风格指纹 13 维向量的构造与余弦相似度分级，偏差清单的阈值，六维文笔基线「排除本章后现算」的口径，原著锚段的选取与语义风格相似度的降级文案。">
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body class="docs">
+
+<header class="docs__top">
+  <a class="docs__brand" href="../index.html">← dsh-novel-writer</a>
+  <span class="docs__crumb">技术文档 / <code>novel_style_check</code></span>
+</header>
+
+<div class="docs__layout">
+  <aside class="docs__side" id="docsSide"></aside>
+
+  <main class="docs__main">
+    <article class="doc">
+      <h1>novel_style_check</h1>
+      <p class="doc__lead">
+        风格自检。把目标章节与「全书除本章外的其余章」当作两个样本，先算句式指纹的余弦相似度并给出 high / medium / low 分级与偏差清单，再用同一套六维文笔指标做「本章值 vs 其他章基线 μ±σ」的带外判定，最后附上原著锚段供逐句对照修正。<strong>基线永远不含目标章</strong>：目标章只参与判定，不参与统计，否则风格漂移会把自己的基线一起拉走。
+      </p>
+
+      <h2>参数</h2>
+      <table>
+        <thead><tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><th><code>book</code></th><td>string</td><td>是</td><td>书名，即 <code>novels/</code> 下的子目录名。经 <code>requiredString</code> 判空后交 <code>sanitizeSegment</code> 过滤。</td></tr>
+          <tr><th><code>chapter</code></th><td>string</td><td>是</td><td>目标章节标识：章号（<code>1</code> / <code>01</code>）、文件名（<code>第01章.md</code>）或标题子串，由 <code>findChapter</code> 解析；找不到则抛错。</td></tr>
+          <tr><th><code>root</code></th><td>string</td><td>否</td><td>章节库根目录。省略时取插件 <code>config.root</code>，再省略取会话工作目录。MCP 形态下必须落在启动参数 <code>--root</code> 指定的书库根内，越界会被静默回退到该书库根。</td></tr>
+        </tbody>
+      </table>
+      <p>本工具<strong>没有</strong> <code>threshold</code>、<code>top</code> 一类可调参数：偏差阈值与判定分级都是常量，语义增强是否参与由侧边栏功能开关决定。</p>
+
+      <h2>输出结构</h2>
+      <p>契约字段（<code>output.schema.required</code>）：<code>book</code>、<code>chapter</code>、<code>baselineScope</code>、<code>similarity</code>、<code>verdict</code>、<code>diffs</code>、<code>chapterFingerprint</code>、<code>baselineFingerprint</code>、<code>advice</code>、<code>semantic</code>。其余字段按需出现。</p>
+      <table>
+        <thead><tr><th>字段</th><th>类型</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr><th><code>chapter</code></th><td>string</td><td>解析后的目标章文件名（不是调用方传入的原始值）</td></tr>
+          <tr><th><code>baselineScope</code></th><td>string</td><td>仅 1 个其他章时是该章文件名，否则为「全书除本章外的 N 章」</td></tr>
+          <tr><th><code>similarity</code></th><td>number</td><td>0~1，千分位取整（<code>Math.round(x*1000)/1000</code>）</td></tr>
+          <tr><th><code>verdict</code></th><td>string</td><td>枚举 <code>high</code> / <code>medium</code> / <code>low</code></td></tr>
+          <tr><th><code>diffs</code></th><td>array</td><td>偏差清单，元素为 <code>{dimension, diff, note}</code>；<code>diff</code> 单位为百分点（句长项为字）</td></tr>
+          <tr><th><code>chapterFingerprint</code></th><td>string</td><td>本章指纹串（九类占比 + 句长 + 主观性 + 主导情绪 + 首选句式模板）</td></tr>
+          <tr><th><code>baselineFingerprint</code></th><td>string</td><td>基线指纹串，同格式，可直接肉眼对照</td></tr>
+          <tr><th><code>semantic</code></th><td>object</td><td>必返对象。<code>enabled:true</code> 时含 <code>similarity</code> 与 <code>note</code>；不可用时仅 <code>enabled:false</code> 与说明文案</td></tr>
+          <tr><th><code>metric</code></th><td>object</td><td>六维对照。<code>enabled:true</code> 时含 <code>baseline</code> / <code>metrics</code> / <code>verdicts</code> / <code>outCount</code> / <code>skippedDims</code> / <code>summary</code>；不可用时仅 <code>enabled:false</code> 与 <code>note</code></td></tr>
+          <tr><th><code>fixAnchors</code></th><td>array</td><td>原著锚段，元素为 <code>{label, text}</code>，最多 3 条；锚包构建失败时缺省</td></tr>
+          <tr><th><code>advice</code></th><td>string</td><td>面向生成端的建议文本，已与六维判定统一口径</td></tr>
+        </tbody>
+      </table>
+      <p>渲染层（<code>render</code>）依次输出：检查章节、对比基线、风格相似度百分比与中文分级、偏差清单（无偏差时写「偏差: 无明显偏差」）、语义对比备注、原著锚段（带「逐句对比本章对应写法，只修跑偏部分，不得整章重写」的约束语）、本章指纹与基线指纹、文笔六维逐维「本章 v vs 基线 μ（±%，marks）」、<code>advice</code>。六维行的状态符号为 <code>⚠ 出带</code> / <code>△ 提醒</code> / <code>✓ 在带</code>；<code>metric.enabled === false</code> 时该段只打印 <code>note</code>。</p>
+
+      <h2>计算原理</h2>
+      <p>本工具做两类判定，共用一次逐章读盘：<strong>句式指纹相似度</strong>（整章 vs 全书其他章的文本聚合）与<strong>六维文笔基线对照</strong>（逐章测量后再汇总）。</p>
+
+      <h3>1 · 风格指纹与向量化</h3>
+      <p>指纹串由 <code>buildFingerprint</code> 拼装，向量由 <code>fingerprintSimilarity</code> 内部按固定维度顺序构造，共 13 维：</p>
+      <div class="formula">指纹串 = 九类短码占比(‰，保留 1 位小数，空格分隔)
+        + " | len:" + 平均句长
+        + " subj:" + 主观性指数
+        + " emo:"  + 主导情绪
+        + " | motif:" + 最高频句式模板
+
+v[0..8] = 九类句式占比（CATEGORY_ORDER 顺序，缺失补 0）
+v[9]    = min(平均句长, 100) / 100
+v[10]   = 短句占比
+v[11]   = 长句占比
+v[12]   = 主观性指数 / 100
+
+similarity = dot(va, vb) / (‖va‖ · ‖vb‖)        ← 任一范数为 0 则返回 0</div>
+      <p>句长维度先按 100 字截顶再归一，其余各维本身已在 0~1 量级，因此余弦不会被句长一项主导。九类短码为 <code>S / ENV / PSY / DLG / Q / RQ / EX / IMP / …</code>，与 <code>novel_sentence_analysis</code> 的 <code>TYPE_CODE</code> 同源。</p>
+
+      <h3>2 · 分级与偏差清单</h3>
+      <div class="formula">verdict = similarity ≥ 0.9 ? "high" : similarity ≥ 0.75 ? "medium" : "low"</div>
+      <p>偏差清单由 <code>styleDiffs(baseline, chapter)</code> 产生，方向为「本章相对基线」，四类判据与阈值固定：</p>
+      <div class="formula">句式占比：|Δratio| ≥ 0.06            → {dimension:"X占比", diff: Δ×100（1 位小数）, note: 偏高/偏低}
+平均句长：|Δavg|   ≥ 5 字            → {dimension:"平均句长", diff: Δ（1 位小数）, note: 偏长/偏短}
+短句占比：|Δshort| ≥ 0.08            → {dimension:"短句占比", diff: Δ×100, note: 偏高/偏低}
+主导情绪：baseline.dominant ≠ chapter.dominant → {diff: 0, note: "由「A」变为「B」"}</div>
+      <p>清单<strong>不做数量上限</strong>：九类 + 句长 + 短句 + 情绪最多 12 条。但 <code>advice</code> 文案只取前 4 条拼入自然语言建议，其余条目仍完整保留在 <code>diffs</code> 里由渲染层逐条打印。方向词映射为「偏高→略多、偏低→略少、偏长→略长、偏短→略短」。</p>
+
+      <h3>3 · 六维基线的「排除本章」口径</h3>
+      <p>先用 <code>metricChaptersCached</code> 取得全书每章的六维测量值（带缓存），再分两步算两组基线：</p>
+      <div class="formula">excluding   = perChapter.filter(文件 ≠ 目标章)      ← 判定用基线
+b           = computeBaselineFromPerChapter(excluding)
+
+allBaseline = computeBaselineFromPerChapter(perChapter)  ← 容差来源（含目标章）
+tol[k]      = { low: -allBaseline[k].recTol, high: +allBaseline[k].recTol }
+
+若用户自定义了 styleTolerance[k] 的 low/high（均为 number）→ 该维改用自定义值
+judge = judgeAgainstBaseline(measureStyleMetrics(目标章).metrics, b, tol)</div>
+      <p>容差取「含目标章的全书推荐值」而非「排除目标章后的推荐值」，是因为排除后样本更少、σ 更不稳定；用户自定义容差只覆盖显式给出的维度，未设置的维度继续沿用全书推荐值。<code>recTol</code> 缺失或非有限值时回退 15。六维的定义、μ±σ 公式与 out / warn / ok 判据与 <code>novel_style_report</code> 完全同源，见<a href="novel-style-report.html">该页</a>「六个维度的定义与公式」与「基线带 μ±σ 的计算」两节。</p>
+      <div class="note">
+        <b>advice 与六维判定统一口径。</b> 六维判定算完之后，若 <code>metric.outCount &gt; 0</code>，<code>advice</code> 会被覆写：指纹无偏差时改写为「句式指纹与全书高度一致，但 N 个维度超出容差带…」，有偏差时在原建议后追加「另：…」。此举避免了同一份输出既说「可以放心续写」又标「⚠ 需修正」的自相矛盾。
+      </div>
+
+      <h3>4 · 原著锚段 fixAnchors</h3>
+      <p>锚段由 <code>buildStyleAnchorPackage</code> 从**基线章文本**（已读入内存的逐章文本，不再二次读盘）中挑选，段落需 <code>trim().length ≥ 40</code>：</p>
+      <div class="formula">对话锚：含 " 或 “ 且长度 ≤ 200     → 取 2 条
+心理锚：命中 /想|觉得|心|怕|慌|记忆/ 且不含引号 且 ≤ 200 → 取 1 条
+描写锚：不含引号 且 80 ≤ 长度 ≤ 200 → 取 2 条
+每类内部按「全书等距抽样」选取（首尾必取、均匀取 n 条；n=1 取中位段）
+锚段文本统一截断到 200 字，label 为 对话 / 心理 / 描写
+全空时回退为 3 条 label="原文" 的等距段落
+
+fixAnchors = 按 label 去重后的前 3 条；不足 3 条时按原顺序补齐（最多 3 条）</div>
+      <p>等距抽样而非顺序取前 n 条，是为了避免锚段全部来自序章与开头章。跨桶去重（对话×2 → 心理×1 → 描写×2 中先各取一条）修正了此前「slice(0,2) 恒取到两条对话锚、心理与描写锚永远进不了输出」的缺陷。</p>
+
+      <h3>5 · 语义风格相似度（可选增强）</h3>
+      <p>仅当 <code>semanticStyle</code>（含 <code>semanticEmbedding</code> 总开关）开启且本地引擎可用时执行。目标章与基线文本各自切块后合并为一份临时索引，块 id 加 <code>"0|"</code> / <code>"1|"</code> 前缀以区分两侧：</p>
+      <div class="formula">targetVecs = index.filter(id 以 "0|" 开头)
+baseVecs   = index.filter(id 不以 "0|" 开头)
+baseSample = baseVecs 长度 ≤ 20 ? 全部 : 按 (len-1)/19 步长等距取 20 条
+
+semSim = Σ cosine(tv, bv) / (targetVecs.length × baseSample.length)
+note   = semSim ≥ 0.55 ? "语义风格高度一致"
+       : semSim ≥ 0.45 ? "语义风格中等一致"
+       : "语义风格存在差异，注意写法口吻"
+similarity = round(semSim × 1000) / 1000</div>
+      <p>基准侧的 20 条等距抽样是必要的：早先的 <code>slice(0,20)</code> 只覆盖全书开头约 20 段，大书结果系统性偏置。索引缓存键为 <code>&lt;book&gt;__style_&lt;章名清洗后&gt;</code>，写盘失败不阻塞本次结果，只在 <code>semantic.note</code> 末尾追加「（语义索引缓存写入失败，下次会重建）」。</p>
+
+      <h2>约束与边界</h2>
+      <ul>
+        <li><strong>三处前置断言会直接抛错</strong>：写作助手总开关关闭时抛「写作助手功能（句式模式分析）当前已关闭…」；作品章数 ≤ 1 时抛「只有 N 章，无法做风格对比（至少需要 2 章）」；<code>chapter</code> 解析不到时抛「找不到章节」。调用方应把这三类视为参数/环境错误，而不是降级结果。</li>
+        <li><strong>基线缓存每书一份、按内容哈希失效</strong>。基线分析写入 <code>&lt;root&gt;/.novel-writer/analysis/&lt;book&gt;__base-full.json</code>，失效键是 <code>sha1(基线全文)</code> 前 16 位加算法版本号。<code>bookAnalysisCached</code> 命中时要求 <code>th</code> 与 <code>ver</code> 同时相等；任一章节改动都会改变基线全文，从而整份重建。文件不含目标章名，因此检查不同章不会堆积近似全书大小的缓存文件。</li>
+        <li><strong>六维逐章测量缓存单独一份</strong>：<code>&lt;root&gt;/.novel-writer/analysis/&lt;book&gt;-chapters-metrics.json</code>，指纹按文件名排序后拼 <code>file + "\0" + text</code> 再哈希，<strong>与传入章序无关</strong>——本工具传「其他章 + 目标章」，<code>novel_style_report</code> 传全书序，两者共用同一缓存不会互相击穿。</li>
+        <li><strong>六维对照可能整体不可用</strong>：排除目标章后没有可用基线章时返回 <code>{enabled:false, note:"基线章节不足（至少需要 1 个其他章节）"}</code>；测量过程抛异常时返回 <code>{enabled:false, note:"六维测量失败：…"}</code>（异常文本截断到 80 字）。两种情形下 <code>diffs</code> / <code>similarity</code> 仍是有效结果，调用方不应把 <code>metric.enabled === false</code> 读成「六维合格」。</li>
+        <li><strong>六维可能静默跳过维度</strong>：某维基线 μ=0 且 σ=0 时无法做相对判定，该维登记进 <code>metric.skippedDims</code>，<code>summary</code> 会写明「另有 N 个维度基线均值为 0、未做相对判定（维度名）」。μ=0 但 σ&gt;0 时改用绝对尺度（<code>|v| &gt; 1.5σ</code> 判 out），该项 <code>devPct</code> 为 <code>null</code>、<code>basis</code> 为 <code>"absolute"</code>，渲染层打印「基线为 0，按绝对尺度判定」而不是 <code>null%</code>。</li>
+        <li><strong>语义增强有三条降级路径，文案各异</strong>：功能未开启时为 <code>{enabled:false, note:"语义增强未启用（纯规则模式）"}</code>；目标侧或基准侧无段落时为 <code>{enabled:false, note:"语义对比样本不足（目标章或基准章为空）"}</code>；计算抛异常时为 <code>{enabled:false, note:"语义对比失败：…"}</code>（异常文本截断到 80 字）。<code>semantic</code> 在 schema 中是必返 object，<code>enabled:false</code> 属正常返回而非错误。</li>
+        <li><strong>被静默跳过的情形</strong>：锚包构建抛异常时 <code>fixAnchors</code> 缺省，判定与建议不受影响；语义索引写盘失败只追加一行备注；<code>cleanOutput</code> 会统一把 <code>-0</code> 归一为 <code>0</code>、把 <code>NaN</code> 归一为 <code>null</code>、剔除 <code>undefined</code> 值的键，以满足宿主无损 JSON 校验。</li>
+        <li><strong>跨版本不可横比</strong>：六维口径在 v4.3.0 有多处行为变化（句末符统一为 <code>。！？…!?</code> 且省略号单独成句、动作词表去重清洗到 625 条、抽象度改为最长匹配、修饰密度新增停用词表、留白指数量纲统一为千字密度）。同一本书在旧版本下算出的 <code>similarity</code> / <code>diffs</code> / <code>metric</code> 数值不可与新版本直接比较；缓存另设算法版本键，升级后自动失效重建。</li>
+        <li><strong>语义索引指纹算法变更属一次性代价</strong>：v4.3.0 为内容指纹字段加了长度前缀定界（消除字段含分隔符导致的边界歧义），既存索引与风格缓存的指纹一次性失效并重建，之后恢复增量命中。</li>
+      </ul>
+
+      <h2>相关工具</h2>
+      <ul>
+        <li><a href="novel-style-report.html">novel_style_report</a> —— 提供六维指标的定义、词表规模与 μ±σ 完整公式；本工具的 <code>metric</code> 段是其判定路径的「单章版」。</li>
+        <li><a href="novel-sentence-analysis.html">novel_sentence_analysis</a> —— 九类句式分布、句长分布、情感曲线与风格指纹的原始实现，本工具的 <code>diffs</code> 全部来自该分析结果。</li>
+        <li><a href="novel-semantic-search.html">novel_semantic_search</a> —— 与本节「语义风格相似度」共用同一个本地向量引擎与同一份索引缓存文件。</li>
+      </ul>
+
+      <h2>源码位置</h2>
+      <ul>
+        <li><span class="src">lib/index.js</span> —— 工具注册与执行（<code>registerNovelStyleCheck</code>，第 899 行起；<code>execute</code> 自第 989 行）、渲染（第 947 行）、语义门控 <code>semanticGate</code>（第 109 行）</li>
+        <li><span class="src">lib/analysis.js</span> —— <code>buildFingerprint</code>（第 1600 行）、<code>fingerprintSimilarity</code>（第 1607 行）、<code>styleDiffs</code>（第 1634 行）、<code>analyzeText</code>（第 1174 行）</li>
+        <li><span class="src">lib/style-metrics.js</span> —— <code>measureStyleMetrics</code>（第 242 行）、<code>computeBaselineFromPerChapter</code>（第 399 行）、<code>judgeAgainstBaseline</code>（第 460 行）、<code>METRIC_ORDER</code>（第 394 行）</li>
+        <li><span class="src">lib/core.js</span> —— <code>metricChaptersCached</code>（第 1864 行）、<code>bookAnalysisCached</code>（第 1881 行）、<code>buildStyleAnchorPackage</code>（第 2071 行）、<code>cleanOutput</code>（第 2308 行）</li>
+        <li><span class="src">lib/embedding.js</span> —— <code>chunkText</code>（第 520 行）、<code>buildIndexIncremental</code>（第 463 行）、<code>loadIndexMeta</code>（第 440 行）、<code>saveIndex</code>（第 408 行）、<code>fingerprint</code>（第 338 行）、<code>cosine</code>（第 179 行）</li>
+        <li><span class="src">mcp/server.mjs</span> —— MCP 形态下的 <code>--root</code> 越界拒绝与回退（<code>resolveLibraryRoot</code> 第 130 行、参数补全与校验第 259~281 行）</li>
+      </ul>
+    </article>
+
+    <nav class="docs__pager" id="docsPager"></nav>
+  </main>
+
+  <aside class="docs__toc" id="docsToc"></aside>
+</div>
+
+<script src="docs.js"></script>
+</body>
+</html>

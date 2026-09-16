@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>novel_settings — 设定五张表｜dsh-novel-writer 技术文档</title>
+<meta name="description" content="novel_settings 的实现细节：五张设定表的 listKey 映射、category 与 action 的枚举回退、各动作返回体差异、worldview 语用规范自动推导、scan 候选提取正则与 detect 文化基准评分公式。">
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body class="docs">
+
+<header class="docs__top">
+  <a class="docs__brand" href="../index.html">← dsh-novel-writer</a>
+  <span class="docs__crumb">技术文档 / <code>novel_settings</code></span>
+</header>
+
+<div class="docs__layout">
+  <aside class="docs__side" id="docsSide"></aside>
+
+  <main class="docs__main">
+    <article class="doc">
+      <h1>novel_settings</h1>
+      <p class="doc__lead">
+        设定管理。用 <code>category</code> 选定五张设定表之一（人物 / 地点 / 道具 / 时间线 / 世界观用语规范），以 <code>action</code> 执行增删改查；<code>scan</code> 从全书正文里按类别正则提取候选条目名，<code>detect</code> 用词表统计自动判定作品的文化基准（西方欧式 / 东方中式 / 现代都市 / 混合）。<strong>全部为本地规则统计与字符串写入</strong>，单部作品一份 JSON，五张表同文件存放。
+      </p>
+
+      <h2>参数</h2>
+      <table>
+        <thead><tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><th><code>book</code></th><td>string</td><td>是</td><td>书名，即 <code>novels/</code> 下的子目录名。经 <code>sanitizeSegment</code> 过滤。</td></tr>
+          <tr><th><code>category</code></th><td>string</td><td>否</td><td>枚举 <code>character</code> / <code>location</code> / <code>item</code> / <code>timeline</code> / <code>worldview</code>。非枚举取值（含省略）一律按 <code>character</code> 处理；<code>action:"detect"</code> 时被强制为 <code>worldview</code>。</td></tr>
+          <tr><th><code>action</code></th><td>string</td><td>否</td><td>枚举 <code>list</code> / <code>add</code> / <code>update</code> / <code>delete</code> / <code>scan</code> / <code>detect</code>。非枚举取值按 <code>list</code> 处理。</td></tr>
+          <tr><th><code>name</code></th><td>string</td><td>否</td><td><code>add</code> / <code>update</code> / <code>delete</code> 的条目名；<code>timeline</code> 可用 <code>day</code> 代替。<code>timeline</code> 条目登记时 <code>name</code> 与 <code>day</code> 同值。</td></tr>
+          <tr><th><code>description</code></th><td>string</td><td>否</td><td>通用描述字段。</td></tr>
+          <tr><th><code>traits</code></th><td>string</td><td>否</td><td><code>character</code> 专用：性格 / 外貌特征。</td></tr>
+          <tr><th><code>relationships</code></th><td>string</td><td>否</td><td><code>character</code> 专用：人际关系。</td></tr>
+          <tr><th><code>alias</code></th><td>string[]</td><td>否</td><td><code>character</code> 专用：别名。</td></tr>
+          <tr><th><code>firstSeen</code></th><td>string</td><td>否</td><td>首次出现的章节。</td></tr>
+          <tr><th><code>owner</code> / <code>status</code> / <code>lastSeen</code></th><td>string</td><td>否</td><td><code>item</code> 专用：当前持有者 / 状态 / 最近出现章节。</td></tr>
+          <tr><th><code>day</code></th><td>string</td><td>否</td><td><code>timeline</code> 专用：时间点标识。<code>add</code> 时作为条目名登记；<code>update</code> / <code>delete</code> 用 <code>name</code> 定位旧标识，改名时 <code>name</code> 传旧值并同时传 <code>day</code> 新值。</td></tr>
+          <tr><th><code>event</code> / <code>chapter</code></th><td>string</td><td>否</td><td><code>timeline</code> 专用：事件与对应章节。</td></tr>
+          <tr><th><code>notes</code></th><td>string</td><td>否</td><td>备注。</td></tr>
+          <tr><th><code>basis</code></th><td>string</td><td>否</td><td><code>worldview</code> 专用：判断依据 / 文化基准说明，同时参与语用规范的自动推导。</td></tr>
+          <tr><th><code>ritual</code></th><td>string</td><td>否</td><td><code>worldview</code> 专用：仪式规范（如「点烛不烧香」）。</td></tr>
+          <tr><th><code>speechStyle</code></th><td>object</td><td>否</td><td><code>worldview</code> 专用：说话方式规范。可含 <code>title</code> / <code>tone</code> / <code>honorBad</code> / <code>honorGood</code> / <code>ritualBadPatterns</code> / <code>ritualGoodNote</code>。</td></tr>
+          <tr><th><code>bannedWords</code></th><td>string[]</td><td>否</td><td><code>worldview</code> 专用：禁用词表。</td></tr>
+          <tr><th><code>recommended</code></th><td>object</td><td>否</td><td><code>worldview</code> 专用：替代词映射，如 <code>{ "上香": "点烛" }</code>。</td></tr>
+          <tr><th><code>root</code></th><td>string</td><td>否</td><td>章节库根目录。</td></tr>
+        </tbody>
+      </table>
+      <p><code>action</code> 六个取值的语义：<code>list</code> 查看（默认）；<code>add</code> 登记；<code>update</code> 修改；<code>delete</code> 删除；<code>scan</code> 扫描章节提取候选条目名；<code>detect</code> 自动判断世界观文化基准（<code>worldview</code> 专用，会忽略传入的 <code>category</code>）。</p>
+
+      <h2>输出结构</h2>
+      <p>契约字段（<code>required: ["book","category","action"]</code>）恒返；其余字段<strong>按动作出现</strong>，形态并不统一。</p>
+      <table>
+        <thead><tr><th>动作</th><th>返回的字段</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><th><code>list</code></th><td><code>total</code> + <code>characters</code> <code>locations</code> <code>items</code> <code>timeline</code> <code>worldview</code></td><td>五张表全量返回，<code>total</code> 为五表条目数之和；无 <code>message</code></td></tr>
+          <tr><th><code>add</code></th><td>该类别对应的表 + <code>message</code></td><td>只含新增的那一条；表键由 <code>category</code> 决定</td></tr>
+          <tr><th><code>update</code></th><td>该类别对应的表 + <code>message</code></td><td>只含更新后的那一条</td></tr>
+          <tr><th><code>delete</code></th><td><code>total</code> + 五张表 + <code>message</code></td><td>删除分支不提前返回，落到与 <code>list</code> 相同的收尾块，返回<strong>全表</strong></td></tr>
+          <tr><th><code>scan</code></th><td><code>candidates</code> + 五张表 + <code>message</code></td><td>候选为字符串数组；<strong>不含</strong> <code>total</code></td></tr>
+          <tr><th><code>detect</code></th><td><code>culture</code> / <code>confidence</code> / <code>scores</code> / <code>evidence</code> / <code>total</code> / <code>worldview</code> / <code>message</code>，条件性带 <code>genre</code> / <code>theme</code> / <code>vibe</code></td><td>文化基准判定结果 + 世界观表</td></tr>
+        </tbody>
+      </table>
+      <table>
+        <thead><tr><th>字段</th><th>类型</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr><th><code>characters</code> / <code>locations</code> / <code>items</code> / <code>timeline</code> / <code>worldview</code></th><td>object[]</td><td>五张表的条目数组，条目结构见下</td></tr>
+          <tr><th><code>total</code></th><td>integer</td><td>五张表条目数之和</td></tr>
+          <tr><th><code>candidates</code></th><td>string[]</td><td>形如「琉璃（7次）」，已过滤已登记名，最多 15 条</td></tr>
+          <tr><th><code>culture</code></th><td>string</td><td><code>western</code> / <code>eastern</code> / <code>modern</code> / <code>mixed</code> / <code>unknown</code></td></tr>
+          <tr><th><code>confidence</code></th><td>number</td><td>0–0.95，保留两位小数</td></tr>
+          <tr><th><code>scores</code></th><td>object</td><td><code>{ western, eastern, modern }</code> 命中计数</td></tr>
+          <tr><th><code>evidence</code></th><td>object</td><td>按文化分组的证据串数组，如 <code>["教堂×3"]</code>，每组最多 8 条</td></tr>
+          <tr><th><code>message</code></th><td>string</td><td>结果文案；<code>detect</code> 下形如「自动判断：东方/中式古代（置信度 82%）」</td></tr>
+          <tr><th><code>genre</code> / <code>theme</code></th><td>object</td><td><code>detect</code> 且 <code>genreTheme</code> 功能开关开启时出现</td></tr>
+          <tr><th><code>vibe</code></th><td>object</td><td><code>detect</code> 下的氛围光谱（<code>axes</code> / <code>top</code> / <code>conclusion</code> / <code>confidence</code> / <code>evidence</code>）</td></tr>
+        </tbody>
+      </table>
+      <div class="warn">
+        <b>渲染文本只显示 <code>category</code> 对应的那一张表。</b>返回体的 JSON 里 <code>list</code> / <code>scan</code> / <code>delete</code> 都带五张表，但 <code>output.render</code> 按 <code>value.category</code> 取表：省略 <code>category</code> 时默认值为 <code>character</code>，MCP 客户端看到的文本就只含「人物卡（N 条）」。需要看其余四张表时必须显式传对应 <code>category</code>，或直接消费 JSON 返回体。
+      </div>
+
+      <h2>数据模型与落盘</h2>
+      <pre><code>{
+  "book": "雨夜灯",
+  "characters": [
+    { "name": "沈砚", "traits": "左手旧伤，雨天隐痛", "relationships": "沈家次子",
+      "alias": ["阿砚"], "firstSeen": "第01章", "notes": "随身带半枚铜钱" }
+  ],
+  "locations": [
+    { "name": "西市当铺", "description": "砖墙剥落，柜台高于人肩", "firstSeen": "第07章" }
+  ],
+  "items": [
+    { "name": "半枚铜钱", "owner": "沈砚", "status": "在沈砚处", "lastSeen": "第19章" }
+  ],
+  "timeline": [
+    { "name": "第1天", "day": "第1天", "event": "沈砚返乡", "chapter": "第01章" }
+  ],
+  "worldview": [
+    { "name": "东方/中式古代", "basis": "全篇出现客栈、掌柜、时辰",
+      "ritual": "中式宗教仪式=焚香/上香/跪拜；禁点烛/弥撒/礼拜",
+      "bannedWords": ["教堂", "神甫"],
+      "recommended": { "教堂": "庙/寺" },
+      "speechStyle": { "title": "中式称谓：老爷/夫人/姑娘/小姐/官人可用；禁 Miss/Mr.+名式的西式称呼",
+                       "tone": "中式对话：可文言客套（老夫/在下/承蒙/赐教/小姐）；禁西式口语（Ah/well/我的上帝）",
+                       "honorBad": ["Miss", "先生", "阁下", "Thank you", "if you please"],
+                       "honorGood": { "先生": "老爷/相公" },
+                       "ritualBadPatterns": ["点烛", "蜡烛", "礼拜", "祈祷跪下?", "light candle"],
+                       "ritualGoodNote": "中式宗教仪式=焚香/上香/跪拜；禁点烛/弥撒/礼拜" } }
+  ]
+}</code></pre>
+      <p>字段结构取自 <code>normalizeSettingEntry</code> 的白名单；上例数值与文本为示意。</p>
+
+      <h3>落盘位置</h3>
+      <p><code>&lt;root&gt;/.novel-writer/settings/&lt;book&gt;.json</code>，写入时固定为 <code>{ book, characters, locations, items, timeline, worldview }</code>——<strong>五张表在同一份文件里</strong>。读取时逐表做 <code>Array.isArray</code> 校验，缺失或类型不对的表回落为空数组；文件不存在或 JSON 损坏时五表全空，不抛错。</p>
+
+      <h3>五张表与 <code>listKey</code> 映射</h3>
+      <table>
+        <thead><tr><th><code>category</code></th><th>表键</th><th>渲染标签</th><th>专属字段</th></tr></thead>
+        <tbody>
+          <tr><th><code>character</code></th><td><code>characters</code></td><td>人物卡</td><td><code>traits</code> <code>relationships</code> <code>alias</code></td></tr>
+          <tr><th><code>location</code></th><td><code>locations</code></td><td>地点卡</td><td><code>description</code> <code>firstSeen</code></td></tr>
+          <tr><th><code>item</code></th><td><code>items</code></td><td>道具清单</td><td><code>owner</code> <code>status</code> <code>lastSeen</code></td></tr>
+          <tr><th><code>timeline</code></th><td><code>timeline</code></td><td>时间线</td><td><code>day</code> <code>event</code> <code>chapter</code>（<code>day</code> 与 <code>name</code> 同值）</td></tr>
+          <tr><th><code>worldview</code></th><td><code>worldview</code></td><td>世界观/用语规范</td><td><code>basis</code> <code>ritual</code> <code>speechStyle</code> <code>bannedWords</code> <code>recommended</code></td></tr>
+        </tbody>
+      </table>
+      <p>字段白名单不按类别强制：<code>normalizeSettingEntry</code> 对任意类别都保留全部已知字段，跨类别传字段不会被拒绝，只会原样落盘。字段值统一经 <code>String()</code> 强转（<code>name</code> 缺省写成空串）。</p>
+
+      <h3>add 的写入与 worldview 语用规范自动推导</h3>
+      <p><code>name</code> 取值优先级为 <code>args.name</code> → <code>args.day</code>，二者都空则报错。随后按固定键序把已在参数里出现的标量字段 <code>String()</code> 写入；<code>alias</code> / <code>bannedWords</code> 仅在是数组时写入；<code>recommended</code> / <code>speechStyle</code> 仅在是非 null 对象时写入。类别为 <code>timeline</code> 时额外写入 <code>day = name</code>。</p>
+      <p><code>category:"worldview"</code> 且<strong>未显式传入 <code>speechStyle</code></strong> 时，插件按 <code>basis</code> 文本自动推导语用规范，判定顺序为：</p>
+      <div class="formula">① eastHint = /中式|东方|中原|中土|古装|古风|客栈|老爷|少侠|江湖|茶楼|媒婆|太监|衙门|香客/.test(basis)
+② westHint = /west|西方|欧式|西式|教廷|教堂|神甫|公爵|骑士|城堡|女巫|庄园|圣器|牧师|弥撒/.test(basis)
+③ detected = eastHint ? {culture:"eastern"} : westHint ? {culture:"western"} : detectCulture(basis)</div>
+      <p>判定为 <code>eastern</code> 或 <code>western</code> 时，从 <code>SPEECH_STYLE_RULES</code> 取 <code>titleGuideline</code> / <code>honorBad</code> / <code>honorGood</code> / <code>ritualBadPatterns</code>（正则对象的 <code>source</code> 字符串）/ <code>ritualGoodNote</code> / <code>toneGuideline</code> 六项写入 <code>speechStyle</code>，并在调用方未给 <code>ritual</code> 时用 <code>ritualGoodNote</code> 兜底。判定结果为 <code>modern</code> / <code>mixed</code> / <code>unknown</code> 时<strong>不写 <code>speechStyle</code>，也不写 <code>ritual</code></strong>。</p>
+      <div class="note">
+        <b>「单一判定、一次赋值」是刻意设计。</b>历史实现分成两块独立逻辑：先按裸「中/东」正则把「中世纪」误判为 <code>eastern</code> 并写入 <code>speechStyle</code> + <code>ritual</code>，第二块又按「欧/教堂」覆盖为 <code>western</code>，而 <code>ritual</code> 已落定 <code>eastern</code> 值，两个字段来源分裂。现版本三项提示（eastHint → westHint → 词表检测）互斥，只赋值一次。
+      </div>
+
+      <h3>update 的合并语义</h3>
+      <ul>
+        <li><strong>可改字段</strong>：<code>description</code> <code>traits</code> <code>relationships</code> <code>firstSeen</code> <code>owner</code> <code>status</code> <code>lastSeen</code> <code>event</code> <code>chapter</code> <code>notes</code> <code>basis</code> <code>ritual</code> <code>day</code>（以及下方的数组 / 对象字段）。</li>
+        <li><strong><code>name</code> 不是可改字段</strong>，只用于定位。改名只能走 <code>timeline</code> 的 <code>day</code> 通道。</li>
+        <li><code>alias</code> / <code>bannedWords</code> 整体替换；<code>recommended</code> 整体替换；<code>speechStyle</code> 与已有对象<strong>浅合并</strong>（<code>{ ...old, ...new }</code>），未提及的子键保留。</li>
+        <li><code>timeline</code> 的 <code>day</code> 变更时同步 <code>name</code>：原 <code>name</code> 等于旧 <code>day</code> 则跟随新值；<code>name</code> 为空则填新值；其余情况保持不动，避免身份字段分裂成 <code>{ name:"第1天", day:"第2天" }</code>。</li>
+        <li>定位规则：先按 <code>name</code> 全等匹配；<code>timeline</code> 类别下额外按 <code>day</code> 全等匹配（双查）。找不到即报错，并提示 <code>timeline</code> 需用旧 <code>day</code> 定位。</li>
+      </ul>
+
+      <h3>scan 的候选提取</h3>
+      <p>先拼读全书章节正文，再用类别专属正则提取候选，最后统一过滤与截断：</p>
+      <div class="formula">保留条件：count &gt;= 2 且 该名不在本类别已登记条目名集合中
+输出格式："名字（N次）"，slice(0, 15)</div>
+      <table>
+        <thead><tr><th><code>category</code></th><th>提取正则（示意形式）</th><th>附加过滤</th></tr></thead>
+        <tbody>
+          <tr><th><code>character</code></th><td><code>([\u4e00-\u9fff]{2,3}?)(?:说|道|问|喊|叫|笑|叹|点头|摇头)</code></td><td>丢弃以「他她我你它又再还这那谁」开头的命中；丢弃「那个/这个/什么/怎么/自己/她们/他们/你们/我们」</td></tr>
+          <tr><th><code>location</code></th><td>「回到/来到/走进/离开/路过/奔向/赶赴/躲进/藏进/出了/进了」+ 2–5 个汉字，且后随 <code>[的里中前后处。，,！？!?]</code> 或行尾</td><td>丢弃「自己/他们/她们/我们/你们/这个/那个/什么」起头的命中</td></tr>
+          <tr><th><code>item</code></th><td>「一把/一柄/一顶/一枚/一件/一块/一条/一盏/一封/一叠/几件/抓起/拿起/握紧/掏出/收好/放下」+ 2–6 个汉字</td><td>丢弃「自己/他们/她们/我们/你们/这个/那个/什么/一点」起头的命中</td></tr>
+          <tr><th><code>timeline</code> / <code>worldview</code></th><td>不适用「正文高频词」式扫描</td><td><code>candidates</code> 恒为空数组，<code>message</code> 改为指引用 <code>add</code> / <code>detect</code></td></tr>
+        </tbody>
+      </table>
+      <p>人物正则的量词是<strong>懒惰</strong>的（<code>{2,3}?</code>），「琉璃说道」不会被吃成「琉璃说」。<code>known</code> 集合只取当前 <code>category</code> 那张表的条目名——跨表同名不会阻止候选出现。</p>
+
+      <h3>detect 的文化基准判定</h3>
+      <p>先拼读全书正文，再对三张文化词表（<code>CULTURE_MARKERS</code> 的 <code>western</code> / <code>eastern</code> / <code>modern</code>）做一次扫描。扫描器 <code>scanWordHits</code> 按词长降序、用长度等于文本长度的占用位图消费命中区间：同表重复词不双计，同一位置的长词命中后其子串不再计数（「高潮迭起」命中则「高潮」不重复计）。</p>
+      <div class="formula">total = western + eastern + modern
+
+total = 0                         → culture = "unknown"，confidence = 0
+
+modern &gt;= 5 且 modern &gt;= max(western, eastern, 1)
+                                  → culture = "modern"
+
+否则 western + eastern &gt; 0：
+  ratio = western / max(eastern, 1)
+  ratio &gt;= 2                     → culture = "western"
+  ratio &lt;= 0.5                   → culture = "eastern"
+  否则                            → culture = "mixed"，confidence = 0.5
+
+命中分支的 confidence = min(0.95, 0.5 + 该文化得分 / (total × 2))
+返回前四舍五入到两位小数</div>
+      <p><code>modern</code> 优先是为避免剧情里的西式道具词把现代都市题材误判为西式。<code>detect</code> 分支还会读取功能开关：<code>genreTheme</code> 开启时附带 <code>genre</code>（流派）与 <code>theme</code>（题材）检测结果；<code>webnovelVibe</code> 开启时把正文交给氛围光谱聚合，失败则降级为 <code>{ axes: [], top: [], conclusion: "气质聚合失败: …", confidence: 0, evidence: [] }</code>，不影响文化基准结论。</p>
+
+      <h2>约束与边界</h2>
+      <ul>
+        <li><strong>book 是唯一必填项</strong>（<code>required: ["book"]</code>）。<code>category</code> 与 <code>action</code> 都有隐式默认值：分别是 <code>character</code> 与 <code>list</code>，且<strong>非枚举取值静默回退</strong>而不报错。传 <code>category:"person"</code> 不会失败，而是操作人物表。</li>
+        <li><strong><code>detect</code> 覆盖 <code>category</code></strong>：返回体的 <code>category</code> 恒为 <code>worldview</code>，与传入值无关。</li>
+        <li><strong>同名条目不查重</strong>：<code>add</code> 只做 <code>list.push</code>，没有名字去重；重复登记会产生两条同 <code>name</code> 的记录，后续 <code>update</code> / <code>delete</code> 只命中第一条（<code>findIndex</code> 取首次匹配）。</li>
+        <li><strong><code>add</code> / <code>update</code> / <code>delete</code> 的定位串是精确全等</strong>，不做去空格以外的归一：手写「沈 砚」与「沈砚」是两个条目。</li>
+        <li><strong>非数组的数组字段被静默忽略</strong>：<code>alias:"阿砚"</code>（字符串）不会写入，也不会报错。同理 <code>recommended</code> / <code>speechStyle</code> 传字符串时按「未提供」处理，<code>worldview</code> 的自动推导分支照常执行；显式传 <code>null</code> 也被视为未提供。</li>
+        <li><strong><code>scan</code> 有硬阈值与硬上限</strong>：命中少于 2 次的名字不出现；最多返回 15 条；<code>candidates</code> 只是候选，插件<strong>不会</strong>自动登记，必须由调用方逐条 <code>add</code>。</li>
+        <li><strong><code>scan</code> 读取的是全书正文</strong>：章节数多时 I/O 与内存开销随全书字数线性增长；<code>scanChapters</code> 在作品目录缺失时抛错，空目录则返回空候选列表。</li>
+        <li><strong><code>detect</code> 无章节时不报错</strong>：作品目录存在但没有章节文件时，正文为空串，判定结果为 <code>culture:"unknown"</code> / <code>confidence:0</code>，<code>message</code> 为「自动判断：无法判断（词表未命中）（置信度 0%）」。目录不存在则会抛错。</li>
+        <li><strong>score 与 confidence 不可跨版本横比</strong>：v4.3.0 清理了三张词表内部的重复词条（如「城堡」「便利店」「朋友圈」的二度出现）、v4.0.0 把扫描改成单遍占用位图，同一本书在不同版本下的 <code>scores</code> 会不同。去重本身不改变扫描语义（位图本就不双计），但历史版本的分数不可与新版本直接对照。</li>
+        <li><strong>并发是文件级的</strong>：v3.9.5 起 <code>add</code> / <code>update</code> / <code>delete</code> / <code>scan</code> / <code>detect</code> 全部包在 <code>withFileTx</code> 内（键为 settings 文件的绝对路径），同一本书的并发写被串行化，不会基于同一旧快照互相整表覆盖。代价是<strong>不同 <code>category</code> 的并发写也会互相排队</strong>——它们共用同一份文件。</li>
+        <li><strong>写盘是整文件覆盖 + 原子替换</strong>：<code>writeSettings</code> 走 <code>atomicWriteJson</code>（临时文件 + <code>rename</code>，失败回退直写，两者都失败抛 <code>ENOVELWRITEFAIL</code>），并在成功后把书库根记入全局状态。</li>
+        <li><strong>列表动作渲染口径</strong>：<code>list</code> / <code>delete</code> / <code>scan</code> 的返回体都带五张表，但渲染层只打印 <code>category</code> 对应的那一张（见上文警示块）。</li>
+        <li><strong>跨版本字段口径</strong>：v4.0.0 起 <code>list</code> 的渲染按 <code>category</code> 取表（旧版 <code>??</code> 链在 <code>list</code> / <code>scan</code> 恒返回全部五张表时永不前进，永远只显示人物卡）；同版起 <code>null</code> 的 <code>speechStyle</code> 不再被当作对象写入空壳，且「按 <code>basis</code> 自动推导语用规范」改为单一判定；脏条目（<code>null</code> / 标量）在 <code>normalizeSettingEntry</code> 里被过滤，旧版会在坏数据上抛 <code>TypeError</code> 打挂整个工具。</li>
+        <li><strong>MCP 形态下的 root 限制</strong>：参数 <code>root</code> 必须落在服务器启动参数 <code>--root</code> 的书库根之内，越界会被静默回退，同时记 stderr。</li>
+        <li><strong>参数表禁止额外字段</strong>：<code>parameters.additionalProperties = false</code>。</li>
+      </ul>
+
+      <h2>相关工具</h2>
+      <ul>
+        <li><a href="novel-continuity-check.html">novel_continuity_check</a> —— 消费本工具的五张表：登记人物的缺场 / 别名未用、设定表重复条目、按 <code>worldview</code> 的 <code>bannedWords</code> 与 <code>speechStyle</code> 做的用语冲突与语用冲突扫描都在彼处实现。</li>
+        <li><a href="novel-plot.html">novel_plot</a> —— 伏笔登记表，可用 <code>relatedCharacters</code> / <code>locations</code> 引用本工具登记的条目名。</li>
+        <li><a href="novel-outline.html">novel_outline</a> —— 创作资料（创作设定 / 人物设定 / 剧情大纲 / 钩子记录 / 创作状态卡），与本工具的五张表是两套并行的资料体系。</li>
+        <li><a href="novel-summary.html">novel_summary</a> —— 章节摘要，与本工具同属「按书写入 <code>.novel-writer/</code>」的持久化数据。</li>
+      </ul>
+
+      <h2>源码位置</h2>
+      <ul>
+        <li><span class="src">lib/index.js</span> —— 工具注册与 <code>execute</code>：<code>registerNovelSettings</code>（约 1449–1759 行），含六个动作分支、<code>speechStyle</code> 自动推导与三套 <code>scan</code> 正则。</li>
+        <li><span class="src">lib/core.js</span> —— <code>settingsFile</code> / <code>readSettings</code> / <code>writeSettings</code> / <code>normalizeSettingEntry</code> / <code>normalizeSettingList</code>（约 1999–2054 行）。</li>
+        <li><span class="src">lib/core.js</span> —— <code>detectCulture</code> / <code>detectGenre</code> / <code>detectTheme</code> / <code>scanWordHits</code> / <code>sortedMarkerWords</code>（约 669–774 行）。<strong>文化基准判定与词表不在 <code>lib/analysis.js</code></strong>：判定实现在 <code>core.js</code>，词表在 <code>lib/lexicons/markers.js</code>。</li>
+        <li><span class="src">lib/lexicons/markers.js</span> —— <code>CULTURE_MARKERS</code> / <code>SPEECH_STYLE_RULES</code> / <code>GENRE_MARKERS</code> / <code>THEME_MARKERS</code> / <code>DEFAULT_BANNED_WORDS</code>（全文件 130 行，末尾统一导出）。</li>
+        <li><span class="src">lib/core.js</span> —— <code>withFileTx</code>（约 969 行）与 <code>atomicWriteJson</code>（约 942 行）。</li>
+        <li><span class="src">mcp/server.mjs</span> —— <code>buildArgs</code> / <code>isInsideRoot</code>（约 259–289 行）。</li>
+      </ul>
+    </article>
+
+    <nav class="docs__pager" id="docsPager"></nav>
+  </main>
+
+  <aside class="docs__toc" id="docsToc"></aside>
+</div>
+
+<script src="docs.js"></script>
+</body>
+</html>

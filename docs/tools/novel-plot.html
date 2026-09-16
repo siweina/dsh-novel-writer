@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>novel_plot — 伏笔登记表｜dsh-novel-writer 技术文档</title>
+<meta name="description" content="novel_plot 的实现细节：伏笔条目的字段结构、open/done 状态机、id 生成规则、scan 的提及扫描算法与关键词提取口径、落盘路径与并发事务语义。">
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body class="docs">
+
+<header class="docs__top">
+  <a class="docs__brand" href="../index.html">← dsh-novel-writer</a>
+  <span class="docs__crumb">技术文档 / <code>novel_plot</code></span>
+</header>
+
+<div class="docs__layout">
+  <aside class="docs__side" id="docsSide"></aside>
+
+  <main class="docs__main">
+    <article class="doc">
+      <h1>novel_plot</h1>
+      <p class="doc__lead">
+        伏笔 / 剧情钩子登记表。以「一部作品一个 JSON 文件」维护伏笔条目，用 <code>status</code> 区分 <code>open</code>（待回收）与 <code>done</code>（已回收）；<code>scan</code> 动作把伏笔内容切成关键词后遍历章节正文，自动在条目上标注「在哪几章被提及」。<strong>纯本地文本包含判定</strong>，不做语义推理，也不调用在线模型。
+      </p>
+
+      <h2>参数</h2>
+      <table>
+        <thead><tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><th><code>book</code></th><td>string</td><td>是</td><td>书名，即 <code>novels/</code> 下的子目录名。经 <code>sanitizeSegment</code> 过滤。</td></tr>
+          <tr><th><code>action</code></th><td>string</td><td>否</td><td>枚举六值，见下表。非枚举取值与省略一律按 <code>list</code> 处理。</td></tr>
+          <tr><th><code>id</code></th><td>string</td><td>否</td><td><code>update</code> / <code>done</code> / <code>delete</code> 必需：目标伏笔 id，必须已存在。</td></tr>
+          <tr><th><code>content</code></th><td>string</td><td>否</td><td><code>add</code> 必需；<code>update</code> 可选：伏笔内容描述。</td></tr>
+          <tr><th><code>chapter</code></th><td>string</td><td>否</td><td>伏笔出现的章节。<code>scan</code> 时用作「只扫该章」的章节标识。</td></tr>
+          <tr><th><code>note</code></th><td>string</td><td>否</td><td>备注（如何回收 / 何时回收）。</td></tr>
+          <tr><th><code>type</code></th><td>string</td><td>否</td><td>枚举：<code>剧情</code> / <code>设定</code> / <code>道具</code> / <code>人物</code> / <code>其他</code>。非枚举值被静默丢弃。</td></tr>
+          <tr><th><code>priority</code></th><td>string</td><td>否</td><td>枚举：<code>high</code> / <code>medium</code> / <code>low</code>。非枚举值被静默丢弃。</td></tr>
+          <tr><th><code>relatedCharacters</code></th><td>string[]</td><td>否</td><td>关联人物。<code>add</code> 写入；<code>update</code> 整组替换。</td></tr>
+          <tr><th><code>locations</code></th><td>string[]</td><td>否</td><td>关联地点。<code>add</code> 写入；<code>update</code> 整组替换。</td></tr>
+          <tr><th><code>payoffCondition</code></th><td>string</td><td>否</td><td>回收条件。</td></tr>
+          <tr><th><code>root</code></th><td>string</td><td>否</td><td>章节库根目录。缺省时取插件配置的 <code>root</code>，再缺省取会话工作目录。</td></tr>
+        </tbody>
+      </table>
+
+      <h3><code>action</code> 取值</h3>
+      <table>
+        <thead><tr><th>取值</th><th>语义</th><th>前置要求</th><th>返回体形态</th></tr></thead>
+        <tbody>
+          <tr><th><code>list</code></th><td>列出全部伏笔（默认值）。</td><td>无</td><td>全表</td></tr>
+          <tr><th><code>add</code></th><td>登记新伏笔，<code>status</code> 固定为 <code>open</code>。</td><td><code>content</code></td><td>单条</td></tr>
+          <tr><th><code>update</code></th><td>修改指定条目的文本字段。</td><td><code>id</code> 且存在</td><td>单条</td></tr>
+          <tr><th><code>done</code></th><td>标记已回收（<code>status → done</code>）。</td><td><code>id</code> 且存在</td><td>全表</td></tr>
+          <tr><th><code>delete</code></th><td>删除条目。</td><td><code>id</code> 且存在</td><td>全表</td></tr>
+          <tr><th><code>scan</code></th><td>扫描章节正文，更新 <code>open</code> 条目的提及章节。</td><td>作品目录下至少一个章节文件</td><td>全表 + 统计文案</td></tr>
+        </tbody>
+      </table>
+
+      <h2>输出结构</h2>
+      <p>契约字段（<code>output.schema.required</code>）：<code>book</code>、<code>action</code>、<code>entries</code> 恒返；<code>message</code> 按动作出现。</p>
+      <table>
+        <thead><tr><th>字段</th><th>类型</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr><th><code>book</code></th><td>string</td><td>净化后的书名</td></tr>
+          <tr><th><code>action</code></th><td>string</td><td>归一后的动作（可能与传入值不同）</td></tr>
+          <tr><th><code>entries</code></th><td>object[]</td><td>伏笔条目数组，见下</td></tr>
+          <tr><th><code>message</code></th><td>string</td><td>操作结果文案，例如「已登记伏笔 #m1x2k9ab3f」「扫描 12 章，更新 3 条伏笔的提及记录」</td></tr>
+        </tbody>
+      </table>
+      <p><code>entries</code> 的元素契约（<code>required: ["id","content","status"]</code>）：</p>
+      <table>
+        <thead><tr><th>字段</th><th>类型</th><th>来源</th></tr></thead>
+        <tbody>
+          <tr><th><code>id</code></th><td>string</td><td>插件生成，调用方不可指定</td></tr>
+          <tr><th><code>content</code></th><td>string</td><td><code>content</code> 参数</td></tr>
+          <tr><th><code>status</code></th><td>string</td><td>枚举 <code>open</code> / <code>done</code>，归一后写入</td></tr>
+          <tr><th><code>chapter</code> / <code>note</code> / <code>payoffCondition</code></th><td>string</td><td>同名参数</td></tr>
+          <tr><th><code>type</code> / <code>priority</code></th><td>string</td><td>同名参数，仅在命中枚举时写入</td></tr>
+          <tr><th><code>relatedCharacters</code> / <code>locations</code></th><td>string[]</td><td>同名参数</td></tr>
+          <tr><th><code>mentionedIn</code></th><td>string[]</td><td><code>scan</code> 写入，元素是<strong>章节文件名</strong></td></tr>
+          <tr><th><code>lastMentioned</code></th><td>string</td><td><code>scan</code> 写入，最近一次命中的章节文件名</td></tr>
+          <tr><th><code>createdAt</code> / <code>updatedAt</code></th><td>string</td><td>ISO 8601 时间戳</td></tr>
+        </tbody>
+      </table>
+      <div class="note">
+        <b>两种章节字段口径不同。</b><code>chapter</code> 是调用方传入的原文（如 <code>第03章</code> 或「第三章」），<code>mentionedIn</code> / <code>lastMentioned</code> 由扫描器写入，元素固定为磁盘文件名（如 <code>第03章.md</code>）。调用方做跨字段比对时不应假定二者同构。
+      </div>
+
+      <h2>数据模型与落盘</h2>
+      <pre><code>{
+  "book": "雨夜灯",
+  "entries": [
+    {
+      "id": "m1x2k9ab3f",
+      "content": "母亲留下的半枚铜钱",
+      "chapter": "第03章",
+      "note": "与第19章当铺掌柜的银票核对",
+      "type": "道具",
+      "priority": "high",
+      "relatedCharacters": ["沈砚"],
+      "locations": ["西市当铺"],
+      "payoffCondition": "主角认出铜钱缺口与银票吻合",
+      "status": "open",
+      "mentionedIn": ["第03章.md", "第07章.md"],
+      "lastMentioned": "第07章.md",
+      "createdAt": "2026-09-13T02:11:07.412Z",
+      "updatedAt": "2026-09-13T02:40:55.008Z"
+    }
+  ]
+}</code></pre>
+      <p>上例的 <code>id</code> 与时间戳为示意值，字段名与结构取自 <code>writePlots</code> 与 <code>normalizePlotEntry</code> 的实际读写口径。</p>
+
+      <h3>落盘位置与迁移</h3>
+      <ul>
+        <li>当前路径：<code>&lt;root&gt;/.novel-writer/plots/&lt;book&gt;.json</code>，内容为 <code>{ book, entries }</code>，以 2 空格缩进序列化。</li>
+        <li>旧路径：<code>&lt;root&gt;/.novel-writer/&lt;book&gt;.json</code>。<code>readPlots</code> 在新路径不存在时回读旧路径，命中且含 <code>entries</code> 数组则复制到新路径；旧文件保留不删。</li>
+        <li>读不到文件或 JSON 损坏时返回空数组，不抛错——首次登记即视为「空表」。</li>
+      </ul>
+
+      <h3>读写流程与事务语义</h3>
+      <ul>
+        <li>所有动作先经 <code>withFileTx(plotsFile(root, book), …)</code> 取得该文件的独占票：同一路径的读-改-写串行执行，不同书（不同路径）互不阻塞。</li>
+        <li><code>list</code> 是只读分支，<strong>不写盘</strong>；其余动作在变更后调用 <code>writePlots</code>，并把书库根记入全局状态（<code>writeSentenceState({ lastRoot })</code>）。</li>
+        <li><code>writePlots</code> 内部走 <code>atomicWriteJson</code>：先写 <code>&lt;文件&gt;.tmp-&lt;pid&gt;-&lt;时间戳&gt;</code> 再 <code>rename</code>；<code>rename</code> 失败回退整文件直写；两者都失败抛出带 <code>code = "ENOVELWRITEFAIL"</code> 的错误，不再静默假报成功。</li>
+        <li>返回前对全表做一次 <code>normalizePlotEntry</code> 清洗与排序：<code>status</code> 相同的按 <code>createdAt</code> 字典序升序，<code>open</code> 恒排在 <code>done</code> 之前。</li>
+      </ul>
+
+      <h3>id 生成与状态机</h3>
+      <div class="formula">id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6)</div>
+      <p>时间基部分保证趋势有序，随机后缀 4 位用于降低同毫秒碰撞概率：<code>add</code> 一次只生成一个 id，不查重。</p>
+      <p>状态是单向的：<code>add</code> 固定写 <code>open</code>，<code>done</code> 固定写 <code>done</code>，<code>update</code> 不接受 <code>status</code> 参数。<strong>没有任何动作可以把 <code>done</code> 改回 <code>open</code></strong>——需要「重新打开」时只能 <code>delete</code> 后重新 <code>add</code>（id 与 <code>createdAt</code> 都会变）。读取时脏数据兜底为 <code>open</code>：<code>status !== "done"</code> 的一切取值（含 <code>in-progress</code>、缺失）都归一为 <code>open</code>。</p>
+
+      <h3>scan 的提及扫描算法</h3>
+      <p>扫描分两步：先把每条 <code>open</code> 伏笔的 <code>content</code> 转成关键词集合（进入章节循环前只算一次），再逐章做纯子串包含判定。</p>
+      <h3>关键词提取 <code>plotKeywords</code></h3>
+      <ol>
+        <li>剥掉全部非汉字字符：<code>content.replace(/[^\u4e00-\u9fff]/g, "")</code>。标点、数字、拉丁字母都不参与。</li>
+        <li>按长度 4 → 3 → 2 滑窗枚举子串。</li>
+        <li>子串中非停用字的占比须 ≥ <code>ceil(长度 × 0.6)</code>（长度 2 需 2 个非停用字、长度 3 需 2 个、长度 4 需 3 个）。停用字表含「的了是在我有和就都不一一个这那与及或但是因为所以如果然后而且比如什么怎么自己她们他们你们我们咱们没有不是别莫未」。</li>
+        <li>去重后按长度降序取<strong>前 8 个</strong>。</li>
+      </ol>
+      <h3>命中判定</h3>
+      <div class="formula">命中 = keywords.length &gt; 0 且 keywords.some(k =&gt; chapterText.includes(k))</div>
+      <p>任一关键词在章节正文中出现即算该章提及：把 <code>chapter.file</code> 追加进 <code>mentionedIn</code>（已在数组内则跳过），同时刷新 <code>lastMentioned</code> 与 <code>updatedAt</code>。计数器只在「本条目本不存在于该章」时递增，因此返回文案里的更新条数反映的是新增的提及，而不是命中总数。</p>
+      <p>遍历范围有限定：<strong>只处理 <code>status === "open"</code> 的条目</strong>——已回收的伏笔不再更新提及记录；<code>chapter</code> 参数存在时只扫该章（先用 <code>findChapter</code> 解析，找不到则报错），否则扫全部章节。</p>
+
+      <h2>约束与边界</h2>
+      <ul>
+        <li><strong>book 必填</strong>，经 <code>sanitizeSegment</code>：剥除 <code>\ / : * ? " &lt; &gt; |</code>、首尾点与空白；命中 Windows 保留名（<code>con</code> / <code>nul</code> / <code>com1</code>…）时前置下划线；清洗后为空则报错终止。</li>
+        <li><strong>action 非枚举值静默退化为 <code>list</code></strong>：传入 <code>action:"close"</code> 不会报错，而是返回全表。调用方必须以返回体里的 <code>action</code> 字段判断实际执行了哪个动作。</li>
+        <li><strong><code>type</code> / <code>priority</code> 的非枚举值是静默丢弃</strong>，不报错也不写字段；<code>add</code> 时该键为 <code>undefined</code>，序列化后不出现。</li>
+        <li><strong>id 必须已存在</strong>：<code>update</code> / <code>done</code> / <code>delete</code> 找不到目标时抛「伏笔 #xxx 不存在」，整次调用失败且不写盘。</li>
+        <li><strong>纯符号或纯英文的伏笔永远扫不到</strong>：<code>plotKeywords</code> 只保留汉字，<code>content</code> 若无汉字则关键词为空数组，任何章节都不会被标注为提及。</li>
+        <li><strong>scan 需要章节文件</strong>：作品目录不存在或没有符合 <code>.md</code> / <code>.markdown</code> / <code>.txt</code> 的章节时抛错；空作品不会返回「0 条更新」。</li>
+        <li><strong><code>mentionedIn</code> 只增不减、无上限</strong>：条目在 <code>open</code> 期间每被新章命中就追加一项，全书扫一遍后可能积累上百个章节名；它不参与任何截断，也不随正文删改而回收。</li>
+        <li><strong>并发语义是「整表读-改-写 + 按文件串行」</strong>：同一部作品的并发 <code>add</code> 会依次串行，不会互相覆盖；但这也意味着跨进程（插件进程 + 另一个直接改 JSON 的脚本）没有锁保护，手改文件的并行写入可能被整表覆盖。</li>
+        <li><strong>返回体形态依动作而异</strong>：<code>add</code> / <code>update</code> 只返回被操作的那条；<code>list</code> / <code>done</code> / <code>delete</code> / <code>scan</code> 返回全表。想在 <code>done</code> 后只取单条，需要在返回的 <code>entries</code> 里按 id 自行筛选。</li>
+        <li><strong>跨版本口径</strong>：v0.8.0 起数据文件由 <code>.novel-writer/&lt;book&gt;.json</code> 迁到 <code>plots/</code> 子目录（读取时自动迁移）；v3.5.0 起非 <code>done</code> 的 <code>status</code> 统一归一为 <code>open</code>；v4.0.0 起 <code>scan</code> 的关键词集合改为进入章节循环前预计算，并对 <code>null</code> / 标量脏条目做守卫（旧版会在坏数据上抛 <code>TypeError</code> 打挂整个工具）。跨版本对同一份数据的扫描耗时与容错表现不同，提及结果本身的口径未变。</li>
+        <li><strong>MCP 形态下的 root 限制</strong>：工具参数里的 <code>root</code> 必须落在服务器启动参数 <code>--root</code> 指定的书库根之内（含根本身），越界会被静默回退为书库根，同时记 stderr 日志。</li>
+        <li><strong>参数表禁止额外字段</strong>：<code>parameters.additionalProperties = false</code>，未声明的参数名不在契约内。</li>
+      </ul>
+
+      <h2>相关工具</h2>
+      <ul>
+        <li><a href="novel-settings.html">novel_settings</a> —— 人物 / 地点 / 道具 / 时间线 / 世界观用语规范五张设定表，伏笔里的关联人物与地点通常先在此登记。</li>
+        <li><a href="novel-outline.html">novel_outline</a> —— 创作资料（含「钩子记录.md」）：逐章结尾钩子的行级回填，与伏笔表是两套不同的追踪对象。</li>
+        <li><a href="novel-continuity-check.html">novel_continuity_check</a> —— 对照设定表扫描全书输出矛盾候选；世界观禁用词与语用规范检查在彼处实现。</li>
+        <li><a href="novel-summary.html">novel_summary</a> —— 章节摘要，用于回忆前情而非追踪伏笔。</li>
+      </ul>
+
+      <h2>源码位置</h2>
+      <ul>
+        <li><span class="src">lib/index.js</span> —— 工具注册与 <code>execute</code>：<code>registerNovelPlot</code>（约 2245–2434 行），含六个动作分支与返回体组装。</li>
+        <li><span class="src">lib/core.js</span> —— <code>plotsFile</code> / <code>legacyPlotsFile</code> / <code>readPlots</code> / <code>writePlots</code> / <code>plotKeywords</code> / <code>normalizePlotEntry</code>（约 1942–1998 行）。</li>
+        <li><span class="src">lib/core.js</span> —— <code>withFileTx</code>（约 969 行）、<code>atomicWriteJson</code>（约 942 行）、<code>sanitizeSegment</code>（约 211 行）、<code>scanChapters</code> / <code>findChapter</code>（约 236 / 376 行）。</li>
+        <li><span class="src">mcp/server.mjs</span> —— <code>buildArgs</code> / <code>isInsideRoot</code>（约 259–289 行）：root 越界回退与参数注入。</li>
+      </ul>
+    </article>
+
+    <nav class="docs__pager" id="docsPager"></nav>
+  </main>
+
+  <aside class="docs__toc" id="docsToc"></aside>
+</div>
+
+<script src="docs.js"></script>
+</body>
+</html>

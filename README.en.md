@@ -1,5 +1,7 @@
 # 📚 dsh-novel-writer — on-device style checkup for novel writers
 
+> 🌐 **[Project site](https://siweina.github.io/dsh-novel-writer/)** · [Technical docs — implementation details, formulas and limits for all 16 tools](https://siweina.github.io/dsh-novel-writer/tools/)
+
 English | [中文](./README.md)
 
 [![npm version](https://img.shields.io/npm/v/dsh-novel-writer.svg?style=flat-square&color=blue)](https://www.npmjs.com/package/dsh-novel-writer)

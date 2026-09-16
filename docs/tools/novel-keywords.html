@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>novel_keywords — 关键词统计｜dsh-novel-writer 技术文档</title>
+<meta name="description" content="novel_keywords 的实现细节：中文相邻二字/三字组的滑动窗口与停用字规则、英文词与疑似人名的识别模式、入选阈值与排序截断、报告落盘与保留份数，以及对调用方模型的约束。">
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body class="docs">
+
+<header class="docs__top">
+  <a class="docs__brand" href="../index.html">← dsh-novel-writer</a>
+  <span class="docs__crumb">技术文档 / <code>novel_keywords</code></span>
+</header>
+
+<div class="docs__layout">
+  <aside class="docs__side" id="docsSide"></aside>
+
+  <main class="docs__main">
+    <article class="doc">
+      <h1>novel_keywords</h1>
+      <p class="doc__lead">
+        高频关键词统计。对某部作品或单个章节做纯字面计数，产出四类条目：中文相邻二字组、中文相邻三字组、疑似人名/专名、英文词。<strong>输出不含单字</strong>——单字频次不参与统计，只保留重复出现的二字组、三字组与英文词，以及出现两次以上的疑似人名。全程零依赖、无分词模型、不调用在线大模型，结果同时落盘到书库数据目录留档。
+      </p>
+
+      <h2>参数</h2>
+      <table>
+        <thead><tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><th><code>book</code></th><td>string</td><td>是</td><td>书名，即 <code>novels/</code> 下的子目录名。经 <code>sanitizeSegment</code> 过滤。目录不存在或目录下无可识别的章节文件时直接报错，不返回空结果。</td></tr>
+          <tr><th><code>chapter</code></th><td>string</td><td>否</td><td>只统计该章节；省略则统计全书。取值可以是章号（<code>1</code> / <code>01</code> / <code>第一章</code>）、文件名或标题子串，解析规则见「约束与边界」。</td></tr>
+          <tr><th><code>top</code></th><td>integer</td><td>否</td><td>返回的关键词数量，须为 <strong>1–100 的整数</strong>，默认 20。越界即报错，不截断到边界。</td></tr>
+          <tr><th><code>root</code></th><td>string</td><td>否</td><td>章节库根目录。缺省回退顺序：<code>args.root</code> → <code>config.root</code> → 会话工作目录。MCP 形态下必须落在启动参数 <code>--root</code> 之内。</td></tr>
+        </tbody>
+      </table>
+      <p>参数对象声明 <code>additionalProperties: false</code>，多传的键会被宿主拒绝。</p>
+
+      <h2>输出结构</h2>
+      <p>契约字段（<code>output.schema.required</code>）：<code>book</code> / <code>scope</code> / <code>totalChars</code> / <code>keywords</code> 四项必返。</p>
+      <table>
+        <thead><tr><th>字段</th><th>类型</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr><th><code>book</code></th><td>string</td><td><strong>必返</strong>。清洗后的书名</td></tr>
+          <tr><th><code>scope</code></th><td>string</td><td><strong>必返</strong>。统计范围：单章模式为章节文件名；全书模式为 <code>全书 N 章</code></td></tr>
+          <tr><th><code>totalChars</code></th><td>integer</td><td><strong>必返</strong>。各章原文长度之和（<code>chapterText.length</code> 累加，含 Markdown 标题行与空行）</td></tr>
+          <tr><th><code>keywords</code></th><td>array</td><td><strong>必返</strong>。按 count 降序排列的条目数组，最多 <code>top</code> 条，可能为空数组</td></tr>
+          <tr><th><code>keywords[].word</code></th><td>string</td><td><strong>必返</strong>。词面</td></tr>
+          <tr><th><code>keywords[].count</code></th><td>integer</td><td><strong>必返</strong>。出现次数</td></tr>
+          <tr><th><code>keywords[].kind</code></th><td>string</td><td><strong>必返</strong>。枚举 <code>cjk-bigram</code> / <code>cjk-trigram</code> / <code>name-candidate</code> / <code>word</code>，分别对应二字组、三字组、疑似人名、英文词</td></tr>
+          <tr><th><code>reportFile</code></th><td>string</td><td>报告落盘的绝对路径。落盘失败时不返回该字段（主流程不受影响）</td></tr>
+        </tbody>
+      </table>
+
+      <h2>计算原理</h2>
+      <p>全部统计为单遍字面扫描，没有词表以外的语言模型，也不做词性标注与切词。四种条目各自独立计数，最后合并、排序、截断。</p>
+
+      <h3>1 · 语料拼接与字数口径</h3>
+      <div class="formula">全书模式：selected = scanChapters(dir)          ← 全部章节，章号升序，不可解析者排最后
+单章模式：selected = [ findChapter(chapters, chapter) ]
+text       = 各章原文以 "\n\n" 连接
+totalChars = Σ 各章 chapterText.length         ← 不含插入的分隔符</div>
+      <p>章节之间强制插入空行是 v4.0.0 的修正：旧版首尾相接会把上一章末尾与下一章开头当成相邻二字/三字组，产出正文里根本不存在的「词」。因此<strong>全书统计的结果不等于各章分别统计后求和</strong>。另需注意 <code>totalChars</code> 是原文长度累加，包含 Markdown 标题行与空行，与 <code>novel_style_report</code> 先剥离标题行再统计的口径不同，两个工具的同一字段不可互相校验。</p>
+
+      <h3>2 · 中文相邻二字组与三字组</h3>
+      <div class="formula">切分：文本按字符扫描，/[一-鿿]/ 之内累积为「连续汉字串」，
+      标点、空白、拉丁字母、数字一律作为断点（断点不参与任何组）
+
+对每个长度为 L 的汉字串，取两套重叠窗口：
+  二字组：位置 i 与 i+1，若两字不全在停用字表 → 计数 +1
+  三字组：位置 i 与 i+2 共三字，若其中至少 2 字不在停用字表 → 计数 +1
+
+CJK_STOP_CHARS 单字停用表 = 68 个字符（去重后 67 字，含重复的「有」）：
+  的了是在有和就都而于及与或这那之其以被把让向着过也还又但更最很从对为等
+  啊吧呢吗嗯哦呀哈啦么个中上下前后左右来去出进到说想看要会能可没有不</div>
+      <p>停用规则是「组内至少一个字是有信息量的实字」，用来压掉「的了」「是在」这类纯虚词碎片。取舍代价是<strong>重叠计数</strong>：同一段文字会同时产出二字与三字条目（例如「琉璃说道」会产出「琉璃」「璃说」「琉璃说」等），<code>cjk-bigram</code> 与 <code>cjk-trigram</code> 的计数<strong>不可相加</strong>，且三字组常为跨词边界的碎片，不应直接当作词汇表使用。</p>
+
+      <h3>3 · 英文词</h3>
+      <div class="formula">text.toLowerCase().matchAll( /[a-z]{2,}/g )
+命中词不在 EN_STOP_WORDS（101 个英文停用词：the and of to in a an is are was were …）
+  → 计数 +1</div>
+      <p>单个字母不参与统计（下限 2 个字母）。英文词在源头按出现计数，最终入选阈值是 <code>count &gt; 1</code>，因此只出现一次的英文词不会出现在结果中。</p>
+
+      <h3>4 · 疑似人名 / 专名</h3>
+      <div class="formula">模式 A（2–3 字懒惰匹配 + 动作词）：
+  /([一-鿿]{2,3}?)(?:说|道|问|喊|叫|想|笑|叹|答|喝|骂|念|哭|点头|摇头)/g
+模式 B（2–3 字贪婪匹配 + 称谓词）：
+  /([一-鿿]{2,3})(?:小姐|大人|先生|少爷|姑娘|殿下|老师|导师|婆婆|爷爷|奶奶|夫人|老爷|公子|长老|神甫|陛下)/g
+
+过滤：以 他 她 我 你 它 又 再 还 这 那 谁 起头的命中一律丢弃
+整词黑名单：那个 这个 什么 怎么 自己 她们 他们 你们</div>
+      <p>模式 A 的量词取<strong>懒惰</strong>是为修正贪婪误吞：贪婪会把「琉璃说道」匹配成「琉璃说」加剩余部分，使人名候选被动词尾巴污染。代词起头过滤针对「他说」「她又」「我问道」这类伪人名。该通道本质是启发式，故输出的 <code>kind</code> 标为 <code>name-candidate</code>（疑似）而非确定人名。</p>
+
+      <h3>5 · 入选阈值、排序与截断</h3>
+      <div class="formula">入选阈值：
+  cjk-bigram     count &gt; 1
+  cjk-trigram    count &gt; 1
+  name-candidate count ≥ 2
+  word           count &gt; 1
+
+排序：count 降序；count 相同时按 word 的 localeCompare 升序（结果稳定可复现）
+截断：slice(0, top)      top 默认 20，取值区间 1–100</div>
+      <p>出现一次的词组在合并阶段就被丢弃，因此「篇幅可观但用词分散」的文本可能返回<strong>空数组</strong>——渲染层此时输出「（未提取到重复出现的关键词）」。空数组是正常结果，不等于统计失败。</p>
+
+      <h3>6 · 报告落盘与保留份数</h3>
+      <div class="formula">reportFile = &lt;root&gt;/.novel-writer/analysis/
+             &lt;book&gt;-keywords-&lt;sha1( book + "|" + scope + "|" + text ) 前 12 位&gt;.json
+写入内容 = 返回体 + generatedAt( ISO 时间戳 ) + ver( 插件版本号 )
+写入方式 = 原子写（临时文件 + rename，失败回退直写）
+
+保留策略：同书的关键词报告最多保留 20 份（按 mtime 降序），更旧的删除</div>
+      <p>指纹含内容哈希与 <code>scope</code>：改稿或切换统计范围都会生成新文件，同长度改稿不再互相覆盖（v4.0.0 修正，旧版只哈希 <code>text.length</code>）。落盘失败被 <code>try/catch</code> 吞掉，仅表现为返回体缺少 <code>reportFile</code>。该文件<strong>只写不读</strong>：本工具不会因缓存存在而跳过计算，每次调用都重新统计；需要复用历史结果时由调用方自行读取该路径。</p>
+
+      <h2>约束与边界</h2>
+      <ul>
+        <li><strong>四类条目共用同一个 <code>top</code> 预算。</strong>排序对合并后的全部条目全局进行，不按 <code>kind</code> 配额分配：<code>top</code> 较小时结果可能被某一类（通常是高频二字组）占满，其它类别被整体挤出。需要分类观察某一类时应提高 <code>top</code>（上限 100）后按 <code>kind</code> 过滤，或改用单章缩小语料。</li>
+        <li><strong>字面统计，无分词。</strong>没有词性标注与词典切词：三字组常为跨词碎片，二字组也可能跨越词边界（「琉璃说」）。<code>cjk-bigram</code> / <code>cjk-trigram</code> 是「字面重复片段」而不是词汇表，不应直接当名词表使用。</li>
+        <li><strong>输出不含单字。</strong>单字频次不参与统计；若确需单字分布，应改用句式分析或风格报告工具，而不是通过降低 <code>top</code> 或放宽参数来绕过。</li>
+        <li><strong>阈值不可配置。</strong>入选阈值（<code>&gt;1</code> / <code>≥2</code>）与停用字表是代码内常量，没有对应的工具参数；不同插件版本的停用表若发生变化，同一本书的关键词列表不可跨版本直接比较。</li>
+        <li><strong>与风格工具的计数口径不同。</strong><code>totalChars</code> 为原文长度累加（含 Markdown 标题行），风格报告侧先剥离 <code>^#{1,6}</code> 标题行再统计，且两者统计对象（字面片段 vs 六维密度）不同。同名数字字段之间不存在可比关系。</li>
+        <li><strong>章节解析走 <code>findChapter</code></strong>：先按章号数值匹配（<code>1</code> / <code>01</code> / <code>第一章</code> 同义），再按文件名精确匹配，最后按章节标题或文件名的子串匹配。<strong>纯数字参数不做子串兜底</strong>——传入 <code>"1"</code> 不会命中「第11章」，只会在数值相等时命中。找不到章节时报错，不降级为全书统计。</li>
+        <li><strong>报错而非空结果的情形</strong>：书名目录不存在（提示先用 <code>novel_books</code> 核对作品名）、目录下没有 <code>.md</code> / <code>.markdown</code> / <code>.txt</code> 章节文件、<code>chapter</code> 无法匹配、<code>top</code> 不在 1–100 的整数区间。</li>
+        <li><strong>只读顶层文件。</strong>章节扫描不递归，子目录中的稿件不会进入统计，也不会计入 <code>totalChars</code>。</li>
+        <li><strong>报告目录的清理边界。</strong>保留 20 份的清理只匹配 <code>&lt;book&gt;-keywords-*.json</code>，同目录下的 <code>&lt;book&gt;-full.json</code>、<code>&lt;book&gt;-chapters-metrics.json</code> 等分析缓存不受影响。</li>
+        <li><strong>root 与工具开关</strong>：MCP 形态下 <code>root</code> 越界会被静默回退书库根；<code>execute</code> 首行执行 <code>assertToolEnabled</code>，UI 中关闭该工具后调用直接报错。</li>
+      </ul>
+
+      <h2>相关工具</h2>
+      <ul>
+        <li><a href="novel-style-report.html">novel_style_report</a> —— 六维风格画像，其中的词汇维度与本工具同属字面统计但口径不同。</li>
+        <li><a href="novel-sentence-analysis.html">novel_sentence_analysis</a> —— 高频句式模板与题材/关键词共现，用于看「句式怎么排」而非「哪些字在重复」。</li>
+        <li><a href="novel-read.html">novel_read</a> —— 对可疑的三字组碎片回到正文核对上下文。</li>
+      </ul>
+
+      <h2>源码位置</h2>
+      <ul>
+        <li><span class="src">lib/index.js</span> —— 工具注册与 <code>execute</code>：参数 schema、输出契约、语料拼接、报告落盘与保留清理（<code>registerNovelKeywords</code>，约 2782 行）</li>
+        <li><span class="src">lib/core.js</span> —— <code>extractKeywords</code> 四类条目统计与排序截断（约 397 行）、<code>tallyCjkRun</code> 汉字串滑动窗口（约 446 行）、<code>CJK_STOP_CHARS</code> 单字停用表与 <code>EN_STOP_WORDS</code> 英文停用词（约 187 行）</li>
+        <li><span class="src">lib/core.js</span> —— <code>scanChapters</code> / <code>findChapter</code> 章节定位、<code>sanitizeSegment</code>、<code>atomicWriteJson</code> 原子写、<code>novelDataDir</code> 数据目录、<code>formatKeywords</code> 渲染</li>
+        <li><span class="src">lib/index.js</span> —— <code>pruneAnalysisReports</code> 同书保留最近 20 份报告的清理（约 155 行）</li>
+      </ul>
+      <div class="note">
+        <b>实现文件的归属易被误判。</b>四类关键词统计<strong>不在 <code>lib/analysis.js</code></strong>：该文件服务于句式分类、情感量化与风格指纹，与本工具没有调用关系。关键词的计数、阈值与排序全部位于 <code>lib/core.js</code> 的 <code>extractKeywords</code> / <code>tallyCjkRun</code>，工具壳层位于 <code>lib/index.js</code> 的 <code>registerNovelKeywords</code>。
+      </div>
+    </article>
+
+    <nav class="docs__pager" id="docsPager"></nav>
+  </main>
+
+  <aside class="docs__toc" id="docsToc"></aside>
+</div>
+
+<script src="docs.js"></script>
+</body>
+</html>

@@ -1,5 +1,7 @@
 # 📚 dsh-novel-writer — 给网文作者的本地章节体检
 
+> 🌐 **[在线主页](https://siweina.github.io/dsh-novel-writer/)** · [完整技术文档（16 个工具的实现细节、公式与约束）](https://siweina.github.io/dsh-novel-writer/tools/)
+
 [English](./README.en.md) | 中文
 
 [![npm version](https://img.shields.io/npm/v/dsh-novel-writer.svg?style=flat-square&color=blue)](https://www.npmjs.com/package/dsh-novel-writer)

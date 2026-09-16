@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>novel_sentence_analysis — 句式模式分析｜dsh-novel-writer 技术文档</title>
+<meta name="description" content="novel_sentence_analysis 的实现细节：九类句式的分类优先级与切句规则、句式转移与模板统计、句长分布、情感词扫描与净化、情感曲线与 Valence 量化、风格指纹、节奏建议，以及缓存键、上限与降级路径。">
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body class="docs">
+
+<header class="docs__top">
+  <a class="docs__brand" href="../index.html">← dsh-novel-writer</a>
+  <span class="docs__crumb">技术文档 / <code>novel_sentence_analysis</code></span>
+</header>
+
+<div class="docs__layout">
+  <aside class="docs__side" id="docsSide"></aside>
+
+  <main class="docs__main">
+    <article class="doc">
+      <h1>novel_sentence_analysis</h1>
+      <p class="doc__lead">
+        句式模式分析。逐句把正文分成九类句式并统计占比、转移、模板与段落结构，同时给出句长分布、情感曲线、细节密度、风格指纹与节奏建议。分析范围可以是全书，也可以是单章。<strong>全部为本地规则统计</strong>：情感词命中走词表加否定过滤与副词加权，语义隐性情感是在此之上的可选增强。结果写入书库缓存并同时落盘一份报告 JSON，可用 <code>fresh</code> 强制重算。
+      </p>
+
+      <h2>参数</h2>
+      <table>
+        <thead><tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><th><code>book</code></th><td>string</td><td>是</td><td>书名。经 <code>sanitizeSegment</code> 过滤；对应目录内无章节文件时抛错。</td></tr>
+          <tr><th><code>chapter</code></th><td>string</td><td>否</td><td>只分析该章（章号 / 文件名 / 标题子串）。省略则分析全书，<code>scope</code> 形如「全书 N 章」。</td></tr>
+          <tr><th><code>top</code></th><td>integer</td><td>否</td><td>返回的高频句式模板条数。<strong>允许区间 1–50，默认 8</strong>；越界或非整数抛错（不静默钳制）。</td></tr>
+          <tr><th><code>maxSentences</code></th><td>integer</td><td>否</td><td>采样句数上限。<strong>允许区间 100–100000，默认 20000</strong>；触顶后按前缀截断并在建议文本尾部标注。</td></tr>
+          <tr><th><code>curveSegments</code></th><td>integer</td><td>否</td><td>情感曲线分段数。<strong>允许区间 1–50，默认 20</strong>；实际段数为 <code>min(有效段落数, curveSegments)</code>。</td></tr>
+          <tr><th><code>fresh</code></th><td>boolean</td><td>否</td><td><code>true</code> 跳过缓存读取并强制重算；结果仍写回同一缓存文件。</td></tr>
+          <tr><th><code>brief</code></th><td>boolean</td><td>否</td><td><code>true</code> 时返回 <code>brief</code> 单句摘要，渲染层只输出该句并提示「省略 brief 重新调用」。</td></tr>
+          <tr><th><code>root</code></th><td>string</td><td>否</td><td>章节库根目录。省略时取插件 <code>config.root</code>，再省略取会话工作目录；MCP 形态下受启动参数 <code>--root</code> 约束。</td></tr>
+        </tbody>
+      </table>
+
+      <h2>输出结构</h2>
+      <p>契约字段（<code>output.schema.required</code>）：<code>book</code>、<code>scope</code>、<code>enabled</code>、<code>totalChars</code>、<code>totalSentences</code>。功能关闭时返回体只含这五项加 <code>message</code>，且 <code>totalChars</code> 与 <code>totalSentences</code> 均为 0。</p>
+      <table>
+        <thead><tr><th>字段</th><th>类型</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr><th><code>scope</code></th><td>string</td><td>单章时为文件名；全书时为「全书 N 章」</td></tr>
+          <tr><th><code>enabled</code> / <code>message</code></th><td>boolean / string</td><td>句式分析总开关状态；关闭时 <code>message</code> 给出开启方式</td></tr>
+          <tr><th><code>autoAnalyze</code></th><td>boolean</td><td>生效的「分析作品时主动使用」开关状态</td></tr>
+          <tr><th><code>totalChars</code> / <code>totalSentences</code></th><td>integer</td><td>全文字符数与实际参与统计的句数（受 <code>maxSentences</code> 影响）</td></tr>
+          <tr><th><code>categories</code></th><td>array</td><td>固定九项，顺序为 <code>CATEGORY_ORDER</code>：<code>{type, label, count, ratio, avgLength, examples}</code>；<code>examples</code> 每类最多 3 条、每条超 42 字截断加「…」</td></tr>
+          <tr><th><code>transitions</code></th><td>array</td><td>相邻句类型转移，<code>{from, to, count}</code>，按次数降序，最多 12 条</td></tr>
+          <tr><th><code>motifs</code></th><td>array</td><td>2 连句与 3 连句模板合并排序后取前 <code>top</code> 条，<code>{pattern, count}</code>，模式用 <code>→</code> 连接</td></tr>
+          <tr><th><code>paragraphs</code></th><td>object</td><td><code>total</code> / <code>avgSentences</code> / <code>opening</code> / <code>closing</code> / <code>dialogueOnly</code> / <code>psychologyOnly</code> / <code>mixed</code> / <code>narrationOnly</code> / <code>exchanges</code>；四类段落计数之和恒等于 <code>total</code></td></tr>
+          <tr><th><code>lengths</code></th><td>object</td><td><code>avg</code> / <code>median</code> / <code>shortRatio</code> / <code>mediumRatio</code> / <code>longRatio</code> / <code>distribution</code>（四桶 1-10 / 11-24 / 25-40 / 41+）</td></tr>
+          <tr><th><code>style</code></th><td>object</td><td>对话、心理、环境、疑问（含反问）、感叹占比，短句与长句占比，<code>subjectivityIndex</code>（0–100 整数）、<code>emotionDensity</code>、<code>avgSentenceLength</code>、<code>firstPersonDensity</code></td></tr>
+          <tr><th><code>emotion</code></th><td>object</td><td><code>dominant</code>、<code>cleanDominant</code>、<code>confidence</code>、<code>caveat</code>、<code>aiAction</code>、<code>pollution</code>、<code>scores</code>、<code>cleanScores</code>、<code>intensity</code>、<code>topWords</code>（≤12）、<code>curve</code>、<code>quantification</code></td></tr>
+          <tr><th><code>chapterPatterns</code></th><td>array</td><td>全书分析时的分章压缩节奏序列，<code>{chapter, sequence}</code>；单章分析为空数组</td></tr>
+          <tr><th><code>guidance</code></th><td>string</td><td>节奏建议多行文本，末尾可能附前缀截断提示</td></tr>
+          <tr><th><code>density</code></th><td>object</td><td><code>actionVerbsPer1000</code> / <code>actionChainRatio</code> / <code>actionChainExamples</code> / <code>objectNounsPer1000</code> / <code>sensePer1000</code> / <code>sense</code>（五感官通道）</td></tr>
+          <tr><th><code>fingerprint</code></th><td>string</td><td>一维风格指纹串，格式与 <code>novel_style_check</code> 一致</td></tr>
+          <tr><th><code>reportFile</code> / <code>cache</code> / <code>cachedAt</code></th><td>string</td><td>报告落盘路径；<code>cache</code> 枚举 <code>hit</code> / <code>miss</code>；<code>cachedAt</code> 为 ISO 时间</td></tr>
+          <tr><th><code>brief</code></th><td>string</td><td><code>brief:true</code> 时的单句摘要</td></tr>
+        </tbody>
+      </table>
+      <p>渲染层按 <code>【句式分布】→【句式排列】→【句长与风格】→【主观情感】→【情感净化预警】→【情感量化】→【语义隐性情感】→【细节密度】→【节奏建议】→【风格指纹】→【AI 解读提示】</code> 分段输出纯文本；情感净化预警段仅在 <code>cleanDominant !== dominant</code> 时出现，语义隐性情感段仅在 <code>quantification.semanticImplicit.hits</code> 非空时出现。</p>
+
+      <h2>计算原理</h2>
+
+      <h3>1 · 分块、切句与九类判定</h3>
+      <p>先分段落再切句，两者都做了降噪：</p>
+      <div class="formula">splitBlocks(text)：
+  归一 CRLF / CR 为 LF
+  段落分隔符 =「前后都是非空行」的中间空行；无空行时每行视为一段
+  跳过 Markdown 标题行（/^#{1,6}\s/）
+  跳过分割线（/^[-_*=]{3,}$/）
+  末尾过滤空串
+
+splitSentences(block)：
+  遇 \n 或 \r 直接切句
+  遇 TERMINATORS = "。！？…!?" 切句；连续句末符并入同一句
+  句末符后最多吞掉 2 个闭合引号（”」』’" '）</div>
+      <p>九类句式的判定是<strong>固定优先级瀑布</strong>，先命中先归类，不做打分：</p>
+      <div class="formula">1. 引号内片段含心理标记           → psychology（内心独白，quoted 标记）
+2. 引号内片段（无心理标记）        → dialogue
+3. 全文命中心理标记                → psychology
+4. 命中反问强标记                  → rhetoric-question
+5. 以问号结尾                      → question
+6. 命中祈使硬词 / 祈使动词 + 吧    → imperative
+7. 命中感叹标记                    → exclamation
+8. 命中环境标记词表                → environment
+9. 以「…」结尾                     → ellipsis（省略留白）
+   否则                            → statement</div>
+      <p>祈使排在感叹之前，是为了让「闭嘴！」这类句归祈使，感叹只留给不含祈使词的叹句。反问分支已剔除「哪里」这一最常见的真疑问词，并把「谁 + 情态」收紧为固定格式（谁知道 / 谁说的 / 谁能想到…），避免把「谁会来参加明天的会议？」判成反问。</p>
+
+      <h3>2 · 采样上限与密度分母</h3>
+      <div class="formula">逐段逐句累计；一旦 sentences.length ≥ maxSentences 即停止（前缀采样），truncated = true
+sampleText  = sentences.map(s =&gt; s.text).join("")     ← 全部密度类指标的样本
+sampleChars = sampleText.length
+totalChars  = 原文长度（顶层字段语义不变）
+guidance   += "\n⚠️ 文本超过采样上限(N 句),以上统计基于前缀采样(X/Y 字);建议分章分析。"  （仅 truncated 时）</div>
+      <p>情感密度、主观性指数、细节密度、Valence 量化全部以 <code>sampleText</code> 为样本，与句式计数同源。此前存在的两套口径（截断时用句子拼接、未截断时用含空行与标题行的原文）会让密度类指标仅因是否触顶而不可比，现已统一：代价是未截断路径下空行与段落分隔符不再进分母，密度读数略高于旧版本。</p>
+
+      <h3>3 · 排列规律：转移、模板、段落结构</h3>
+      <div class="formula">transitions：对 i ≥ 1 统计 (type[i-1] → type[i])；按 count 降序、from/to 字典序，取前 12
+motifs     ：同时统计 2 连句与 3 连句；按 count 降序、pattern 字典序，取前 top
+paragraphs ：段首 / 段尾句式各按次数降序
+             dialogueOnly  = 全段均为 dialogue
+             psychologyOnly= 全段均为 psychology
+             mixed         = 段落内句式种类 &gt; 1
+             narrationOnly = 其余单一句式段（含全陈述段）
+             exchanges     = 段内相邻两句均为 dialogue 的次数
+chapterPatterns：按章识别句式码后做游程压缩（S×8 ENV×2 …），最多 48 段，超出追加「…(共N段)」</div>
+      <p>四类段落计数互斥且穷尽，<code>dialogueOnly + psychologyOnly + mixed + narrationOnly === paragraphs.total</code> 恒成立——早先缺少 <code>narrationOnly</code> 桶时，全环境句段与全疑问句段会静默漏计。</p>
+
+      <h3>4 · 句长分布</h3>
+      <div class="formula">shortRatio  = 占比(len ≤ 10)
+mediumRatio = 占比(10 &lt; len ≤ 24)
+longRatio   = 占比(len &gt; 24)
+avg = 均值（2 位小数）；median = 中位数（偶数个取中间两值均值，2 位小数）
+distribution 桶 = 1-10 / 11-24 / 25-40 / 41+</div>
+      <p>短 / 中 / 长三档与 distribution 四桶在 10 与 24 处对齐，按 distribution 复算 ratio 必然一致。</p>
+
+      <h3>5 · 情感词扫描</h3>
+      <p>三张表叠加使用：强情绪词 50 条（深层情感，进 clean）、弱情绪词 52 条（生理 / 爽感反应，只进 raw）、大连理工七类词表 27413 条（懒加载 gzip，兜底；只进 raw）。</p>
+      <div class="formula">scanEmotionHits(text, table)：
+  收集词表全部出现 → 按「词长降序 → 表内情绪序 → 表内词序 → 起点」排序
+  → 逐项做区间消费，落在已消费区间内的短词不再命中
+
+逐次命中后：
+  ① 否定过滤 negatedAt(text, idx)
+     单字否定：不 没 无 别 莫 未；「别」在 36 个构词前字之后（特别/别人/告别…）不算否定
+     双 / 三字前缀 22 项：不要 不用 不必 不再 不是 并非 绝非 毫不 丝毫不 从不 从未
+                          没有 没啥 未曾 无法 难以 不太 不很 不怎么 不算 算不上 谈不上
+  ② 副词加权 adverbWeight(text, idx)
+     窗口 = 当前小句（遇标点截断），再往前最多 6 字
+     命中强副词 13 项 → ×1.5；命中弱副词 8 项 → ×0.6；其余 ×1
+     单字副词（太 / 略 / 挺）必须紧邻情感词，且左邻 2 字不在 19 项同形非副词搭配内（太阳/策略/省略/挺拔…）</div>
+      <p>「最长匹配 + 区间消费」消除了嵌套双计：「悲痛欲绝」不再被拆成「悲痛」＋「悲痛欲绝」两分。DUTIR 兜底同样按最长优先扫描，但将上限由 4 字提到 8 字（词表最长条目 7 字），使 853 条 ≥5 字的成语级情感词恢复可命中；兜底词不做强弱分级，只进 <code>scores</code> 不进 <code>cleanScores</code>。</p>
+
+      <h3>6 · 情绪污染源与置信度</h3>
+      <div class="formula">污染词表 52 条，分三类：r18 26 条 / battle 13 条 / horror 13 条
+density = 命中次数 / max(sampleChars, 1) × 1000
+polluted = r18Density ≥ 1.5 ‖ battleDensity ≥ 3 ‖ horrorDensity ≥ 3
+
+confidence = polluted ? "low"
+           : cleanDominant === "neutral" ? "medium"
+           : cleanDominant !== dominant ? "medium"
+           : "high"</div>
+      <p>命中污染阈值时 <code>caveat</code> 会写明「检测到高密度 X 描写…请勿直接采信，须 novel_read 抽查 2-3 段原文复核真实情感基调后再下结论」，同时给出 <code>aiAction</code>；仅强弱主导不一致时 <code>caveat</code> 以「剔除易污染的情绪词后，主导情感为…」表述；两者都不成立时 <code>caveat</code> 为空串。</p>
+
+      <h3>7 · 情感曲线</h3>
+      <div class="formula">segmentCount = min(有效段落数, curveSegments ≤ 50)
+第 s 段覆盖 blocks[floor(s·B/S) : floor((s+1)·B/S)]
+段主导情感 = 段内各类 scores 之和的最大者（并列时按 joy→anger→sorrow→fear→surprise 顺序取先者）
+intensity   = 段内情感总命中 / 段内字符数 × 1000（2 位小数）</div>
+      <p>曲线<strong>不做零强度段裁剪</strong>：段数由 <code>min(段落数, curveSegments)</code> 保证每段至少 1 个段落，不会产生空切片，因此强度为 0 的段是「真实的平缓段」而非伪段，跨章节曲线可按固定段数对齐。</p>
+
+      <h3>8 · Valence 量化与隐性情感</h3>
+      <div class="formula">valenceSeries(text, win = 100 字)：
+  效价表 149 条，最长优先 + 区间消费；否定命中不计词也不进正负计数
+  每窗口均值仅由「有命中的窗口」构成（series，零命中窗口不产生 0 以免稀释均值）
+  seriesFull = 全窗口等距序列（零命中窗口记 0）；hasHit[w] 标记该窗口是否有命中
+
+valenceStats：
+  variance    = Σ(x−mean)² / (n−1)                    ← 仅命中窗口，n&lt;2 时为 0
+  adjVariance = Σ|seriesFull[i]−seriesFull[i−1]| / 有效对数   ← 仅「相邻两窗都有命中」的对
+  delta       = 最小二乘斜率 × (m−1)                  ← 基于 seriesFull
+  deltaRobust = 尾三分位均值 − 首三分位均值            ← 同基于 seriesFull（deltaBasis="seriesFull"）
+  conflict    = 各窗口 2·min(pos,neg)/(pos+neg) 的均值
+  posRatio / negRatio / meanValence
+
+implicitEmotionScan：
+  单向载体 28 条（意象 + 微动作，带 valence / label / fragile）
+  多方向载体 14 个（雨 / 烛火 / 火光 / 夜 / 风 / 海 / 灯 / 影子 / 笑 / 眼泪 / 沉默 / 花开 / 黄昏 / 奔跑）
+  多方向词在 ±30 字上下文内做触发词最长优先裁决；多触发冲突或未裁决 → 计入 ambiguous
+  negative / positive / ambiguousRatio 三项共用分母 totalAllHits，三项之和恒 ≤ 1
+
+emotionComplexity：
+  entropy = −Σ p·ln p（五类，最大熵 ln5 ≈ 1.609）；diversity = p ≥ 0.15 的类别数
+  score = 0.5·(entropy / ln5) + 0.25·(meanDiversity / 5) + 0.25·(secondaryRatio / dominantRatio)
+  level = score ≥ 0.6 ? high : score ≥ 0.4 ? medium : low
+  chapterDrift.swinging = entropies 的方差 &gt; 0.03
+  chapterDrift.basis = 有 chapterTexts 时 "chapter"，单章分析回退段级 "paragraph"</div>
+      <p><code>explicitImplicitCompare</code> 以显性效价均值 ±0.15 与隐性方向占比 0.6 判定「表里不一」，双向冲突（显正隐负、显负隐正）都会置位 <code>explicitImplicitConflict</code>。复合情感共现按段落内共现的情感类对统计，输出前 5 组并补中文标签（悲喜交加 / 又爱又恨 等）。</p>
+
+      <h3>9 · 主观性指数、细节密度与指纹</h3>
+      <div class="formula">firstPersonCount：第一人称词按最长匹配先消（「我们」不拆成 我 + 我们），再补统计剩余孤立「我 / 俺 / 咱」
+subjectivityIndex = min(100, round(心理占比×50 + 感叹占比×60
+                        + min(emotionDensity×2.5, 25) + min(firstPersonDensity×1.2, 20)))
+
+densityOf(sampleText)：
+  动作动词正则 /摸|拿|推|拉|…|合/：单句命中 ≥ 2 记为动作链句
+  actionVerbsPer1000 / objectNounsPer1000 / sensePer1000 按千字归一（1 位小数）
+  actionChainRatio = 动作链句 / 句数 × 100
+  感官五通道：visual / auditory / tactile / olfactory / temperature（温度词只归 temperature，防双计）
+
+fingerprint = 九类短码占比(‰) + " | len:" + 均句长 + " subj:" + 主观性 + " emo:" + 主导情绪 + " | motif:" + 首选模板</div>
+
+      <h3>10 · 缓存与报告落盘</h3>
+      <div class="formula">scopeKeyParts[i] = 章文件名 + ":" + sha1(该章前 8KB) 前 12 位 + ":" + 文件字节数
+                    （读取失败时记 "文件:?:?"）
+cacheKey  = sha1(book | scope | scopeKeyParts.join(",")
+                 | "top=" + top | "max=" + maxSentences | "curve=" + curveSegments
+                 | "en=" + enabled | "auto=" + autoAnalyze) 前 20 位
+reportFile = &lt;root&gt;/.novel-writer/analysis/&lt;book&gt;-&lt;cacheKey&gt;.json
+命中条件：!fresh 且 文件可解析 且 cached.ver === CACHE_VERSION
+写盘后按书前缀保留最近 20 份（REPORT_CACHE_KEEP，按 mtime 降序删除其余）</div>
+      <p>缓存指纹用「每章前 8KB 的内容哈希 + 文件大小」而非 <code>stat</code> 的 mtime：内容同大小且 mtime 未变时旧指纹不会失效。命中路径只读每章前缀 8KB，不整章读盘。</p>
+
+      <h2>约束与边界</h2>
+      <ul>
+        <li><strong>两层开关，行为不同</strong>：工具级开关关闭时 <code>assertToolEnabled</code> 抛错（「工具 novel_sentence_analysis…当前已在「写作助手功能」UI 中关闭」）；句式分析总开关 <code>enabled</code> 关闭时<strong>不抛错</strong>，返回 <code>enabled:false</code>、<code>totalChars:0</code>、<code>totalSentences:0</code> 与 <code>message</code>，且<strong>不读章节正文、不写缓存</strong>。调用方应据 <code>enabled</code> 而非 <code>totalSentences === 0</code> 判断可用性。</li>
+        <li><strong>参数越界是错误而非钳制</strong>：<code>top</code> / <code>maxSentences</code> / <code>curveSegments</code> 由 <code>optionalInt</code> 校验，非整数或越界直接抛「参数 X 必须是 A 到 B 之间的整数」。内部 <code>analyzeText</code> 另有 <code>≥1</code> 与 <code>1–50</code> 的兜底钳制，供直接调用该函数的一方使用。</li>
+        <li><strong>触顶即前缀采样</strong>：超过 <code>maxSentences</code> 后只统计靠前部分，<code>totalSentences</code> 等于上限而不是全书句数。这不是全量结果，提示只写在 <code>guidance</code> 末尾（不加顶层字段），调用方需要全量时应分章调用。</li>
+        <li><strong>缓存键含内容指纹与全部参数</strong>：改一章内容、换一个 <code>top</code> 或翻转 <code>enabled</code> / <code>autoAnalyze</code> 都会生成新缓存文件，旧文件不再命中；<code>fresh:true</code> 跳过读取但仍写回同一文件。落盘目录按书最多保留 20 份报告，超出部分按修改时间淘汰，<code>&lt;book&gt;-full.json</code> 与 <code>&lt;book&gt;-chapters-metrics.json</code> 是分析缓存、不匹配报告命名，不会被清理。</li>
+        <li><strong>算法版本是硬失效条件</strong>：缓存内 <code>ver</code> 与插件版本（当前 4.3.0）不一致时视为过期并重新分析。这保证升级后不会复用旧口径的情感与句式结果。</li>
+        <li><strong>语义隐性情感受独立门控</strong>：仅当 <code>semanticImplicit</code>（含 <code>semanticEmbedding</code> 总开关）开启且本地引擎可用时才会补充 <code>emotion.quantification.semanticImplicit</code>。「用户明确关闭」与「引擎瞬时不可用」被区分对待——后者不会把缓存里已算好的 <code>semanticImplicit</code> 抹成空。单章分析时命中范围被约束在本章内，越界的旧缓存结果会被重算并写回。</li>
+        <li><strong>情感字段可能被裁剪</strong>：<code>emotionCaveat</code> 关闭时 <code>emotion</code> 只保留 <code>dominant</code> / <code>scores</code> / <code>intensity</code> / <code>topWords</code> / <code>curve</code>；<code>emotionComplexity</code> 关闭时删除 <code>quantification</code>。两个开关各自独立生效，关闭其一不会连带剥掉另一个。</li>
+        <li><strong>静默降级点</strong>：DUTIR 词表加载失败时跳过兜底（不影响主词表结果）；语义裁决与语义隐性情感失败不阻塞规则结果；缓存写盘失败不影响本次返回值；<code>cleanOutput</code> 统一消除 <code>-0</code>、把 <code>NaN</code> 归一为 <code>null</code>、剔除 <code>undefined</code> 键。</li>
+        <li><strong>跨版本不可横比</strong>：v4.3.0 起，句末符口径统一（省略号单独成句）、密度分母统一为句子拼接样本、情感命中改为区间消费、Valence 的 <code>adjVariance</code> 与 <code>deltaRobust</code> 改口径、隐性情感三项比率共用三分分母。同一本书在旧版本下产生的报告数值不可与新版本直接比较。</li>
+      </ul>
+
+      <h2>相关工具</h2>
+      <ul>
+        <li><a href="novel-style-report.html">novel_style_report</a> —— 本工具的 <code>fingerprint</code>、<code>lengths</code>、<code>style</code>、<code>emotion</code> 是其「维度」聚合的原始来源。</li>
+        <li><a href="novel-style-check.html">novel_style_check</a> —— 复用本工具的九类占比、句长与主观性构造指纹向量，做单章对照判定。</li>
+        <li><a href="novel-semantic-search.html">novel_semantic_search</a> —— 与本工具的语义隐性情感共用同一个本地向量引擎、同一份索引缓存与同一套切块规则。</li>
+      </ul>
+
+      <h2>源码位置</h2>
+      <ul>
+        <li><span class="src">lib/index.js</span> —— 工具注册与执行（<code>registerNovelSentenceAnalysis</code>，第 403 行起；<code>execute</code> 自第 590 行）、缓存键与 <code>pruneAnalysisReports</code>（第 155 行）、<code>cropEmotionByFeatures</code>（第 83 行）、<code>semanticGate</code>（第 109 行）</li>
+        <li><span class="src">lib/analysis.js</span> —— 九类标签与顺序（<code>CATEGORY_LABELS</code> 第 23 行、<code>CATEGORY_ORDER</code> 第 37 行、<code>TYPE_CODE</code> 第 43 行）、词表（第 58–142 行）、<code>splitBlocks</code>（第 145 行）、<code>splitSentences</code>（第 183 行）、<code>classifySentence</code>（第 348 行）、<code>scanEmotionHits</code>（第 451 行）、<code>emotionOf</code>（第 500 行）、<code>valenceSeries</code>（第 896 行）、<code>valenceStats</code>（第 953 行）、<code>implicitEmotionScan</code>（第 763 行）、<code>emotionComplexity</code>（第 1095 行）、<code>analyzeText</code>（第 1174 行）、<code>emotionCurve</code>（第 1558 行）、<code>buildFingerprint</code>（第 1600 行）、<code>densityOf</code>（第 1678 行）</li>
+        <li><span class="src">lib/core.js</span> —— <code>buildBriefLine</code>（第 1324 行）、<code>formatSentenceAnalysis</code>（第 1330 行）、<code>enrichSemanticImplicit</code>（第 793 行）、<code>semanticFeatureEnabled</code>（第 852 行）、<code>cropEmotion</code>（第 856 行）、<code>cleanOutput</code>（第 2308 行）、<code>CACHE_VERSION</code>（第 24 行）</li>
+        <li><span class="src">lib/embedding.js</span> —— <code>chunkText</code>（第 520 行）、<code>detectImplicitEmotions</code>（第 292 行）、<code>IMPLICIT_EMOTION_PROTOTYPES</code>（第 232 行，共 29 条原型句）、<code>fingerprint</code>（第 338 行）</li>
+      </ul>
+    </article>
+
+    <nav class="docs__pager" id="docsPager"></nav>
+  </main>
+
+  <aside class="docs__toc" id="docsToc"></aside>
+</div>
+
+<script src="docs.js"></script>
+</body>
+</html>
