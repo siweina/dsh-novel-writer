@@ -51,7 +51,8 @@ jobs:
           mkdir -p dist
           # v4.0.0：补 --exclude='node_modules'——此前 npm ci 装出的依赖树（本机 142MB）会被整包打进 release zip；
           # 依赖由用户侧 npm install/dsh plugin add 安装。同时删掉过时排除项 .e2e-test/.f39/.f3*（测试早已改用 tmpdir，永不匹配）。
-          rsync -a --exclude='node_modules' --exclude='.github' --exclude='dist' --exclude='*.zip' --exclude='.git' --exclude='.novel-writer' --exclude='_*.mjs' --exclude='*.bak*' ./ dist/dsh-novel-writer-v${{ steps.ver.outputs.VERSION }}/
+          # v4.3.0 后补 --exclude='docs'：docs/ 是 GitHub Pages 的宣传主页与技术文档站，不属于插件包内容。
+          rsync -a --exclude='node_modules' --exclude='.github' --exclude='docs' --exclude='dist' --exclude='*.zip' --exclude='.git' --exclude='.novel-writer' --exclude='_*.mjs' --exclude='*.bak*' ./ dist/dsh-novel-writer-v${{ steps.ver.outputs.VERSION }}/
       - name: Create zip
         run: cd dist && zip -r ../dsh-novel-writer-v${{ steps.ver.outputs.VERSION }}.zip dsh-novel-writer-v${{ steps.ver.outputs.VERSION }}
       - name: Upload artifact
