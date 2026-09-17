@@ -4,21 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>novel_chapters — 列出章节｜dsh-novel-writer 技术文档</title>
-<meta name="description" content="novel_chapters 的实现细节：章节文件过滤、中文章号与全角数字的解析路径、标题清洗、字数与行数口径、排序规则，以及章号可能缺失等调用约束。">
+<meta name="description" content="novel_chapters 的实现细节：章节文件过滤、中文章号与全角数字的解析路径、标题清洗、字数与行数口径、排序规则、同章号多文件的提示规则，以及章号可能缺失等调用约束。">
 <link rel="stylesheet" href="../styles.css">
 <link rel="stylesheet" href="docs.css">
 <link rel="canonical" href="https://siweina.github.io/dsh-novel-writer/tools/novel-chapters.html">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="dsh-novel-writer">
 <meta property="og:title" content="novel_chapters — 列出章节｜dsh-novel-writer 技术文档">
-<meta property="og:description" content="novel_chapters 的实现细节：章节文件过滤、中文章号与全角数字的解析路径、标题清洗、字数与行数口径、排序规则，以及章号可能缺失等调用约束。">
+<meta property="og:description" content="novel_chapters 的实现细节：章节文件过滤、中文章号与全角数字的解析路径、标题清洗、字数与行数口径、排序规则、同章号多文件的提示规则，以及章号可能缺失等调用约束。">
 <meta property="og:url" content="https://siweina.github.io/dsh-novel-writer/tools/novel-chapters.html">
 <meta property="og:locale" content="zh_CN">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="novel_chapters — 列出章节｜dsh-novel-writer 技术文档">
-<meta name="twitter:description" content="novel_chapters 的实现细节：章节文件过滤、中文章号与全角数字的解析路径、标题清洗、字数与行数口径、排序规则，以及章号可能缺失等调用约束。">
+<meta name="twitter:description" content="novel_chapters 的实现细节：章节文件过滤、中文章号与全角数字的解析路径、标题清洗、字数与行数口径、排序规则、同章号多文件的提示规则，以及章号可能缺失等调用约束。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_chapters","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-chapters.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_chapters — 列出章节｜dsh-novel-writer 技术文档","description":"novel_chapters 的实现细节：章节文件过滤、中文章号与全角数字的解析路径、标题清洗、字数与行数口径、排序规则，以及章号可能缺失等调用约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-chapters.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"4.3.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_chapters, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_chapters — 列出章节｜dsh-novel-writer 技术文档","description":"novel_chapters 的实现细节：章节文件过滤、中文章号与全角数字的解析路径、标题清洗、字数与行数口径、排序规则、同章号多文件的提示规则，以及章号可能缺失等调用约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-chapters.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"4.3.1","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_chapters, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -36,6 +36,10 @@
       <p class="doc__lead">
         列出某部作品的全部章节：章号、标题、字数、行数与更新时间。工具按扩展名过滤目录下的文件，对每个文件名做<strong>章号解析</strong>（阿拉伯数字、中文章号、全角数字）与<strong>标题清洗</strong>，再逐章 <code>stat</code> + 读全文得到统计量。<code>book</code> 为必填项；解析不出章号的文件仍会列出，但 <code>number</code> 字段缺省。
       </p>
+
+      <div class="warn note">
+        <b>v4.3.1 行为变更：渲染层新增同章号提示。</b>当一本书里有两个以上文件解析出<strong>同一章号</strong>（例如拆分章节后原稿仍在），渲染文本会在列表末尾追加一段 <code>⚠️ 同章号多文件 N 组</code>，逐组列出章号与撞号文件名。这不是去重、也不修改任何文件，只把「两条看起来一样的条目其实是两份文件」这件事显式说出来——因为按章号定位的工具此时会拒绝执行（见 <a href="novel-read.html">novel_read</a>）。返回体的 <code>chapters</code> 数组仍如实包含全部记录。
+      </div>
 
       <h2>参数</h2>
       <table>
@@ -61,7 +65,7 @@
           <tr><th><code>updated</code></th><td>string</td><td>文件 mtime 的 ISO 8601 字符串（UTC）</td></tr>
         </tbody>
       </table>
-      <p>渲染层（<code>formatChapters</code>）每行格式为 <code>- 第NN章 标题 — M 字 / L 行 (文件名, 更新于 YYYY-MM-DD)</code>；<code>number</code> 缺失时章号位显示 <code>?</code>，日期只取 <code>updated</code> 的前 10 个字符。</p>
+      <p>渲染层（<code>formatChapters</code>）每行格式为 <code>- 第NN章 标题 — M 字 / L 行 (文件名, 更新于 YYYY-MM-DD)</code>；<code>number</code> 缺失时章号位显示 <code>?</code>，日期只取 <code>updated</code> 的前 10 个字符。列表之后，若存在同章号多文件，追加 <code>⚠️ 同章号多文件 N 组</code> 与逐组的 <code>第NN章: 文件A / 文件B</code>（v4.3.1 起）。</p>
 
       <h2>行为与实现</h2>
 
@@ -116,7 +120,7 @@ updated = stat(file).mtime.toISOString() ← UTC ISO 8601</div>
         <li><strong>目录缺失是硬错误</strong>：抛出 <code>书库中未找到作品目录：&lt;路径&gt;…</code>，而非空数组。调用方应把该错误当作「书名或根目录错误」处理。</li>
         <li><strong><code>number</code> 可能不存在</strong>：文件名不含可识别章号时该键被整体省略（实现上用条件展开写入）。调用方必须按可选字段处理，不能假设 <code>chapters[i].number</code> 总有值；排序也会把这类章推到末尾。</li>
         <li><strong>含「万」的中文章号解析失败</strong>：正则字符类收录了「万」，但 <code>cjkToNumber</code> 未定义「万」的单位累加，逐字扫描遇「万」直接返回 <code>undefined</code>。故 <code>第两万章.md</code> 得不到 <code>number</code>。<code>第零章.md</code> 同理（既无单位、<code>section</code> 又为 0）。</li>
-        <li><strong>同号重复文件不去重</strong>：两个文件解析出同一章号时不合并、不报冲突，返回体中会出现两条相同 <code>number</code> 的记录。</li>
+        <li><strong>同号重复文件不合并，但会在渲染文本里被点名（v4.3.1 起）</strong>：两个文件解析出同一章号时返回体仍出现两条相同 <code>number</code> 的记录（不去重、不改文件），但渲染层会追加同章号提示分组。<strong>这类书用章号定位的工具（<code>novel_read</code> 等）会直接报错</strong>，必须改用文件名指定，或先把多余文件改名到空闲章号。</li>
         <li><strong>列表无截断，成本为全文读取</strong>：章节数、字段长度都没有上限；每章都要 <code>stat</code> + 读全文，全部章节一次返回。删除或新增章节文件会立即反映，因为结果不做缓存。</li>
         <li><strong><code>chars</code> 不等于「汉字数」</strong>：它是 <code>text.length</code>，Markdown 标题行、空行、标点、ASCII 一律计入；<code>lines</code> 按 <code>\r?\n</code> 计行，空文件为 0 行。</li>
         <li><strong><code>updated</code> 是 UTC 时间串</strong>：形如 <code>2024-05-01T09:30:00.000Z</code>，渲染层只截前 10 字符。跨时区展示需自行换算。</li>

@@ -663,6 +663,47 @@ if (res.status !== 200) throw new Error("allowLan route broken");
   console.log("v3.9.5 scan 分派: " + scanLoc.message + " " + JSON.stringify(scanLoc.candidates) + " ✓");
 }
 
+// ================= v4.3.1 回归：同章号多文件不再"静默读错稿" =================
+// 现场背景：某工具把一章拆成两个文件后，两份共用章号 3。旧版 findChapter 先按章号匹配、
+// 才退回文件名匹配，于是「第03章 重逢.md」这种完整文件名也会被 parseChapterNumber 解析出 3、
+// 命中排序靠前的另一份；被抢走的那份用章号/文件名/标题三条路都读不到（永久不可达，已实测复现）。
+await (async function duplicateChapterRegression() {
+  const dupBook = join(testRoot, "novels", "重号样本");
+  mkdirSync(dupBook, { recursive: true });
+  writeFileSync(join(dupBook, "第03章 初遇.md"), "这是旧的第三章正文。\n", "utf8");
+  writeFileSync(join(dupBook, "第03章 重逢.md"), "这是新拆分出来的第三章正文。\n", "utf8");
+  writeFileSync(join(dupBook, "第3章 初遇.md"), "这是另一份同号同名文件的正文。\n", "utf8");
+
+  // ① 章节列表必须显式提示——否则用户只看到两条同名条目，不知道磁盘上是两份文件
+  const listed = await defs.novel_chapters.execute({ book: "重号样本", root: testRoot }, exec);
+  const listText = defs.novel_chapters.output.render({}, listed)[0].text;
+  if (!listText.includes("同章号多文件")) throw new Error("同章号未在 novel_chapters 提示: " + listText);
+
+  // ② 精确文件名优先于章号（旧版此处命中另一份）
+  const byFile = await defs.novel_read.execute({ book: "重号样本", chapter: "第03章 重逢.md", root: testRoot }, exec);
+  if (!String(byFile.path).endsWith("第03章 重逢.md")) throw new Error("完整文件名未优先命中: " + byFile.path);
+  // ③ 省略扩展名的文件名同样命中
+  const byStem = await defs.novel_read.execute({ book: "重号样本", chapter: "第3章 初遇", root: testRoot }, exec);
+  if (!String(byStem.path).endsWith("第3章 初遇.md")) throw new Error("省略扩展名的文件名未命中: " + byStem.path);
+  // ④ 只给章号 → 必须拒绝并列出候选（旧版静默返回其中一份，另一份永久读不到）
+  let ambiguous = null;
+  try { await defs.novel_read.execute({ book: "重号样本", chapter: "3", root: testRoot }, exec); } catch (e) { ambiguous = String(e && e.message ? e.message : e); }
+  if (ambiguous === null) throw new Error("同章号按章号读取应被拒绝，实际成功返回");
+  for (const expect of ["第03章 初遇.md", "第03章 重逢.md", "第3章 初遇.md"]) {
+    if (!ambiguous.includes(expect)) throw new Error("歧义报错未列出候选 " + expect + ": " + ambiguous);
+  }
+  // ⑤ 审计工具能查出同章号
+  const audit = await defs.novel_continuity_check.execute({ book: "重号样本", root: testRoot }, exec);
+  if (!audit.candidates.some((c) => c.type === "同章号多文件")) throw new Error("novel_continuity_check 未报同章号多文件");
+  // ⑥ 无重号的书必须零误报、行为不变
+  const cleanList = await defs.novel_chapters.execute({ book: "测试", root: testRoot }, exec);
+  const cleanText = defs.novel_chapters.output.render({}, cleanList)[0].text;
+  if (cleanText.includes("同章号多文件")) throw new Error("无重号书出现误报: " + cleanText);
+  const cleanRead = await defs.novel_read.execute({ book: "测试", chapter: "1", root: testRoot }, exec);
+  if (!String(cleanRead.path).endsWith("第01章.md")) throw new Error("无重号书按章号读取异常: " + cleanRead.path);
+  console.log("v4.3.1 同章号回归: 列表提示 / 文件名优先 / 章号歧义拒绝 / 审计检出 / 无重号书零误报 ✓");
+})();
+
 // 清理缓存文件（保留状态文件）
 rmSync(testRoot, { recursive: true, force: true });
 // v4.0.0：告警即失败——插件运行期 console.warn 此前完全不被测试感知（e2e 全绿但 stderr 持续刷契约失配）

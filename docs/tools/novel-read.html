@@ -4,21 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>novel_read — 阅读正文｜dsh-novel-writer 技术文档</title>
-<meta name="description" content="novel_read 的实现细节：章节定位的三级查找、offset/limit 分段与 20000 字上限、单行 3000 字裁剪、行号口径与编码探测，以及纯数字参数不下探子串等关键约束。">
+<meta name="description" content="novel_read 的实现细节：章节定位的查找顺序（精确文件名优先于章号、同章号多文件时拒绝执行并列出候选）、offset/limit 分段与 20000 字上限、单行 3000 字裁剪、行号口径与编码探测，以及纯数字参数不下探子串等关键约束。">
 <link rel="stylesheet" href="../styles.css">
 <link rel="stylesheet" href="docs.css">
 <link rel="canonical" href="https://siweina.github.io/dsh-novel-writer/tools/novel-read.html">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="dsh-novel-writer">
 <meta property="og:title" content="novel_read — 阅读正文｜dsh-novel-writer 技术文档">
-<meta property="og:description" content="novel_read 的实现细节：章节定位的三级查找、offset/limit 分段与 20000 字上限、单行 3000 字裁剪、行号口径与编码探测，以及纯数字参数不下探子串等关键约束。">
+<meta property="og:description" content="novel_read 的实现细节：章节定位的查找顺序（精确文件名优先于章号、同章号多文件时拒绝执行并列出候选）、offset/limit 分段与 20000 字上限、单行 3000 字裁剪、行号口径与编码探测，以及纯数字参数不下探子串等关键约束。">
 <meta property="og:url" content="https://siweina.github.io/dsh-novel-writer/tools/novel-read.html">
 <meta property="og:locale" content="zh_CN">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="novel_read — 阅读正文｜dsh-novel-writer 技术文档">
-<meta name="twitter:description" content="novel_read 的实现细节：章节定位的三级查找、offset/limit 分段与 20000 字上限、单行 3000 字裁剪、行号口径与编码探测，以及纯数字参数不下探子串等关键约束。">
+<meta name="twitter:description" content="novel_read 的实现细节：章节定位的查找顺序（精确文件名优先于章号、同章号多文件时拒绝执行并列出候选）、offset/limit 分段与 20000 字上限、单行 3000 字裁剪、行号口径与编码探测，以及纯数字参数不下探子串等关键约束。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_read","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-read.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_read — 阅读正文｜dsh-novel-writer 技术文档","description":"novel_read 的实现细节：章节定位的三级查找、offset/limit 分段与 20000 字上限、单行 3000 字裁剪、行号口径与编码探测，以及纯数字参数不下探子串等关键约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-read.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"4.3.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_read, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_read — 阅读正文｜dsh-novel-writer 技术文档","description":"novel_read 的实现细节：章节定位的查找顺序（精确文件名优先于章号、同章号多文件时拒绝执行并列出候选）、offset/limit 分段与 20000 字上限、单行 3000 字裁剪、行号口径与编码探测，以及纯数字参数不下探子串等关键约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-read.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"4.3.1","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_read, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -34,15 +34,19 @@
     <article class="doc">
       <h1>novel_read</h1>
       <p class="doc__lead">
-        阅读某部作品的某个章节，返回带行号的正文与字数统计，支持 <code>offset</code> / <code>limit</code> 分段读取长章节。章节标识可用<strong>章号、文件名或标题子串</strong>三种形态，内部走同一套章号解析与定位逻辑。返回体带 <code>truncated</code> 标志与 <code>totalLines</code>，调用方可据此用 <code>offset = 上一段末行 + 1</code> 续读。
+        阅读某部作品的某个章节，返回带行号的正文与字数统计，支持 <code>offset</code> / <code>limit</code> 分段读取长章节。章节标识可用<strong>章号、文件名或标题子串</strong>三种形态，其中<strong>精确文件名优先于章号解析</strong>；仅当按章号命中的文件不唯一时会拒绝执行并列出候选（见下文「章节定位」）。返回体带 <code>truncated</code> 标志与 <code>totalLines</code>，调用方可据此用 <code>offset = 上一段末行 + 1</code> 续读。
       </p>
+
+      <div class="warn note">
+        <b>v4.3.1 行为变更：同章号多文件改为拒绝执行。</b>当一本书里存在两份章号相同的文件（例如拆分章节后又保留了原稿），旧版按章号定位会<strong>静默返回排序靠前的那一份</strong>，另一份用章号、完整文件名、标题三条路都读不到（永久不可达）。现在改为：<strong>先按精确文件名匹配</strong>，文件名命中即返回；只给章号且命中多个文件时<strong>报错并列出全部候选</strong>。存量书库若报此错，把 <code>chapter</code> 写成目标文件名（可省略扩展名）即可，或先改名消除撞号（<a href="novel-chapters.html">novel_chapters</a> 会在列表末尾提示撞号分组）。
+      </div>
 
       <h2>参数</h2>
       <table>
         <thead><tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr></thead>
         <tbody>
           <tr><th><code>book</code></th><td>string</td><td>是</td><td>书名，即 <code>novels/</code> 下的子目录名。空串或纯空白被拒绝；值经 <code>sanitizeSegment</code> 清洗。</td></tr>
-          <tr><th><code>chapter</code></th><td>string</td><td>是</td><td>章节标识：章号（<code>1</code> 或 <code>01</code>）、文件名（<code>第01章.md</code>）或标题子串。定位规则见下文。</td></tr>
+          <tr><th><code>chapter</code></th><td>string</td><td>是</td><td>章节标识：章号（<code>1</code> 或 <code>01</code>）、文件名（<code>第01章.md</code>，可省略扩展名）或标题子串。<strong>文件名优先于章号</strong>；同章号多文件时按章号定位会报错，需改用文件名。定位规则见下文。</td></tr>
           <tr><th><code>offset</code></th><td>integer</td><td>否</td><td>起始行号，从 1 开始。取值区间 1 – 9007199254740991，默认 1。</td></tr>
           <tr><th><code>limit</code></th><td>integer</td><td>否</td><td>最多返回行数。取值区间 1 – <code>READ_LIMIT</code>（400），默认 400。<strong>上限是硬约束，超限报错而非自动截到上限。</strong></td></tr>
           <tr><th><code>root</code></th><td>string</td><td>否</td><td>章节库根目录。省略时按 <code>config.root</code> → 会话工作目录回退。</td></tr>
@@ -71,14 +75,21 @@
       <h3>1 · 章节定位 <code>findChapter</code></h3>
       <p>先 <code>scanChapters</code> 取该作品的全部章节（按章号升序、无章号者置末），再按下列顺序查找，命中即返回：</p>
       <div class="formula">needle = String(chapter).trim()
+lower  = needle.toLowerCase()
 
-① asNumber = parseChapterNumber(needle)
-   asNumber !== undefined → chapters.find(c =&gt; c.number === asNumber)
-② 文件名精确匹配（忽略大小写）：c.file.toLowerCase() === needle.toLowerCase()
+① 精确文件名（忽略大小写）：c.file === lower
+   或去扩展名后相等：c.file 去掉后缀 === needle 去掉 .md / .markdown / .txt
+   命中即返回 —— 调用方明确指定了文件名，优先采信
+② asNumber = parseChapterNumber(needle)
+   命中该章号的文件数 = 1 → 返回该文件
+   命中数 &gt; 1 → 抛错并列出全部候选文件名（同章号歧义，v4.3.1 起）
 ③ /^\d+$/.test(normalizeChapterWidth(needle)) → 返回 undefined（纯数字不再下探子串）
 ④ 标题或文件名的子串匹配（忽略大小写，含文件名扩展名）
 ⑤ 全部未命中 → 抛错「在作品 "X" 中找不到章节 "Y"（可用 novel_chapters 查看章节列表）」</div>
       <p>章号解析复用 <code>parseChapterNumber</code>，与 <a href="novel-chapters.html">novel_chapters</a> 完全同源：入口先做字符宽度归一（全角 <code>０-９</code> / <code>－．／</code> 按 <code>−0xFEE0</code> 映射为半角），再依次尝试阿拉伯数字章号、中段数字、行首数字、末尾数字与中文章号（<code>cjkToNumber</code>，支持十 / 百 / 千，不含「万」）。因此参数写 <code>1</code>、<code>01</code>、<code>０１</code>、<code>第1章</code> 都能解析为同一章号。</p>
+      <div class="warn note">
+        <b>同章号为什么必须报错而不是"取第一个"。</b><code>scanChapters</code> 不去重，两份同章号文件都会进列表，排序规则是「章号升序，同章号按文件名 <code>localeCompare</code>」。旧版 <code>chapters.find(c =&gt; c.number === asNumber)</code> 取到的就是排序靠前的那一份，另一份没有任何入口可达。v4.3.1 起改为：命中多个即拒绝（<code>chapter</code> 换文件名即可指定），把"静默读错稿"换成"带候选清单的报错"。
+      </div>
       <div class="warn note">
         <b>纯数字参数的下探守卫。</b>第 ③ 步是承重逻辑：若章号匹配失败后继续走子串兜底，参数 <code>"1"</code> 会经标题匹配命中 <code>第11章.md</code>。故凡参数整体为纯数字（宽度归一后），解析失败即直接判定「找不到章节」，不做子串尝试。
       </div>
@@ -125,7 +136,8 @@ truncated = hitCharCap ‖ (offset − 1 + lines.length) &lt; totalLines</div>
         <li><strong><code>limit</code> 超限即报错</strong>：请求 <code>limit: 1000</code> 不会静默截到 400，调用方需自行分批。</li>
         <li><strong><code>offset</code> 超界报错</strong>：断言式为 <code>offset &lt;= max(totalLines, 1)</code>，错误文案含文件名与总行数。空文件允许 <code>offset = 1</code>（见行号口径）。</li>
         <li><strong>纯数字 <code>chapter</code> 不做子串兜底</strong>：<code>chapter: "1"</code> 只匹配章号等于 1 的章节，命中失败直接报「找不到章节」，不会退化到 <code>第11章.md</code>。</li>
-        <li><strong>章号优先于文件名与标题</strong>：解析出数值时先按数值查找，故同一 <code>chapter</code> 值可能命中与字面文件名不同的章节；需要精确定位时用完整文件名。</li>
+        <li><strong>文件名优先于章号（v4.3.1 起）</strong>：参数能与某个文件名（含省略扩展名）精确对上时直接返回该文件，不再先做章号解析。旧版顺序相反，导致 <code>chapter: "第03章 重逢.md"</code> 这种完整文件名也会被解析出章号并命中同章号的另一份。</li>
+        <li><strong>同章号多文件按章号定位会报错（v4.3.1 起）</strong>：错误文案列出全部候选文件名与「把 chapter 写成其中一个文件名」的指引。这是刻意设计——旧版静默返回排序靠前的那一份，另一份永久不可达。</li>
         <li><strong>子串匹配取首个命中</strong>：④ 步用的是 <code>includes</code> 且按章号升序列表 <code>find</code> 第一个，短子串（如「序」）可能命中并非目标的那一章。</li>
         <li><strong>三类上限各自独立，且会叠加触发</strong>：单行 &gt; 3000 字先被裁剪并追加 <code>…（行过长已裁剪）</code>（<strong>该后缀也算入 <code>chars</code></strong>），再受 20000 字预算与 <code>limit</code> 行数约束；任一触发都使 <code>truncated = true</code>。</li>
         <li><strong><code>chars</code> 是「已显示部分」</strong>：v3.7.0 起文案已明确区分，调用方不得把截断响应里的 <code>chars</code> 当作章节总字数；总字数需用 <a href="novel-chapters.html">novel_chapters</a> 的 <code>chars</code>。</li>

@@ -4,21 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>novel_continuity_check — 连贯性审计｜dsh-novel-writer 技术文档</title>
-<meta name="description" content="novel_continuity_check 的实现细节：四种互斥模式（衔接检查/OOC 哨兵/大纲对照/全书设定表扫描）的参数、输出契约、判定阈值与证据取得方式，以及被静默跳过的路径。">
+<meta name="description" content="novel_continuity_check 的实现细节：四种互斥模式（衔接检查/OOC 哨兵/大纲对照/全书设定表扫描）的参数、输出契约、判定阈值与证据取得方式、同章号多文件检测，以及被静默跳过的路径。">
 <link rel="stylesheet" href="../styles.css">
 <link rel="stylesheet" href="docs.css">
 <link rel="canonical" href="https://siweina.github.io/dsh-novel-writer/tools/novel-continuity-check.html">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="dsh-novel-writer">
 <meta property="og:title" content="novel_continuity_check — 连贯性审计｜dsh-novel-writer 技术文档">
-<meta property="og:description" content="novel_continuity_check 的实现细节：四种互斥模式（衔接检查/OOC 哨兵/大纲对照/全书设定表扫描）的参数、输出契约、判定阈值与证据取得方式，以及被静默跳过的路径。">
+<meta property="og:description" content="novel_continuity_check 的实现细节：四种互斥模式（衔接检查/OOC 哨兵/大纲对照/全书设定表扫描）的参数、输出契约、判定阈值与证据取得方式、同章号多文件检测，以及被静默跳过的路径。">
 <meta property="og:url" content="https://siweina.github.io/dsh-novel-writer/tools/novel-continuity-check.html">
 <meta property="og:locale" content="zh_CN">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="novel_continuity_check — 连贯性审计｜dsh-novel-writer 技术文档">
-<meta name="twitter:description" content="novel_continuity_check 的实现细节：四种互斥模式（衔接检查/OOC 哨兵/大纲对照/全书设定表扫描）的参数、输出契约、判定阈值与证据取得方式，以及被静默跳过的路径。">
+<meta name="twitter:description" content="novel_continuity_check 的实现细节：四种互斥模式（衔接检查/OOC 哨兵/大纲对照/全书设定表扫描）的参数、输出契约、判定阈值与证据取得方式、同章号多文件检测，以及被静默跳过的路径。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_continuity_check","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-continuity-check.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_continuity_check — 连贯性审计｜dsh-novel-writer 技术文档","description":"novel_continuity_check 的实现细节：四种互斥模式（衔接检查/OOC 哨兵/大纲对照/全书设定表扫描）的参数、输出契约、判定阈值与证据取得方式，以及被静默跳过的路径。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-continuity-check.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"4.3.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_continuity_check, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_continuity_check — 连贯性审计｜dsh-novel-writer 技术文档","description":"novel_continuity_check 的实现细节：四种互斥模式（衔接检查/OOC 哨兵/大纲对照/全书设定表扫描）的参数、输出契约、判定阈值与证据取得方式、同章号多文件检测，以及被静默跳过的路径。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-continuity-check.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"4.3.1","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_continuity_check, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -34,8 +34,12 @@
     <article class="doc">
       <h1>novel_continuity_check</h1>
       <p class="doc__lead">
-        连贯性审计。四种模式由参数选择且<strong>互斥</strong>：<code>chapter</code> 做单章衔接检查（时间跳变 / 语义距离 / 人物延续 / 钩子承接），<code>outline</code> 做创作资料大纲方向行与正文开头的关键词重合度对照，<code>ooc</code> 做登记角色的情绪基线偏离哨兵；三者都不传时对照设定表扫描全书，输出矛盾候选（数字口径 / 人物缺场 / 别名 / 设定重复 / 用语与语用冲突）。全部判定由本地规则与本地向量引擎完成，不调用在线模型；返回值是<strong>候选</strong>而非结论，逐条需人工确认。
+        连贯性审计。四种模式由参数选择且<strong>互斥</strong>：<code>chapter</code> 做单章衔接检查（时间跳变 / 语义距离 / 人物延续 / 钩子承接），<code>outline</code> 做创作资料大纲方向行与正文开头的关键词重合度对照，<code>ooc</code> 做登记角色的情绪基线偏离哨兵；三者都不传时对照设定表扫描全书，输出矛盾候选（同章号多文件 / 数字口径 / 人物缺场 / 别名 / 设定重复 / 用语与语用冲突）。全部判定由本地规则与本地向量引擎完成，不调用在线模型；返回值是<strong>候选</strong>而非结论，逐条需人工确认。
       </p>
+
+      <div class="warn note">
+        <b>v4.3.1 新增：同章号多文件候选。</b>全书扫描模式现在<strong>先</strong>检查章节文件名解析出的章号是否有重复，逐组生成一条 <code>type: "同章号多文件"</code> 的候选（<code>chapters</code> 为该组全部文件名）。这类书用章号定位的工具会直接报错（见 <a href="novel-read.html">novel_read</a>），所以把它放进审计里，可以在报错之前先看到是哪几章撞了。
+      </div>
 
       <h2>参数</h2>
       <table>
@@ -132,6 +136,7 @@ thr = n ≤ 4 ? 0.30 : 2σ
 
       <h3>4 · 全书设定表扫描（无参数）</h3>
       <p>先登记 <code>readSettings</code> 的五张表（characters / locations / items / timeline / worldview），再逐章读全文，按下列固定顺序生成候选。</p>
+      <p><strong>同章号多文件（v4.3.1 起，排在全部检查之前）。</strong>对 <code>scanChapters</code> 的结果按解析出的章号分组，凡一组内文件数 &gt; 1 就生成一条候选，<code>detail</code> 列出该组全部文件名（<strong>不套用 5 章截断</strong>——撞号分组必须完整可见）。章号解析不出（<code>number</code> 缺省）的文件不参与分组。</p>
       <div class="formula">类型顺序：数字口径 → 人物缺失/人物缺场 → 别名未用 → 设定重复
           → 用语冲突 → 语用冲突·客套 → 语用冲突·仪式 → 语用冲突·称谓</div>
       <p><strong>数字口径。</strong>扫描 <code>\d+\s*(?:万亿|千万|百万|十万|[万亿千百])</code> 或 <code>[零一二两三四五六七八九十]{1,2}(?:万亿|千万|百万|十万|[万亿千百])</code>，去掉空白后要求写法以数量单位字（万亿 / 千万 / 百万 / 十万 / 万 / 亿 / 千 / 百 / 十）结尾，并剔除「十」「百」「千」「万」「亿」这类纯单位字写法。把写法解析回数值（<code>万亿</code>=1e12、<code>千万</code>=1e7、<code>百万</code>=1e6、<code>十万</code>=1e5、<code>亿</code>=1e8、<code>万</code>=1e4、<code>千</code>=1e3、<code>百</code>=1e2、<code>十</code>=1e1），<strong>只对数值相同而写法不同的成对条目</strong>生成候选，总数上限 20 条。</p>
