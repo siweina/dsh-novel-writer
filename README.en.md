@@ -1,4 +1,4 @@
-# 📚 dsh-novel-writer — on-device style checkup for novel writers
+# 📚 dsh-novel-writer — an on-device writing workstation for novel writers
 
 English | [中文](./README.md)
 
@@ -10,14 +10,27 @@ English | [中文](./README.md)
 [![GitHub stars](https://img.shields.io/github/stars/siweina/dsh-novel-writer.svg?style=flat-square&color=orange)](https://github.com/siweina/dsh-novel-writer/stargazers)
 [![siweina/dsh-novel-writer MCP server](https://glama.ai/mcp/servers/siweina/dsh-novel-writer/badges/score.svg)](https://glama.ai/mcp/servers/siweina/dsh-novel-writer)
 
-**18 tools that turn "my writing drifted" into numbers you can act on.**
-Sentence, emotion and style-baseline analysis all run **on your machine**: a 24MB Chinese model ships with the package,
+**18 tools covering the whole loop: gather inputs before you write → quantify & self-check → work a prioritised fix list → audit the cross-chapter structure.**
+One call before writing gathers **16 inputs** (missing one is how style drift starts); after you write, you don't just get numbers — you get a **priority-ordered to-do list** (line-anchored original text, current vs. target values, reference passages, **direction only, never ghost-written prose**); across chapters you can finally see "the thread snapped, a character vanished, a hook was forgotten".
+Sentence, emotion and semantic analysis all run **on your machine**: a 24MB Chinese model ships with the package,
 **zero API cost, your manuscript never leaves the device**. Built for DeepSeek Harness (DSH); the same engine is also
 exposed as a **stdio MCP server** for Claude Desktop / Cursor.
 
-[Install](#install) · [60-second start](#60-second-start) · [See the output](#see-the-output) · [The 18 tools](#provided-tools-18) · [MCP server](#mcp-server-usable-outside-dsh)
+[Install](#install) · [The writing loop](#the-writing-loop-end-to-end) · [60-second start](#60-second-start) · [See the output](#see-the-output) · [The 18 tools](#provided-tools-18) · [MCP server](#mcp-server-usable-outside-dsh)
 
 ---
+
+## The writing loop (end to end)
+
+| Step | What you say | Tool | What you get |
+|---|---|---|---|
+| ① **Gather** | "gather material for the next chapter" | `novel_chapter_brief` | **One call, 16 inputs**: previous chapter's closing text (hand-off) / its hook / this chapter's outline direction / relevant character cards / open plot threads with **how long they've been open** / worldview wording rules + banned words / six-metric baseline / reference passages & sentence skeletons / previous chapter's self-check / avoid-list / writing checklist — anything missing is reported in `degraded` with the reason and the fix |
+| ② **Write** | "write chapter N" | `novel_new_chapter` · `write` | The new chapter file (with the baseline μ attached and the reference pack); write by the anchors' flavour, use the numbers only to verify afterwards |
+| ③ **Self-check** | "check chapter N" | `novel_style_check` · `novel_sentence_analysis` | Similarity + deviation list + six-metric comparison (in band ✓ / out of band ⚠) + reference passages for the drifting dimensions (fix sentence by sentence, never rewrite the whole chapter) |
+| ④ **Revise** | "turn chapter N into a fix list" | `novel_fix_plan` | A to-do list sorted by severity → effort → line: line-anchored original text, current/target values, anchors, rewrite direction; then `verify` re-checks three states (resolved / still there / new) and `mark` records your disposition |
+| ⑤ **Audit** | "show me the book's structure" | `novel_plot { action: "graph" }` | Plot-thread spans / consecutive character absences / largest thread gap / timeline order / outline-vs-body drift |
+
+> **Everything local, read-only by default**: the brief and the structure view **write no files at all**; the fix desk writes only its own list file, **never touches your prose and never writes prose for you**; semantic search and emotion analysis cost zero tokens.
 
 ## What problem does it solve
 
@@ -25,6 +38,9 @@ exposed as a **stdio MCP server** for Claude Desktop / Cursor.
 |---|---|
 | "This passage I just wrote doesn't sound like me" | **Six-metric style baseline**: μ±σ of the original measured per chapter across syntactic complexity / modifier density / abstraction / action density / hedging / gap index; a new chapter is compared dimension by dimension and flagged ⚠ when out of band |
 | "The AI says my style changed but can't say where" | **Style check**: similarity score + a deviation list (which sentence types increased, how far sentence length drifted, whether the dominant emotion changed) |
+| "I have to poke six or seven tools before writing, and I still miss one" | **Chapter brief**: 16 inputs in one call; whatever can't be found is explained in `degraded` — **missing an input is the number one source of style drift and setting contradictions** |
+| "I can see the chapter has problems but not which one to fix first" | **Fix plan**: to-dos sorted by severity → effort → line, each with line-anchored text, current vs. target values, a reference passage and a rewrite direction; re-checkable in three states after editing |
+| "A thread snapped, a character vanished, a hook was forgotten — and it only shows up 50 chapters later" | **Structure view**: cross-chapter plot-thread spans, consecutive character-absence intervals, largest thread gap, timeline order, and outline-vs-body overlap |
 | "Analysing a novel means paying for API calls" | Semantic search and emotion analysis run **fully local** — zero token cost |
 | "I planted a plot thread and forgot to pay it off" | **Plot registry**: add / list / scan / done, automatically recording which chapters mention each thread |
 | "Character settings contradict each other" | **Five settings tables + continuity audit** (bridge / OOC / outline drift) |
@@ -55,7 +71,14 @@ appears in the sidebar.
 mkdir -p novels/my-novel     # put chapter files inside (第01章.md, 第02章.md, …)
 ```
 
-Then just ask in chat: **"run novel_style_report on my novel"** and you get:
+Then ask, in order (this is one complete chapter):
+
+1. **"gather material for the next chapter"** → `novel_chapter_brief` returns all 16 inputs in one call (it does the work of 6–8 tools, and **cannot miss one**)
+2. **"write chapter 7"** → write by the returned anchors and skeletons; `novel_new_chapter` attaches the baseline μ
+3. **"check chapter 7"** → `novel_style_check` returns similarity, a deviation list and the six-metric comparison
+4. **"turn chapter 7 into a fix list"** → `novel_fix_plan` returns the prioritised to-dos; run `verify` afterwards to re-check the three states
+
+To just look at the baseline first, ask **"run novel_style_report on my novel"** and you get:
 
 ```text
 全书 1329 字：六维基线 μ=句法复杂度:2.3 修饰密度:35.6 抽象度:0.5 动作密度:101.7 不确定性:2.1 留白指数:7.0
@@ -65,6 +88,38 @@ Then just ask in chat: **"run novel_style_report on my novel"** and you get:
 (Report text is currently Chinese-only — see the note for non-Chinese users below.)
 
 ## See the output
+
+**Chapter brief** (`novel_chapter_brief`, one call before writing):
+
+```text
+目标：第 8 章《（无标题）》（尚未创建，文件名推导为 第08章.md）
+
+【上一章结尾原文·承接口】…（previous chapter's last 300 / 600 chars, per budget）
+【待回收伏笔】
+  - [mu5kjla…] 琥珀色齿轮怀表的来历与停摆的指针（high｜第 1 章埋下，已过 6 章）
+【相关人物】- 林昭：守码头的女人，父亲失踪后回到旧宅
+【世界观用语】欧式中世纪沿海城邦；点烛不烧香｜禁用：上香、烧香、时辰、老夫
+【风格基线】complexity μ=2.42  modifierDensity μ=22.2  abstractDensity μ=10.06 …
+【原著锚段·照这个味道写】[对话] …  [心理] …
+【上一章自检】第 7 章六维对照：全部维度在容差带内 ✓
+【本章禁用清单】- 禁词：上香（建议改用：点烛）
+【开写清单】□ 先读锚段再动笔　□ 承接上一章结尾　□ …（共 8 步）
+【降级/提示】- 钩子记录里没有第 7 章的钩子（上一章钩子未回填）
+```
+
+**Fix plan** (`novel_fix_plan`, diagnostics turned into an ordered to-do list):
+
+```text
+改稿台：共 13 项待办（严重度降序 → 难度升序）。抽象度过高 ×3、衔接缺失 ×1、禁用词 ×3、语用不符 ×5、句式偏离 ×1。
+备注：留白指数 虽出带但差值 8.36 < 门槛 12，已按「无量级差异」忽略 ← the absolute-magnitude gate: no false positives
+
+  - [抽象度过高] 严重度 5 / 难度 2（第 5 行）
+      id：fix-abstract-5-c2c156d4
+      现状：abstractDensity 47.9　目标：0.55~6.95
+      原句：林昭大概说不清那种感觉。她隐隐觉得…
+      方向：抽象度偏离：全章 47.9（基线 3.75，偏差 +1177.3%），本段 74.38。这句抽象词过密，改成具体动作或物件。
+      锚段：林昭把它捏在掌心，翻过来看背面。背面刻着一行小字，被磨得只剩半边。她认出了父亲的名字。
+```
 
 **Style check** (new chapter vs. book baseline):
 
@@ -104,19 +159,19 @@ fixAnchors：3 条原著锚段（对话 / 心理 / 描写各一条，供逐句�
 
 ## Features
 
-1. **Style portrait report** (`novel_style_report`): 6-dimension measurement — style fingerprint / high-frequency lexicon / genre-theme / emotion quantification / 12-axis vibe spectrum / semantic style distance. **Measurement-judgment separation**: the plugin only reports numbers, never labels; AI judgment can be saved back to `.novel-writer/style-reports/` for consistent continuation writing.
-2. **12-axis vibe spectrum**: nightmare / angst / heartwarming / fluff / tearjerker / dark / mystery / blaze / absurd / lonesome / aesthetic / sensual — with traceable evidence, 0 token.
-3. **Local semantic engine**: bge-small-zh Chinese model (24MB, shipped with the plugin) local CPU inference — `novel_semantic_search` finds semantically related passages with natural language (with chapter location), semantic style comparison, semantic implicit emotion; lazy loading + graceful fallback.
-4. **Sentence-pattern analysis**: 9 categories, arrangement patterns, rhythm, emotion curve, style fingerprint + guidance, with cache & report export.
-5. **Emotion purification & quantification**: strong/weak emotion-word grading, pollution detection, caveat warning + AI re-verification; Valence sliding window → variance V / delta Δ / conflict index C + implicit imagery carriers.
-6. **Worldview & pragmatics detection**: auto cultural-baseline detection with confidence; speechStyle title/honorifics/rituals/tone norms; genre & theme + webnovel signals.
-7. **Writing toolkit**: plot tracking / five settings tables (characters·locations·items·timeline·worldview) / chapter summaries / continuity audit / batch import / style check / continuation writing.
-8. **Per-tool UI toggles**: 「写作助手功能」 ("Writing Assistant") sidebar panel (master + grouped tool toggles + feature toggles), plain-language labels, data-dir usage & semantic-engine status display.
-9. **Style Baseline**: Six writing metrics (syntactic complexity / modifier density / abstraction / action density / hedging / gap index) + per-chapter μ±σ baseline band; `novel_style_report` outputs the band, `novel_style_check` compares new chapters (in-band ✓ / out-of-band ⚠); per-metric ±% tolerance configurable in the sidebar (**recommended = 1.5× σ of the book's chapter variance**, rounded, clamped to ±10%~100%; leave blank to use recommended) — free theme, writing style kept inside the band.
-10. **Writing sentinels**: `novel_continuity_check` extended — ①**bridge check** (`chapter`: time jumps / semantic distance / character continuity / hook handoff, with quoted evidence) ②**OOC check** (`ooc`: per-character emotion baseline deviation) ③**outline drift** (`outline`: direction vs body keyword overlap); **brief mode** for report tools.
-11. **Original mode & creation files**: fill in creation settings in the sidebar (worldview/characters/forbidden/main conflict/genre/extras, blank = model decides, per-book profile library); novel_outline maintains creation files (bible/characters/outline/hooks/status), enforcing the bible → outline → hook chain with dynamic batches (10→20→30 chapters) to prevent plot jumps and OOC.
-12. **Experience & stats**: main panel **library stats** (per-book chapters/total chars/7-day active chars, 🔥 green), **🎬 demo** (built-in sample, no files, runs the 6-dim baseline), **📊 report history** (analysis/style-reports browsing); actionable error hints; slimmer tool descriptions.
-13. **Writing-desk trio**: `novel_chapter_brief` (**chapter brief**) — **one call** before you start writing gathers every input (previous-chapter hand-off / chapter direction / relevant characters / open plot threads / wording rules / style baseline / anchors & skeletons / avoid-list / checklist); anything unavailable lands in `degraded` with the reason; `novel_fix_plan` (**fix plan**) — turns style diagnostics into a priority-ordered to-do list (line-anchored original text + current vs. target values + reference passages + rewrite direction) with `plan` / `verify` / `mark` and a three-state re-check, **direction only, never generates prose**; `novel_plot { action: "graph" }` (**structure view**) — plot-thread spans / consecutive character absences / thread gaps / timeline order / outline-vs-body overlap. Plus **scene-scoped prompts** (general / writing / revising / auditing / setup; `general` is the old behaviour).
+1. **The writing-desk trio**: `novel_chapter_brief` (**chapter brief**) — **one call** before you start writing gathers every input (previous-chapter hand-off / chapter direction / relevant characters / open plot threads / wording rules / style baseline / anchors & skeletons / avoid-list / checklist; two `budget` modes: compact / full); anything unavailable lands in `degraded` with the reason; read-only, writes nothing. `novel_fix_plan` (**fix plan**) — turns style diagnostics into a priority-ordered to-do list (line-anchored original text + current vs. target values + reference passages + rewrite direction) with `plan` / `verify` / `mark` and a three-state re-check, **direction only, never generates prose**. `novel_plot { action: "graph" }` (**structure view**) — plot-thread spans / consecutive character absences / thread gaps / timeline order / outline-vs-body overlap. Plus **scene-scoped prompts** (general / writing / revising / auditing / setup; `general` is the old behaviour).
+2. **Style portrait report** (`novel_style_report`): 6-dimension measurement — style fingerprint / high-frequency lexicon / genre-theme / emotion quantification / 12-axis vibe spectrum / semantic style distance. **Measurement-judgment separation**: the plugin only reports numbers, never labels; AI judgment can be saved back to `.novel-writer/style-reports/` for consistent continuation writing.
+3. **12-axis vibe spectrum**: nightmare / angst / heartwarming / fluff / tearjerker / dark / mystery / blaze / absurd / lonesome / aesthetic / sensual — with traceable evidence, 0 token.
+4. **Local semantic engine**: bge-small-zh Chinese model (24MB, shipped with the plugin) local CPU inference — `novel_semantic_search` finds semantically related passages with natural language (with chapter location), semantic style comparison, semantic implicit emotion; lazy loading + graceful fallback.
+5. **Sentence-pattern analysis**: 9 categories, arrangement patterns, rhythm, emotion curve, style fingerprint + guidance, with cache & report export.
+6. **Emotion purification & quantification**: strong/weak emotion-word grading, pollution detection, caveat warning + AI re-verification; Valence sliding window → variance V / delta Δ / conflict index C + implicit imagery carriers.
+7. **Worldview & pragmatics detection**: auto cultural-baseline detection with confidence; speechStyle title/honorifics/rituals/tone norms; genre & theme + webnovel signals.
+8. **Writing toolkit**: plot tracking / five settings tables (characters·locations·items·timeline·worldview) / chapter summaries / continuity audit / batch import / style check / continuation writing.
+9. **Per-tool UI toggles**: 「写作助手功能」 ("Writing Assistant") sidebar panel (master + grouped tool toggles + feature toggles), plain-language labels, data-dir usage & semantic-engine status display.
+10. **Style Baseline**: Six writing metrics (syntactic complexity / modifier density / abstraction / action density / hedging / gap index) + per-chapter μ±σ baseline band; `novel_style_report` outputs the band, `novel_style_check` compares new chapters (in-band ✓ / out-of-band ⚠); per-metric ±% tolerance configurable in the sidebar (**recommended = 1.5× σ of the book's chapter variance**, rounded, clamped to ±10%~100%; leave blank to use recommended) — free theme, writing style kept inside the band.
+11. **Writing sentinels**: `novel_continuity_check` extended — ①**bridge check** (`chapter`: time jumps / semantic distance / character continuity / hook handoff, with quoted evidence) ②**OOC check** (`ooc`: per-character emotion baseline deviation) ③**outline drift** (`outline`: direction vs body keyword overlap); **brief mode** for report tools.
+12. **Original mode & creation files**: fill in creation settings in the sidebar (worldview/characters/forbidden/main conflict/genre/extras, blank = model decides, per-book profile library); novel_outline maintains creation files (bible/characters/outline/hooks/status), enforcing the bible → outline → hook chain with dynamic batches (10→20→30 chapters) to prevent plot jumps and OOC.
+13. **Experience & stats**: main panel **library stats** (per-book chapters/total chars/7-day active chars, 🔥 green), **🎬 demo** (built-in sample, no files, runs the 6-dim baseline), **📊 report history** (analysis/style-reports browsing); actionable error hints; slimmer tool descriptions.
 
 ---
 
@@ -189,7 +244,7 @@ start the server with `--allow-external-src`. Details: [mcp/README.md](./mcp/REA
 
 ## Data Directory
 
-Under `<library-root>/.novel-writer/`: `plots` / `settings` / `summaries` / `analysis` / `audits` / `embedding` / `style-reports`.
+Under `<library-root>/.novel-writer/`: `plots` / `settings` / `summaries` / `analysis` / `audits` (continuity audits + fix-plan lists) / `embedding` / `style-reports`.
 
 ---
 
