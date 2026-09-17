@@ -121,6 +121,6 @@ python -m http.server 8080
 
 页面数字与链接取自插件仓库的实际状态（v4.3.1）：16 个工具、`bge-small-zh-v1.5` 量化模型约 24MB、Node ≥ 22.3、Glama 评分 B / 16 tools、npm latest 4.3.1。发新版后需同步首屏版本号与胶囊链接、`#trust` 区块、页脚链接。
 
-> **v4.3.1 的站点改动已写好但尚未推送**（等插件发版时一并推）：全部 16 个工具页的 JSON-LD `softwareVersion` → 4.3.1；首屏品牌版本号、胶囊内的 Release 链接与 `#trust` 的 `latest` → 4.3.1；`novel-read` / `novel-chapters` / `novel-continuity-check` 三页各加一个 `v4.3.1` 变更提示块（`.warn.note`），并同步修正 `novel-read` 的查找顺序、`novel-keywords` 的章节解析顺序、`novel-summary` 的同章号共用槽位说明。**推送前必须先发 GitHub Release**（否则胶囊里的 `v4.3.1 已发布` 与 npm/Release 链接会对不上）。
+> **v4.3.1 已于 2026-09-17 发布**（站点与代码同一次推送）：全部 16 个工具页的 JSON-LD `softwareVersion` → 4.3.1；首屏品牌版本号、胶囊内的 Release 链接与 `#trust` 的 `latest` → 4.3.1；`novel-read` / `novel-chapters` / `novel-continuity-check` 三页各加一个 `v4.3.1` 变更提示块（`.warn.note`），并同步修正 `novel-read` 的查找顺序、`novel-keywords` 的章节解析顺序、`novel-summary` 的同章号共用槽位说明。**注意发版顺序**：站点与 tag 同一次推送时，Pages 重建与 CI 发包是并发的，会有 1–3 分钟窗口内「胶囊写着已发布但 Release/npm 还没就绪」。
 
 技术文档子页面的参数与公式均取自插件源码（`lib/index.js`、`lib/analysis.js`、`lib/style-metrics.js`、`lib/embedding.js`、`lib/core.js`、`mcp/server.mjs`），改动实现后请同步更新对应页面。
