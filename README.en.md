@@ -1,7 +1,5 @@
 # 📚 dsh-novel-writer — on-device style checkup for novel writers
 
-> 🌐 **[Project site](https://siweina.github.io/dsh-novel-writer/)** · [Technical docs — implementation details, formulas and limits for all 16 tools](https://siweina.github.io/dsh-novel-writer/tools/)
-
 English | [中文](./README.md)
 
 [![npm version](https://img.shields.io/npm/v/dsh-novel-writer.svg?style=flat-square&color=blue)](https://www.npmjs.com/package/dsh-novel-writer)
@@ -12,12 +10,12 @@ English | [中文](./README.md)
 [![GitHub stars](https://img.shields.io/github/stars/siweina/dsh-novel-writer.svg?style=flat-square&color=orange)](https://github.com/siweina/dsh-novel-writer/stargazers)
 [![siweina/dsh-novel-writer MCP server](https://glama.ai/mcp/servers/siweina/dsh-novel-writer/badges/score.svg)](https://glama.ai/mcp/servers/siweina/dsh-novel-writer)
 
-**16 tools that turn "my writing drifted" into numbers you can act on.**
+**18 tools that turn "my writing drifted" into numbers you can act on.**
 Sentence, emotion and style-baseline analysis all run **on your machine**: a 24MB Chinese model ships with the package,
 **zero API cost, your manuscript never leaves the device**. Built for DeepSeek Harness (DSH); the same engine is also
 exposed as a **stdio MCP server** for Claude Desktop / Cursor.
 
-[Install](#install) · [60-second start](#60-second-start) · [See the output](#see-the-output) · [The 16 tools](#provided-tools-16) · [MCP server](#mcp-server-usable-outside-dsh)
+[Install](#install) · [60-second start](#60-second-start) · [See the output](#see-the-output) · [The 18 tools](#provided-tools-18) · [MCP server](#mcp-server-usable-outside-dsh)
 
 ---
 
@@ -94,7 +92,7 @@ fixAnchors：3 条原著锚段（对话 / 心理 / 描写各一条，供逐句�
 | Cost | **0 (local inference)** | Billed per token | Self-hosted |
 | Purpose-built for Chinese fiction | **Yes** | Generic | No |
 | Style baseline (μ±σ) | **Yes** | Rare | No |
-| DSH integration | **16 tools + sidebar toggles** | None | None |
+| DSH integration | **18 tools + sidebar toggles** | None | None |
 | Usable without DSH | **Yes (MCP)** | Yes | You wrap it yourself |
 
 > **A note for non-Chinese users**: this plugin is designed for analysing and writing Chinese fiction — the sentence-pattern,
@@ -118,10 +116,11 @@ fixAnchors：3 条原著锚段（对话 / 心理 / 描写各一条，供逐句�
 10. **Writing sentinels**: `novel_continuity_check` extended — ①**bridge check** (`chapter`: time jumps / semantic distance / character continuity / hook handoff, with quoted evidence) ②**OOC check** (`ooc`: per-character emotion baseline deviation) ③**outline drift** (`outline`: direction vs body keyword overlap); **brief mode** for report tools.
 11. **Original mode & creation files**: fill in creation settings in the sidebar (worldview/characters/forbidden/main conflict/genre/extras, blank = model decides, per-book profile library); novel_outline maintains creation files (bible/characters/outline/hooks/status), enforcing the bible → outline → hook chain with dynamic batches (10→20→30 chapters) to prevent plot jumps and OOC.
 12. **Experience & stats**: main panel **library stats** (per-book chapters/total chars/7-day active chars, 🔥 green), **🎬 demo** (built-in sample, no files, runs the 6-dim baseline), **📊 report history** (analysis/style-reports browsing); actionable error hints; slimmer tool descriptions.
+13. **Writing-desk trio**: `novel_chapter_brief` (**chapter brief**) — **one call** before you start writing gathers every input (previous-chapter hand-off / chapter direction / relevant characters / open plot threads / wording rules / style baseline / anchors & skeletons / avoid-list / checklist); anything unavailable lands in `degraded` with the reason; `novel_fix_plan` (**fix plan**) — turns style diagnostics into a priority-ordered to-do list (line-anchored original text + current vs. target values + reference passages + rewrite direction) with `plan` / `verify` / `mark` and a three-state re-check, **direction only, never generates prose**; `novel_plot { action: "graph" }` (**structure view**) — plot-thread spans / consecutive character absences / thread gaps / timeline order / outline-vs-body overlap. Plus **scene-scoped prompts** (general / writing / revising / auditing / setup; `general` is the old behaviour).
 
 ---
 
-## Provided Tools (16)
+## Provided Tools (18)
 
 | Tool | Description |
 |------|-------------|
@@ -132,21 +131,23 @@ fixAnchors：3 条原著锚段（对话 / 心理 / 描写各一条，供逐句�
 | `novel_new_chapter` | Create new chapter file |
 | `novel_import` | Batch import manuscripts |
 | `novel_sentence_analysis` | Sentence-pattern analysis |
-| `novel_sentence_config` | View/set tool & feature toggles |
+| `novel_sentence_config` | View/set tool & feature toggles (incl. prompt scene) |
 | `novel_style_check` | Style check (rule + semantic) |
 | `novel_style_report` | **Style portrait report** (6-dim measurement) |
-| `novel_plot` | Plot/foreshadowing tracker |
+| `novel_plot` | Plot/foreshadowing tracker; `action: "graph"` structure view (plot-thread spans / consecutive character absences / thread gaps / timeline order / outline-vs-body overlap) |
 | `novel_settings` | Settings management (+worldview) |
 | `novel_summary` | Chapter summaries |
 | `novel_continuity_check` | Continuity audit + **bridge/OOC/outline sentinels** |
 | `novel_semantic_search` | Semantic search (local embedding, 0 token) |
 | `novel_outline` | **Creation-file management** (bible/characters/outline/hooks/status) |
+| `novel_chapter_brief` | **Chapter brief** — one call before writing gathers everything (previous-chapter hand-off / chapter direction / characters / open threads / wording rules / style baseline / anchors & skeletons / avoid-list / checklist) |
+| `novel_fix_plan` | **Fix plan** — turns style diagnostics into a priority-ordered to-do list (line anchors + reference passages), re-checkable after edits; **direction only, never generates prose** |
 
 ---
 
 ## MCP server (usable outside DSH)
 
-The package ships a **stdio MCP server** (`mcp/server.mjs`) that exposes all 16 tools to any MCP client,
+The package ships a **stdio MCP server** (`mcp/server.mjs`) that exposes all 18 tools to any MCP client,
 e.g. Claude Desktop or Cursor. **It runs as a local process on your own machine — no server, no network, no daemon.**
 
 ```bash

@@ -4,6 +4,7 @@ import { mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, readdirSync
 import { join } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { apply } from "../lib/index.js";
+import { ALL_TOOLS } from "../lib/core.js"; // v5.0.0：工具清单的单一事实源
 
 // v3.9.5 修正（H3）：先隔离 env、再解析 STATE_FILE——旧版在模块加载时先绑定了用户真实 ~/.dsh 路径，
 // 退出处理器可能写回/删除真实用户配置；testRoot 也移出仓库目录（不再在 test/ 下留残渣）
@@ -42,7 +43,14 @@ apply(ctx, { root: testRoot, sentenceAnalysis: { enabled: true, autoAnalyze: tru
 const defs = Object.fromEntries(registry.map((d) => [d.name, d]));
 const names = registry.map((d) => d.name);
 console.log("工具数:", names.length, names.join(", "));
-if (names.length !== 16) throw new Error("expected 16 tools (v3.1.0)");
+// v5.0.0：工具数断言改为与 lib/core.js 的 ALL_TOOLS **单一事实源**对齐。
+// 旧版硬编码 `names.length !== 16`：每加一个工具都要改测试，而且只能发现"少注册"，发现不了"多注册"。
+// 现在双向比对：注册表与 ALL_TOOLS 必须完全一致（顺序无关）。
+const expectedToolNames = [...ALL_TOOLS].sort();
+const actualToolNames = [...names].sort();
+if (JSON.stringify(actualToolNames) !== JSON.stringify(expectedToolNames)) {
+  throw new Error("注册的工具与 ALL_TOOLS 不一致\n  实际: " + actualToolNames.join(", ") + "\n  期望: " + expectedToolNames.join(", "));
+}
 
 const exec = { agent: { session: { header: { cwd: testRoot } } } };
 
@@ -155,7 +163,10 @@ await (async function outputContractCheck() {
     novel_summary: { book: "测试", root: testRoot },
     novel_continuity_check: { book: "测试", chapter: "第02章", root: testRoot },
     novel_style_report: { book: "测试", brief: true, root: testRoot },
-    novel_outline: { book: "测试", action: "read", file: "status", root: testRoot }
+    novel_outline: { book: "测试", action: "read", file: "status", root: testRoot },
+    // v5.0.0：写作能力层的两个新工具也纳入循环契约校验
+    novel_chapter_brief: { book: "测试", chapter: "1", root: testRoot },
+    novel_fix_plan: { book: "测试", chapter: "第01章", action: "plan", root: testRoot }
   };
   // v4.0.0：这 4 个工具没有"循环调用样例"（analysis 会写缓存与 miss 断言冲突），改为在各自调用点断言契约
   const CONTRACT_AT_CALLSITE = ["novel_new_chapter", "novel_import", "novel_sentence_analysis", "novel_semantic_search"];
@@ -702,6 +713,533 @@ await (async function duplicateChapterRegression() {
   const cleanRead = await defs.novel_read.execute({ book: "测试", chapter: "1", root: testRoot }, exec);
   if (!String(cleanRead.path).endsWith("第01章.md")) throw new Error("无重号书按章号读取异常: " + cleanRead.path);
   console.log("v4.3.1 同章号回归: 列表提示 / 文件名优先 / 章号歧义拒绝 / 审计检出 / 无重号书零误报 ✓");
+})();
+
+// ============================================================================
+// v5.0.0：写作能力层三件套的功能性断言（开写包 / 改稿台 / 结构视图）
+// 夹具原则：本段全部自建独立书目，**不往 novels/测试/ 里加改任何文件**（那本书被上方大量既有断言依赖）；
+// 三段各自独立、互不依赖执行顺序，书名的命名也刻意避开既有夹具书（测试/衔接样本/扫描样本/重号样本…）。
+// ============================================================================
+
+// v5.0.0：接线前置检查——两个新工具必须同时存在于注册表与 ALL_TOOLS 单一事实源（工具数不硬编码，沿用文件顶部对齐口径）；
+// novel_plot 的参数 schema 必须已声明 graph（schema 与实际 action 分支脱节时，宿主会在调用前就拒收）。
+await (async function v5WiringPreflight() {
+  for (const toolName of ["novel_chapter_brief", "novel_fix_plan"]) {
+    if (!defs[toolName]) throw new Error("v5.0.0 工具未在注册表中: " + toolName);
+    if (!ALL_TOOLS.includes(toolName)) throw new Error("v5.0.0 工具未进 ALL_TOOLS 单一事实源: " + toolName);
+    if (!names.includes(toolName)) throw new Error("v5.0.0 工具未出现在注册表名称列表: " + toolName);
+  }
+  const plotActions = defs.novel_plot?.parameters?.properties?.action?.enum ?? [];
+  if (!plotActions.includes("graph")) throw new Error("novel_plot 参数 schema 未声明 graph action: " + plotActions.join(","));
+  console.log("v5.0.0 接线: chapter_brief / fix_plan 与 ALL_TOOLS 一致；novel_plot action 已含 graph ✓");
+})();
+
+// ---------- v5.0.0 ①：开写包 novel_chapter_brief（主路径 / 两档预算 / 降级 / isNext） ----------
+await (async function chapterBriefRegression() {
+  const BOOK = "开写包样本";
+  const writeChapter = (book, file, text) => {
+    mkdirSync(join(testRoot, "novels", book), { recursive: true });
+    writeFileSync(join(testRoot, "novels", book, file), text, "utf8");
+  };
+  // v5.0.0 夹具：3 章 + 多段正文 + 设定表（worldview 禁词 + 人物）+ 2 条 open 伏笔 + 创作资料（大纲/钩子/人物）。
+  // 段长都要 ≥40 字（buildStyleAnchorPackage 的抽样门槛），对话段 ≤200 字才会被选为「对话」锚段；
+  // 第 03 章写到 600 字以上，compact(300)/full(600) 两档的 anchor 截断长度才都可观测。
+  const briefCh1 = [
+    "“你真的要去码头？”老船工把缆绳在木桩上绕了两圈，眯着眼看她，“那地方夜里风大，去了也未必等得到人，趁早回吧。”",
+    "",
+    "“我等了三年。”她把袖口的水拧出来，声音很轻，“再等一夜也不算什么，反正家里也没有人在等我回去。”",
+    "",
+    "她心里明白，这一夜若是空手而归，往后就再也没有任何理由站在这条湿冷的栈桥上，继续等一个不会出现的人。",
+    "",
+    "栈桥上的水洼映着摇晃的灯影，风从海口方向一阵一阵地压过来，把远处桅杆上的铁环吹得叮当作响；岸边堆着几只废弃的鱼筐，筐底结着白色的盐霜，一只瘦猫从筐缝里钻出来，嗅了嗅，又钻了回去。",
+    "",
+    "雨停之后，云缝里漏下一点很淡的月光，正落在木桩之间那根断掉的缆绳上。她把缆绳捡起来绕好，放回原处，然后拢了拢衣领，慢慢往回走。",
+    ""
+  ].join("\n");
+  const briefCh2 = [
+    "第二天清晨，她把那本旧账册摊在桌上，一页一页地翻过去，找三年前的那一笔记录。",
+    "",
+    "账册的边角被虫子蛀了几个洞，凡是沾到水的地方都洇成了一片模糊的墨迹，只剩下零星几个还能认出来的字，她凑近了才看清那是个船号的尾数。",
+    "",
+    "她数了数剩下的铜钱，把它们分成三份，一份买米，一份付船钱，剩下的一份塞进贴身的布袋里。",
+    "",
+    "院子里的鸡叫了第三遍，隔壁的妇人开始在井边打水，木桶磕在石沿上，回声一阵一阵地荡过来，又慢慢地散开去，像什么都没有发生过。",
+    ""
+  ].join("\n");
+  const briefCh3 = [
+    "苏晚在码头等到了天快亮的时候，才看见那艘挂着灰帆的船慢慢靠了上来。",
+    "",
+    "船头站着一个披蓑衣的人，他没有说话，只是把手里的木匣递了下来，木匣上刻着一朵很浅的花，花瓣的边缘已经磨得看不出原来的形状。",
+    "",
+    "她接过木匣，指尖碰到匣面的时候，忽然想起父亲临走前说过的那句“别急着打开”，于是把手缩回去，抱在怀里没有动。",
+    "",
+    "潮水退下去以后，滩上留下一层浅浅的泥纹，远远看去像谁用手指在纸上划过的痕迹；她把伞靠在栏杆上，看着那条纹路一点一点被新一轮的浪抹平，然后转身往回走，脚底的沙在每一步里都发出细小的响声。",
+    "",
+    "天光一点点亮起来的时候，整条栈桥从灰蓝变成灰白，海面上浮着一层薄薄的雾气，远处的桅杆只剩下一根根竖着的黑影。偶尔有一只海鸟贴着水面掠过去，翅膀几乎碰到浪尖，然后又抬起来，消失在货栈后面那片低矮的屋脊之间；卖早点的摊子支起了棚布，白色的蒸汽从锅沿上冒出来，被风一吹就散进灰蒙蒙的天里，只剩下一股淡淡的咸腥味留在原地。",
+    "",
+    "她没有回头。船上的蓑衣人也没有再说话。两个人隔着一段不长不短的栈桥，各自站着，直到天完全亮透，货栈的门一扇一扇地被推开发出吱呀的响声。",
+    "",
+    "“船钱我给你留着。”她把布袋按在桌上，声音不高，“你只管把那匣子交到我手上，别问别的。”",
+    "",
+    "她在桥头站了很久，直到早起卖鱼的人推着独轮车从身边经过，轮子在石板上压出一串闷响，她才慢慢往巷子里走，衣角还在滴水。",
+    "",
+    "巷口的屋檐下挂着一盏没有点亮的灯笼，纸面上落了些灰，风一来，灯笼便贴着墙晃两下，发出很轻的响声，像是谁在远处应了一声，又像是谁把门轻轻地合上了。",
+    ""
+  ].join("\n");
+  writeChapter(BOOK, "第01章.md", briefCh1);
+  writeChapter(BOOK, "第02章.md", briefCh2);
+  writeChapter(BOOK, "第03章.md", briefCh3);
+  if (briefCh3.length <= 600) throw new Error("v5.0.0 夹具失效：第 03 章正文不足 600 字，两档 anchor 预算无法区分（实际 " + briefCh3.length + "）");
+  // 设定表：worldview（禁词 + 替代词 + 仪式规范 + 语用）+ 人物卡
+  await defs.novel_settings.execute({ book: BOOK, category: "worldview", action: "add", name: "海港基准", basis: "近海港口，帆船与铜钱", bannedWords: ["上香", "老夫"], recommended: { "上香": "点烛" }, ritual: "点烛不烧香", speechStyle: { tone: "口语化" }, root: testRoot }, exec);
+  await defs.novel_settings.execute({ book: BOOK, category: "character", action: "add", name: "苏晚", description: "等船的年轻女子", traits: "沉默、执拗", root: testRoot }, exec);
+  // 伏笔：2 条 open（一条 high、一条 medium），都要能判出 priority
+  await defs.novel_plot.execute({ book: BOOK, action: "add", content: "灰帆船上的木匣", chapter: "第02章", priority: "high", type: "道具", root: testRoot }, exec);
+  await defs.novel_plot.execute({ book: BOOK, action: "add", content: "父亲临走前的嘱托", chapter: "第03章", priority: "medium", type: "剧情", root: testRoot }, exec);
+  // 创作资料：大纲方向行（下一章 4）+ 上一章（3）钩子 + 主要人物
+  await defs.novel_outline.execute({ book: BOOK, action: "init", root: testRoot }, exec);
+  await defs.novel_outline.execute({ book: BOOK, action: "chapter", number: 1, title: "码头等船", root: testRoot }, exec);
+  await defs.novel_outline.execute({ book: BOOK, action: "chapter", number: 4, title: "苏晚打开木匣，看清里面的东西", root: testRoot }, exec);
+  await defs.novel_outline.execute({ book: BOOK, action: "hook", number: 3, body: "她抱着木匣站在栈桥上，天亮了也没有打开。", root: testRoot }, exec);
+  await defs.novel_outline.execute({ book: BOOK, action: "character", role: "main", name: "苏晚", description: "等船的年轻女子，沉默而执拗", root: testRoot }, exec);
+
+  // ── 主路径（compact）──
+  const compact = await defs.novel_chapter_brief.execute({ book: BOOK, chapter: "next", budget: "compact", root: testRoot }, exec);
+  assertOutputContract(defs.novel_chapter_brief, compact, "novel_chapter_brief(compact)");
+  // ① 约定字段齐全（schema.required + 夹具已登记材料的可选字段）
+  for (const key of ["book", "isNext", "anchor", "previousHook", "outlineDirection", "characters", "openPlots", "anchors", "skeletons", "lastVerdict", "avoid", "plan", "degraded"]) {
+    if (!(key in compact)) throw new Error("开写包缺约定字段: " + key);
+  }
+  if (!compact.worldview || !compact.baseline) throw new Error("夹具已登记世界观与 3 章正文，worldview/baseline 不应缺失");
+  // ② 目标章 = 推导出的下一章（本书命名格式为「第NN章.md」→ 第 04 章）
+  if (compact.chapter?.file !== "第04章.md" || compact.chapter?.number !== 4) throw new Error("下一章文件名推导错: " + JSON.stringify(compact.chapter));
+  if (compact.isNext !== true) throw new Error("下一章（尚未创建）isNext 应为 true，实际 " + compact.isNext);
+  // ③ anchor 非空且受 budget 截断（compact 300 字 / full 600 字）
+  if (typeof compact.anchor !== "string" || compact.anchor.trim() === "") throw new Error("anchor 为空（上一章正文应给出承接口原文）");
+  if (compact.anchor.length > 300) throw new Error("compact anchor 超预算：实际 " + compact.anchor.length + " > 300");
+  // ④ 未回收伏笔：非空 + 每条有 priority（并按 优先级 → distance 降序）
+  if (!Array.isArray(compact.openPlots) || compact.openPlots.length === 0) throw new Error("openPlots 为空（夹具已登记 2 条 open 伏笔）");
+  const prioRank = { high: 0, medium: 1, low: 2 };
+  for (const p of compact.openPlots) {
+    if (typeof p.priority !== "string" || !(p.priority in prioRank)) throw new Error("openPlots 条目 priority 非法: " + JSON.stringify(p));
+    if (typeof p.distance !== "number") throw new Error("openPlots 条目缺 distance: " + JSON.stringify(p));
+  }
+  for (let i = 1; i < compact.openPlots.length; i += 1) {
+    const prevPlot = compact.openPlots[i - 1];
+    const curPlot = compact.openPlots[i];
+    if (prioRank[prevPlot.priority] > prioRank[curPlot.priority]) throw new Error("openPlots 未按优先级降序: " + prevPlot.priority + " → " + curPlot.priority);
+    if (prioRank[prevPlot.priority] === prioRank[curPlot.priority] && prevPlot.distance < curPlot.distance) throw new Error("openPlots 同优先级未按 distance 降序: " + prevPlot.distance + " → " + curPlot.distance);
+  }
+  // ⑤ worldview.bannedWords 非空 → avoid 里必须有「禁词」类条目且逐词列出
+  if (!Array.isArray(compact.worldview.bannedWords) || compact.worldview.bannedWords.length === 0) throw new Error("worldview.bannedWords 为空（夹具已登记 2 个禁词）");
+  const bannedEntries = compact.avoid.filter((a) => a.kind === "禁词");
+  if (bannedEntries.length === 0) throw new Error("worldview 有 bannedWords 时 avoid 必须出现「禁词」类条目: " + JSON.stringify(compact.avoid));
+  for (const word of compact.worldview.bannedWords) {
+    if (!bannedEntries.some((a) => String(a.detail).includes(word))) throw new Error("avoid 禁词条目缺词「" + word + "」: " + JSON.stringify(bannedEntries.map((a) => a.detail)));
+  }
+  // ⑥ plan.checklist 必须是**非空字符串数组**（宿主 render 直接逐条渲染，空串/非字符串会渲染出空行）
+  if (!Array.isArray(compact.plan?.checklist) || compact.plan.checklist.length === 0) throw new Error("plan.checklist 不是非空数组: " + JSON.stringify(compact.plan));
+  for (const step of compact.plan.checklist) {
+    if (typeof step !== "string" || step.trim() === "") throw new Error("plan.checklist 含空/非字符串条目: " + JSON.stringify(step));
+  }
+  if (typeof compact.plan.previousState !== "string" || typeof compact.plan.goal !== "string") throw new Error("plan.previousState/goal 缺失");
+  // ⑦ 两档预算：compact ≤ full，且 full 确实放开了截断（anchors/skeletons 条数与 anchor 长度）
+  const full = await defs.novel_chapter_brief.execute({ book: BOOK, chapter: "next", budget: "full", root: testRoot }, exec);
+  assertOutputContract(defs.novel_chapter_brief, full, "novel_chapter_brief(full)");
+  if (full.anchor.length > 600) throw new Error("full anchor 超预算：实际 " + full.anchor.length + " > 600");
+  if (!(compact.anchor.length < full.anchor.length)) throw new Error("compact/full 的 anchor 截断长度未体现预算差异: " + compact.anchor.length + " / " + full.anchor.length);
+  if (!full.anchor.endsWith(compact.anchor)) throw new Error("full anchor 不是 compact anchor 的后缀（两档截断口径不一致）");
+  if (compact.anchors.length > full.anchors.length) throw new Error("anchors 条数违反 compact ≤ full: " + compact.anchors.length + " > " + full.anchors.length);
+  if (compact.skeletons.length > full.skeletons.length) throw new Error("skeletons 条数违反 compact ≤ full: " + compact.skeletons.length + " > " + full.skeletons.length);
+  if (!(full.anchors.length > compact.anchors.length)) throw new Error("full 档没有放开锚段截断（compact/full 条数相同: " + compact.anchors.length + "）");
+  // ⑧ 已存在的章：isNext 必须为 false
+  const existing = await defs.novel_chapter_brief.execute({ book: BOOK, chapter: "1", root: testRoot }, exec);
+  if (existing.isNext !== false) throw new Error("对已存在章调用时 isNext 应为 false，实际 " + existing.isNext);
+  if (existing.chapter?.file !== "第01章.md") throw new Error("已存在章未按章号命中: " + JSON.stringify(existing.chapter));
+  // ⑨ 人物卡：上一章出场 + 大纲方向 | 伏笔 distance | 上一章自检结论
+  if (!Array.isArray(compact.characters) || compact.characters.length === 0) throw new Error("characters 为空（苏晚在第 03 章出场且出现在第 4 章方向行）");
+  if (!compact.characters.some((c) => c.name === "苏晚" && c.mentions > 0 && (c.sources ?? []).includes("上一章出场"))) throw new Error("人物卡未按上一章正文计出场: " + JSON.stringify(compact.characters));
+  if (typeof compact.lastVerdict !== "string" || !compact.lastVerdict.includes("六维对照")) throw new Error("lastVerdict 缺失（3 章正文应能现算上一章六维对照）: " + compact.lastVerdict);
+  console.log("v5.0.0 开写包: 目标 " + compact.chapter.file + " | anchor " + compact.anchor.length + "/" + full.anchor.length + " 字 | 锚段 " + compact.anchors.length + "/" + full.anchors.length + " | 骨架 " + compact.skeletons.length + "/" + full.skeletons.length + " | 伏笔 " + compact.openPlots.length + " | 禁词条目 " + bannedEntries.length + " | 清单 " + compact.plan.checklist.length + " 步 ✓");
+
+  // ── 降级：只有 1 章、无设定表、无伏笔、无创作资料 → 不抛错 + degraded 说明缺什么 ──
+  const DEGRADED_BOOK = "开写降级";
+  writeChapter(DEGRADED_BOOK, "第01章.md", "她一个人走进空荡荡的屋子，把门关上，坐在桌边没有开灯。\n");
+  let degResult = null;
+  try {
+    degResult = await defs.novel_chapter_brief.execute({ book: DEGRADED_BOOK, chapter: "next", root: testRoot }, exec);
+  } catch (e) {
+    throw new Error("材料全缺时开写包不应抛错，实际抛出: " + String(e?.message ?? e));
+  }
+  assertOutputContract(defs.novel_chapter_brief, degResult, "novel_chapter_brief(degraded)");
+  if (!Array.isArray(degResult.degraded) || degResult.degraded.length === 0) throw new Error("降级书返回了空 degraded（材料缺失必须显式说明）");
+  if (degResult.characters.length !== 0 || degResult.openPlots.length !== 0) throw new Error("降级书 characters/openPlots 应为空数组: " + JSON.stringify({ characters: degResult.characters.length, openPlots: degResult.openPlots.length }));
+  if (degResult.anchor !== "" && degResult.anchor === undefined) throw new Error("降级 anchor 应为空字符串");
+  for (const missing of ["设定表", "伏笔"]) {
+    if (!degResult.degraded.some((d) => String(d).includes(missing))) throw new Error("degraded 未说明缺少「" + missing + "」: " + JSON.stringify(degResult.degraded));
+  }
+  console.log("v5.0.0 开写包降级: 不抛错 | characters/openPlots 空数组 | degraded " + degResult.degraded.length + " 条（含 设定表/伏笔/创作资料 缺失说明）✓");
+})();
+
+// ---------- v5.0.0 ②：改稿台 novel_fix_plan（plan / verify / mark / 落盘 / 不当误报） ----------
+await (async function fixPlanRegression() {
+  const BOOK = "改稿台样本";
+  const writeChapter = (book, file, text) => {
+    mkdirSync(join(testRoot, "novels", book), { recursive: true });
+    writeFileSync(join(testRoot, "novels", book, file), text, "utf8");
+  };
+  // v5.0.0 夹具：第 01 章正常（必须零误报），第 02 章刻意写坏——抽象词（感情/意义/状态）+ 世界观禁词（老夫）
+  // + 仪式/客套违例（上一柱香、提点、承蒙）+ 大量省略号 + 情感直给（非常痛苦/极其悲伤/十分难过/格外孤独）。
+  // 全书只有 2 章：改稿台的指标类检查需要「除本章外 ≥2 章基线」，此处按设计跳过（见 summary 备注），
+  // 因此本段覆盖的是「禁用词 / 语用不符 / 衔接缺失 / 情感过直」四类确定性判定，不含指标类。
+  const normalCh1 = "雨停之后，她沿着河堤慢慢往回走。岸边的芦苇被风吹得伏下去，又立起来。她把伞收好，抖了抖水，抬头看了看天色。远处有人在收摊，木轮碾过石板，声音很轻。回到院子里，她先把湿鞋放在台阶上，再进屋点了灯。\n";
+  const brokenCh2 = [
+    "她站在堂前，心里非常痛苦，也极其悲伤，那种感情与意义纠缠在一起，说不清是什么状态。",
+    "",
+    "老夫给她上一柱香，又添了茶，嘴里说着提点的话，承蒙她多年照拂这个家。",
+    "",
+    "她望着窗外……夜色很沉……她不知道该怎么办……也许一切都结束了……她十分难过，也格外孤独，忽然觉得这一切毫无意义。",
+    ""
+  ].join("\n");
+  writeChapter(BOOK, "第01章.md", normalCh1);
+  writeChapter(BOOK, "第02章.md", brokenCh2);
+  await defs.novel_settings.execute({ book: BOOK, category: "worldview", action: "add", name: "改稿台基准", basis: "中式旧宅", bannedWords: ["上香", "老夫"], recommended: { "上香": "点烛" }, speechStyle: { honorBad: ["提点", "承蒙"], honorGood: { "提点": "提醒" }, ritualBadPatterns: ["上[一二三四五六七八九十百千]*柱?香"], ritualGoodNote: "点烛", tone: "口语化" }, root: testRoot }, exec);
+  // 钩子记录：上一章钩子（铁匠铺/绿灯/风）与第 02 章开头字符几乎不重合 → 产出一条**无法精确到行**的 0/0 定位项，
+  // 用来真实覆盖「全章层面」分支（否则该分支在本段里是空断言）。
+  await defs.novel_outline.execute({ book: BOOK, action: "init", root: testRoot }, exec);
+  await defs.novel_outline.execute({ book: BOOK, action: "hook", number: 1, body: "铁匠铺门口挂着一盏绿灯，风一吹就晃。", root: testRoot }, exec);
+
+  // ── 硬要求：正常章零误报 ──
+  const clean = await defs.novel_fix_plan.execute({ book: BOOK, chapter: "第01章", action: "plan", root: testRoot }, exec);
+  assertOutputContract(defs.novel_fix_plan, clean, "novel_fix_plan(plan,正常章)");
+  if (clean.items.length !== 0) throw new Error("正常章被误报 " + clean.items.length + " 项: " + clean.items.map((it) => it.type + "@" + it.locate.lineStart).join(","));
+  console.log("v5.0.0 改稿台误报检查: 正常章 0 项待办 ✓");
+
+  // ── plan：条数 / 类型数 / 9 字段 / 排序 ──
+  const planRes = await defs.novel_fix_plan.execute({ book: BOOK, chapter: "第02章", action: "plan", root: testRoot }, exec);
+  assertOutputContract(defs.novel_fix_plan, planRes, "novel_fix_plan(plan)");
+  if (planRes.action !== "plan") throw new Error("plan 返回的 action 错: " + planRes.action);
+  const items = planRes.items;
+  if (items.length < 3) throw new Error("写坏的章待办不足 3 条: " + items.length);
+  const typeSet = [...new Set(items.map((it) => it.type))];
+  if (typeSet.length < 3) throw new Error("改稿台 type 种类不足 3 种: " + typeSet.join(","));
+  for (const it of items) {
+    for (const key of ["id", "type", "locate", "current", "target", "anchor", "severity", "effort", "hint"]) {
+      if (!(key in it)) throw new Error("改稿项缺约定字段「" + key + "」: " + JSON.stringify(it).slice(0, 160));
+    }
+    if (typeof it.id !== "string" || it.id === "") throw new Error("改稿项 id 非法: " + JSON.stringify(it.id));
+    if (typeof it.type !== "string" || it.type === "") throw new Error("改稿项 type 非法: " + JSON.stringify(it.type));
+    if (!it.locate || typeof it.locate !== "object") throw new Error("改稿项 locate 非法: " + JSON.stringify(it.locate));
+    for (const key of ["lineStart", "lineEnd", "excerpt"]) {
+      if (!(key in it.locate)) throw new Error("改稿项 locate 缺字段「" + key + "」: " + JSON.stringify(it.locate));
+    }
+    if (!Number.isFinite(it.severity) || it.severity < 1 || it.severity > 5) throw new Error("改稿项 severity 越界: " + it.severity);
+    if (!Number.isFinite(it.effort) || it.effort < 1 || it.effort > 3) throw new Error("改稿项 effort 越界: " + it.effort);
+    if (typeof it.hint !== "string" || it.hint.trim() === "") throw new Error("改稿项 hint 为空: " + it.id);
+  }
+  // 排序：severity 降序 → effort 升序 → lineStart 升序（逐对校验，与 sortItems 的比较键一一对应）
+  for (let i = 1; i < items.length; i += 1) {
+    const prevItem = items[i - 1];
+    const curItem = items[i];
+    if (prevItem.severity < curItem.severity) throw new Error("排序错（severity 未降序）: " + prevItem.id + " " + prevItem.severity + " → " + curItem.id + " " + curItem.severity);
+    if (prevItem.severity === curItem.severity && prevItem.effort > curItem.effort) throw new Error("排序错（同严重度下 effort 未升序）: " + prevItem.id + " " + prevItem.effort + " → " + curItem.id + " " + curItem.effort);
+    if (prevItem.severity === curItem.severity && prevItem.effort === curItem.effort && prevItem.locate.lineStart > curItem.locate.lineStart) throw new Error("排序错（同严重度/难度下 lineStart 未升序）: " + prevItem.id + " " + prevItem.locate.lineStart + " → " + curItem.id + " " + curItem.locate.lineStart);
+  }
+  // locate：0/0 = 全章层面（hint 必须说明不可精确到行）；否则两端都落在真实行内，绝不允许 lineStart > lineEnd
+  const ch2Lines = readFileSync(join(testRoot, "novels", BOOK, "第02章.md"), "utf8").split(/\r?\n/).length;
+  const wholeChapterHintRe = /全章层面|跨章层面|整体衔接|没有可精确定位的行/; // v5.0.0：三类实现（指标全章/伏笔跨章/衔接整体）各自的措辞
+  let zeroLocate = 0;
+  for (const it of items) {
+    const ls = it.locate.lineStart;
+    const le = it.locate.lineEnd;
+    if (ls > le) throw new Error("locate 区间反向（lineStart > lineEnd）: " + ls + " > " + le + " (" + it.id + ")");
+    if (ls === 0 && le === 0) {
+      zeroLocate += 1;
+      if (!wholeChapterHintRe.test(it.hint)) throw new Error("0/0 定位项的 hint 未说明是全章层面: " + it.id + " | " + it.hint);
+      if (String(it.locate.excerpt) !== "") throw new Error("0/0 定位项不应带 excerpt: " + it.id + " | " + it.locate.excerpt);
+    } else {
+      if (!(ls >= 1 && le >= 1)) throw new Error("locate 只有一个端点 > 0: " + ls + "/" + le + " (" + it.id + ")");
+      if (le > ch2Lines) throw new Error("locate 超出真实行数（本章共 " + ch2Lines + " 行）: " + ls + "-" + le + " (" + it.id + ")");
+      if (String(it.locate.excerpt).trim() === "") throw new Error("落在真实行上的项 excerpt 为空: " + it.id);
+    }
+  }
+  console.log("v5.0.0 改稿台 plan: " + items.length + " 项（" + typeSet.join("/") + "）| 严重度 " + items.map((it) => it.severity).join(",") + " | 0/0 全章层面项 " + zeroLocate + " 条 ✓");
+
+  // ── mark → verify ──
+  const targetItem = items[0];
+  const marked = await defs.novel_fix_plan.execute({ book: BOOK, chapter: "第02章", action: "mark", itemId: targetItem.id, state: "done", root: testRoot }, exec);
+  assertOutputContract(defs.novel_fix_plan, marked, "novel_fix_plan(mark)");
+  if (marked.ok !== true) throw new Error("mark 未返回 ok:true: " + JSON.stringify(marked.ok));
+  if (marked.item?.id !== targetItem.id || marked.item?.state !== "done") throw new Error("mark 未写回目标项状态: " + JSON.stringify(marked.item));
+  const verified = await defs.novel_fix_plan.execute({ book: BOOK, chapter: "第02章", action: "verify", root: testRoot }, exec);
+  assertOutputContract(defs.novel_fix_plan, verified, "novel_fix_plan(verify)");
+  const checkedItem = verified.checked.find((c) => c.id === targetItem.id);
+  if (!checkedItem) throw new Error("verify 未回报已落盘清单里的项 " + targetItem.id);
+  if (checkedItem.status === "new") throw new Error("已落盘清单项被 verify 判成 new（清单匹配失效）: " + JSON.stringify(checkedItem));
+  if (!["resolved", "pending"].includes(checkedItem.status)) throw new Error("verify 状态超出约定三态: " + checkedItem.status);
+  if (typeof verified.summary !== "string" || !verified.summary.includes("复测结果")) throw new Error("verify summary 缺失: " + verified.summary);
+  // ── 非法入参必须抛错（而不是静默当 skip / 静默成功）──
+  let badStateError = null;
+  try { await defs.novel_fix_plan.execute({ book: BOOK, chapter: "第02章", action: "mark", itemId: targetItem.id, state: "bogus", root: testRoot }, exec); } catch (e) { badStateError = String(e?.message ?? e); }
+  if (badStateError === null) throw new Error("mark 传非法 state 应抛错，实际成功返回");
+  if (!badStateError.includes("state")) throw new Error("非法 state 的报错未点明 state 参数: " + badStateError);
+  let noIdError = null;
+  try { await defs.novel_fix_plan.execute({ book: BOOK, chapter: "第02章", action: "mark", state: "done", root: testRoot }, exec); } catch (e) { noIdError = String(e?.message ?? e); }
+  if (noIdError === null) throw new Error("mark 缺 itemId 应抛错，实际成功返回");
+  if (!noIdError.includes("itemId")) throw new Error("缺 itemId 的报错未点明 itemId 参数: " + noIdError);
+  // ── 落盘：audits/fix-plan-*.json 必须存在，且 mark 的状态写回了文件 ──
+  const auditsDir = join(testRoot, ".novel-writer", "audits");
+  if (!existsSync(auditsDir)) throw new Error("改稿台未落盘 audits 目录: " + auditsDir);
+  const auditFiles = readdirSync(auditsDir).filter((f) => /^fix-plan-.*\.json$/.test(f));
+  if (auditFiles.length === 0) throw new Error("audits 下没有 fix-plan-*.json: " + JSON.stringify(readdirSync(auditsDir)));
+  if (!auditFiles.some((f) => f.includes(BOOK))) throw new Error("落盘的 fix-plan 文件名未包含书名: " + auditFiles.join(","));
+  if (!existsSync(planRes.planFile)) throw new Error("plan 返回的 planFile 不存在: " + planRes.planFile);
+  const savedPlan = JSON.parse(readFileSync(planRes.planFile, "utf8"));
+  if (!Array.isArray(savedPlan.items) || savedPlan.items.length !== items.length) throw new Error("落盘清单条数与返回值不一致: " + (savedPlan.items || []).length + " vs " + items.length);
+  const savedMarked = savedPlan.items.find((it) => it.id === targetItem.id);
+  if (savedMarked?.state !== "done") throw new Error("mark 的人工状态未写回清单文件: " + JSON.stringify(savedMarked?.state));
+  console.log("v5.0.0 改稿台 mark/verify: ok=true → " + checkedItem.status + " | 非法 state/缺 itemId 均抛错 | 落盘 " + auditFiles.length + " 个清单文件（人工状态已写回）✓");
+})();
+
+// ---------- v5.0.0 ②-b：改稿台的「指标类」分支（句式偏离/抽象度过高/留白异常） ----------
+// 为什么需要单独一本 3 章书：指标类判定要求「除本章外 ≥2 章」的基线（MIN_BASELINE_CHAPTERS=2，
+// 单章基线无法估计作者自身波动，整类被跳过），所以 2 章的「改稿台样本」按设计覆盖不到这一分支。
+// 这本 3 章书只用来覆盖指标类分支：第 01/03 章是正常行文（第 03 章刻意换一种「的」密度，让基线有波动），
+// 第 02 章沿用上面那段写坏的正文。
+await (async function fixPlanMetricBranch() {
+  const BOOK = "改稿台指标样本";
+  const writeChapter = (book, file, text) => {
+    mkdirSync(join(testRoot, "novels", book), { recursive: true });
+    writeFileSync(join(testRoot, "novels", book, file), text, "utf8");
+  };
+  const normalA = "雨停之后，她沿着河堤慢慢往回走。岸边的芦苇被风吹得伏下去，又立起来。她把伞收好，抖了抖水，抬头看了看天色。远处有人在收摊，木轮碾过石板，声音很轻。回到院子里，她先把湿鞋放在台阶上，再进屋点了灯。\n";
+  const normalB = "天刚亮，她提着水桶去井边打水。绳子勒进掌心，她换了一只手。井口的石沿上结着一层青苔，滑得很。她把桶拉上来，水面晃了晃，映出屋檐的一角。回屋以后，她把这桶水倒进缸里，又拿了抹布开始擦桌子。\n";
+  const brokenB = [
+    "她站在堂前，心里非常痛苦，也极其悲伤，那种感情与意义纠缠在一起，说不清是什么状态。",
+    "",
+    "老夫给她上一柱香，又添了茶，嘴里说着提点的话，承蒙她多年照拂这个家。",
+    "",
+    "她望着窗外……夜色很沉……她不知道该怎么办……也许一切都结束了……她十分难过，也格外孤独，忽然觉得这一切毫无意义。",
+    ""
+  ].join("\n");
+  writeChapter(BOOK, "第01章.md", normalA);
+  writeChapter(BOOK, "第02章.md", brokenB);
+  writeChapter(BOOK, "第03章.md", normalB);
+  await defs.novel_settings.execute({ book: BOOK, category: "worldview", action: "add", name: "改稿台基准", basis: "中式旧宅", bannedWords: ["上香", "老夫"], recommended: { "上香": "点烛" }, speechStyle: { honorBad: ["提点", "承蒙"], honorGood: { "提点": "提醒" }, ritualBadPatterns: ["上[一二三四五六七八九十百千]*柱?香"], ritualGoodNote: "点烛", tone: "口语化" }, root: testRoot }, exec);
+
+  const metricPlan = await defs.novel_fix_plan.execute({ book: BOOK, chapter: "第02章", action: "plan", root: testRoot }, exec);
+  assertOutputContract(defs.novel_fix_plan, metricPlan, "novel_fix_plan(plan,3章指标)");
+  const METRIC_TYPES = ["句式偏离", "抽象度过高", "留白异常"];
+  const TYPE_WHITELIST = [...METRIC_TYPES, "禁用词", "语用不符", "衔接缺失", "伏笔未回收", "情感过直"];
+  for (const it of metricPlan.items) {
+    if (!TYPE_WHITELIST.includes(it.type)) throw new Error("改稿台产出未约定的 type: " + it.type);
+  }
+  const metricItems = metricPlan.items.filter((it) => METRIC_TYPES.includes(it.type));
+  if (metricItems.length === 0) throw new Error("3 章基线下未触发任何指标类待办（collectMetricItems 分支零覆盖）: " + JSON.stringify(metricPlan.items.map((it) => it.type)));
+  const ch2LineCount = readFileSync(join(testRoot, "novels", BOOK, "第02章.md"), "utf8").split(/\r?\n/).length;
+  for (const it of metricPlan.items) {
+    for (const key of ["id", "type", "locate", "current", "target", "anchor", "severity", "effort", "hint"]) {
+      if (!(key in it)) throw new Error("指标类章节的待办缺字段「" + key + "」: " + JSON.stringify(it).slice(0, 160));
+    }
+    if (it.locate.lineStart > it.locate.lineEnd) throw new Error("locate 反向: " + JSON.stringify(it.locate));
+    if (it.locate.lineEnd > ch2LineCount) throw new Error("locate 超出真实行数 " + ch2LineCount + ": " + JSON.stringify(it.locate));
+  }
+  for (let i = 1; i < metricPlan.items.length; i += 1) {
+    const prevItem = metricPlan.items[i - 1];
+    const curItem = metricPlan.items[i];
+    if (prevItem.severity < curItem.severity) throw new Error("指标类章节排序错（severity 未降序）: " + prevItem.id + " → " + curItem.id);
+    if (prevItem.severity === curItem.severity && prevItem.effort > curItem.effort) throw new Error("指标类章节排序错（effort 未升序）: " + prevItem.id + " → " + curItem.id);
+    if (prevItem.severity === curItem.severity && prevItem.effort === curItem.effort && prevItem.locate.lineStart > curItem.locate.lineStart) throw new Error("指标类章节排序错（lineStart 未升序）: " + prevItem.id + " → " + curItem.id);
+  }
+  // 指标类问题必须能落到具体段落（段落归因），并带上可对照的原著锚段
+  if (!metricItems.some((it) => it.locate.lineStart > 0)) throw new Error("指标类项全部没有段落级落点（段落归因失效）: " + JSON.stringify(metricItems.map((it) => it.locate)));
+  if (!metricItems.some((it) => String(it.anchor).trim() !== "")) throw new Error("指标类项未带可参照的原著锚段 anchor: " + JSON.stringify(metricItems.map((it) => it.anchor)));
+  // 硬要求：正常章零误报（3 章基线同样不得误报）
+  const cleanThree = await defs.novel_fix_plan.execute({ book: BOOK, chapter: "第01章", action: "plan", root: testRoot }, exec);
+  if (cleanThree.items.length !== 0) throw new Error("3 章基线下的正常章被误报 " + cleanThree.items.length + " 项: " + cleanThree.items.map((it) => it.type + "@" + it.locate.lineStart).join(","));
+  const metricTypeSet = [...new Set(metricItems.map((it) => it.type))];
+  console.log("v5.0.0 改稿台指标类分支: 3 章基线 → 待办 " + metricPlan.items.length + " 项（指标类 " + metricItems.length + " 条: " + metricTypeSet.join("/") + "，severity " + metricItems.map((it) => it.severity).join(",") + "）| 正常章仍 0 项 ✓");
+})();
+
+// ---------- v5.0.0 ③：结构视图 novel_plot{action:"graph"}（伏笔跨度 / 人物缺席 / 降级 / list 不受影响） ----------
+await (async function storyGraphRegression() {
+  const BOOK = "结构视图样本";
+  const writeChapter = (book, file, text) => {
+    mkdirSync(join(testRoot, "novels", book), { recursive: true });
+    writeFileSync(join(testRoot, "novels", book, file), text, "utf8");
+  };
+  // v5.0.0 夹具：8 章。林昭 第 1~3 章出场、第 4 章起完全消失；沈砚 第 5 章才首次出场（用来验证「出场前的章不算缺席」）。
+  // 伏笔：2 条 open（A 第 1 章埋下、B 第 3 章登记）+ 1 条 done（不得进 plotLifecycle）。
+  const graphTexts = [
+    "林昭在码头等了一整夜。她捡起那枚琥珀色齿轮怀表，金属外壳冰凉，指针停在三点。",
+    "林昭回到旧宅，把怀表放在桌上。沈家的人在门外来回踱步，她没有开门。",
+    "林昭终于打开父亲留下的木箱，里面只有一张泛黄的海图。",
+    "海风把帆吹得鼓起，船队向着雾里驶去。甲板上的人各自沉默。",
+    "沈砚站在船头，手里握着那卷海图。他问船长还有几天靠岸。",
+    "沈砚在舱里写完了那封信，又把它撕碎。",
+    "雾散了，远处出现一座礁岛。沈砚让人放慢船速。",
+    "沈砚最后一个走下船，脚印很快被潮水抹平。"
+  ];
+  graphTexts.forEach((text, i) => writeChapter(BOOK, "第" + String(i + 1).padStart(2, "0") + "章.md", text + "\n"));
+  await defs.novel_settings.execute({ book: BOOK, category: "character", action: "add", name: "林昭", description: "守码头的人", root: testRoot }, exec);
+  await defs.novel_settings.execute({ book: BOOK, category: "character", action: "add", name: "沈砚", description: "随船出海的人", root: testRoot }, exec);
+  // A：正文里真的提到（关键词命中路径）→ firstChapter=1；B：只靠登记的 chapter 字段 → firstChapter=3
+  const addA = await defs.novel_plot.execute({ book: BOOK, action: "add", content: "琥珀色齿轮怀表的来历", chapter: "第01章", priority: "high", type: "道具", root: testRoot }, exec);
+  const addB = await defs.novel_plot.execute({ book: BOOK, action: "add", content: "沉船底的青铜罗盘", chapter: "第03章", priority: "medium", type: "道具", root: testRoot }, exec);
+  const addC = await defs.novel_plot.execute({ book: BOOK, action: "add", content: "断剑上的铭文", chapter: "第02章", type: "剧情", root: testRoot }, exec);
+  const idA = addA.entries[0].id;
+  const idB = addB.entries[0].id;
+  const idC = addC.entries[0].id;
+  await defs.novel_plot.execute({ book: BOOK, action: "done", id: idC, root: testRoot }, exec);
+
+  // v5.0.0 P1 回归：时间线里「章号解析不出来」的条目（只有 day/event）必须**省略 number 键**而不是写 null。
+  // 写 null 会被调用方的 dropNullDeep 删掉，若 schema 又把 number 列为 required，整个 graph 响应就会违反
+  // 宿主契约（宿主 schema 不支持 type 数组，无法声明 ["number","null"]）。这里同时验证 required 键齐全。
+  await defs.novel_settings.execute({ book: BOOK, category: "timeline", action: "add", day: "第1天", event: "抵达码头", chapter: "第02章", root: testRoot }, exec);
+  await defs.novel_settings.execute({ book: BOOK, category: "timeline", action: "add", day: "第3天", event: "出海那天", chapter: "出海的当天", root: testRoot }, exec);
+  await defs.novel_settings.execute({ book: BOOK, category: "timeline", action: "add", day: "第2天", event: "回想旧事", chapter: "第01章", root: testRoot }, exec);
+
+  const graph = await defs.novel_plot.execute({ book: BOOK, action: "graph", root: testRoot }, exec);
+  assertOutputContract(defs.novel_plot, graph, "novel_plot(graph)");
+  if (graph.action !== "graph" || graph.book !== BOOK) throw new Error("graph 返回的 action/book 错: " + JSON.stringify({ action: graph.action, book: graph.book }));
+  // graph 分支要靠空 entries 满足共享 schema 的 required（不能为了一个 action 放松契约）
+  if (!Array.isArray(graph.entries) || graph.entries.length !== 0) throw new Error("graph 分支未返回空 entries（共享 required 会被违反）: " + JSON.stringify(graph.entries));
+  if (graph.totalChapters !== 8) throw new Error("totalChapters 错: " + graph.totalChapters);
+  // plotLifecycle：只含 open 的两条；distance = 最大章号 − 最早提及章号
+  if (!Array.isArray(graph.plotLifecycle) || graph.plotLifecycle.length !== 2) throw new Error("plotLifecycle 应只含 2 条 open 伏笔: " + JSON.stringify(graph.plotLifecycle));
+  const lifeA = graph.plotLifecycle.find((p) => p.id === idA);
+  const lifeB = graph.plotLifecycle.find((p) => p.id === idB);
+  if (!lifeA || !lifeB) throw new Error("plotLifecycle 缺登记的 open 伏笔: " + JSON.stringify(graph.plotLifecycle.map((p) => p.id)));
+  if (lifeA.firstChapter !== 1 || lifeA.distance !== 7) throw new Error("伏笔 A 埋设章/跨度错（应为 第1章/7）: " + JSON.stringify(lifeA));
+  if (lifeB.firstChapter !== 3 || lifeB.distance !== 5) throw new Error("伏笔 B 埋设章/跨度错（应为 第3章/5）: " + JSON.stringify(lifeB));
+  for (const p of graph.plotLifecycle) {
+    if (p.status !== "open") throw new Error("plotLifecycle 混入非 open 条目: " + JSON.stringify(p));
+    if (p.distance !== graph.totalChapters - p.firstChapter) throw new Error("distance ≠ 最大章号 − 最早提及章号: " + JSON.stringify(p));
+  }
+  if (graph.plotLifecycle.some((p) => p.id === idC)) throw new Error("已回收（done）伏笔混进 plotLifecycle");
+  if (typeof graph.summary !== "string" || !graph.summary.includes("已回收 1 条")) throw new Error("summary 未披露已回收条数: " + graph.summary);
+  // characterMatrix：抓到消失的人物，且出场前的章不算缺席
+  const rows = graph.characterMatrix?.rows ?? [];
+  const absences = graph.characterMatrix?.absences ?? [];
+  if (rows.length !== 8) throw new Error("人物矩阵行数应等于章数: " + rows.length);
+  if (!rows[0].present.includes("林昭") || rows[0].present.includes("沈砚")) throw new Error("第 1 章出场判定错: " + JSON.stringify(rows[0]));
+  if (!rows[4].present.includes("沈砚")) throw new Error("第 5 章出场判定错: " + JSON.stringify(rows[4]));
+  const absentHero = absences.find((a) => a.name === "林昭");
+  if (!absentHero) throw new Error("未抓到第 4 章起消失的人物「林昭」: " + JSON.stringify(absences));
+  if (absentHero.from !== 4 || absentHero.to !== 8 || absentHero.length !== 5) throw new Error("林昭 缺席区间错（应为 4–8 / 5 章）: " + JSON.stringify(absentHero));
+  if (absences.some((a) => a.name === "沈砚")) throw new Error("出场前的章被算成缺席（沈砚 第 5 章才首现）: " + JSON.stringify(absences));
+  const firstPresentChapter = (name) => (rows.find((r) => r.present.includes(name)) || {}).number;
+  for (const a of absences) {
+    const first = firstPresentChapter(a.name);
+    if (typeof first !== "number") throw new Error("缺席项对应人物在正文里从未出场: " + JSON.stringify(a));
+    if (a.from <= first) throw new Error("缺席区间起点 " + a.from + " 不晚于首次出场章 " + first + "（出场前的章被算成缺席）: " + a.name);
+    if (a.to - a.from + 1 !== a.length) throw new Error("缺席长度与区间不一致: " + JSON.stringify(a));
+  }
+  // v5.0.0：缺席/风险是"数据说了什么"，写在 summary 的【风险】段里（degraded 只报"少了什么数据"）
+  if (!graph.summary.includes("林昭") || !/4[–-]8/.test(graph.summary)) throw new Error("summary 未提示最长缺席区间: " + graph.summary);
+  for (const key of ["threadActivity", "timelineOrder", "planVsActual"]) {
+    if (!Array.isArray(graph[key])) throw new Error("graph." + key + " 应为数组: " + typeof graph[key]);
+  }
+  // 时间线：number 可省略（解析不出章号），但 day/event/chapter/issue 四个键恒在
+  const tl = graph.timelineOrder;
+  if (tl.length !== 3) throw new Error("timelineOrder 应有 3 行: " + JSON.stringify(tl));
+  for (const row of tl) {
+    for (const k of ["day", "event", "chapter", "issue"]) {
+      if (!(k in row)) throw new Error("timelineOrder 行缺 " + k + " 键（required 必须恒在）: " + JSON.stringify(row));
+    }
+  }
+  if (tl[0].number !== 2 || tl[0].issue !== "") throw new Error("时间线第 1 行（第02章）错: " + JSON.stringify(tl[0]));
+  if ("number" in tl[1]) throw new Error("章号解析不出的时间线条目必须**省略** number 键（写 null 会被 dropNullDeep 删键、与 schema required 冲突）: " + JSON.stringify(tl[1]));
+  if (tl[1].issue !== "") throw new Error("无法解析章号的行不应被判为顺序不一致: " + JSON.stringify(tl[1]));
+  if (tl[2].number !== 1 || tl[2].issue === "") throw new Error("章号回退（第02章 → 第01章）应报顺序不一致: " + JSON.stringify(tl[2]));
+  console.log("v5.0.0 结构视图: " + graph.totalChapters + " 章 | 未回收 " + graph.plotLifecycle.length + " 条（distance " + graph.plotLifecycle.map((p) => p.distance).join(",") + "）| 缺席 " + JSON.stringify(absentHero) + " | 出场前不计缺席 | 时间线 " + tl.length + " 行（无章号行省略 number ✓）✓");
+
+  // ── 只有 done 伏笔（或没有伏笔）时：不抛错 + plotLifecycle 为空数组 ──
+  const DONLY_BOOK = "结构降级样本";
+  writeChapter(DONLY_BOOK, "第01章.md", "她把窗推开，风灌进来。\n");
+  writeChapter(DONLY_BOOK, "第02章.md", "天亮以前，她收拾好了行李。\n");
+  const addDone = await defs.novel_plot.execute({ book: DONLY_BOOK, action: "add", content: "旧钥匙", chapter: "第01章", root: testRoot }, exec);
+  await defs.novel_plot.execute({ book: DONLY_BOOK, action: "done", id: addDone.entries[0].id, root: testRoot }, exec);
+  const doneGraph = await defs.novel_plot.execute({ book: DONLY_BOOK, action: "graph", root: testRoot }, exec);
+  if (!Array.isArray(doneGraph.plotLifecycle) || doneGraph.plotLifecycle.length !== 0) throw new Error("只有 done 伏笔时 plotLifecycle 应为空数组: " + JSON.stringify(doneGraph.plotLifecycle));
+  if (doneGraph.totalChapters !== 2) throw new Error("done-only 书 totalChapters 错: " + doneGraph.totalChapters);
+
+  // ── 空书（目录存在、0 章）：不抛错 + degraded 非空 ──
+  const EMPTY_BOOK = "空书样本";
+  mkdirSync(join(testRoot, "novels", EMPTY_BOOK), { recursive: true });
+  let emptyGraph = null;
+  try {
+    emptyGraph = await defs.novel_plot.execute({ book: EMPTY_BOOK, action: "graph", root: testRoot }, exec);
+  } catch (e) {
+    throw new Error("空书（目录存在、0 章）调用 graph 不应抛错，实际抛出: " + String(e?.message ?? e));
+  }
+  if (emptyGraph.totalChapters !== 0) throw new Error("空书 totalChapters 应为 0: " + emptyGraph.totalChapters);
+  if (!Array.isArray(emptyGraph.plotLifecycle) || emptyGraph.plotLifecycle.length !== 0) throw new Error("空书 plotLifecycle 应为空数组: " + JSON.stringify(emptyGraph.plotLifecycle));
+  if (!Array.isArray(emptyGraph.degraded) || emptyGraph.degraded.length === 0) throw new Error("空书 degraded 为空（缺数据必须显式说明）");
+  console.log("v5.0.0 结构视图降级: 只有 done 伏笔 → plotLifecycle 空数组；空书 → 不抛错 + degraded " + emptyGraph.degraded.length + " 条 ✓");
+
+  // ── 既有 action（list）行为不受影响 ──
+  const plotList = await defs.novel_plot.execute({ book: BOOK, action: "list", root: testRoot }, exec);
+  assertOutputContract(defs.novel_plot, plotList, "novel_plot(list)");
+  if (plotList.action !== "list" || plotList.entries.length !== 3) throw new Error("list 行为被 graph 分支影响: " + JSON.stringify({ action: plotList.action, n: plotList.entries.length }));
+  const openCount = plotList.entries.filter((e) => e.status === "open").length;
+  const doneCount = plotList.entries.filter((e) => e.status === "done").length;
+  if (openCount !== 2 || doneCount !== 1) throw new Error("list 的 open/done 分桶错: " + JSON.stringify({ openCount, doneCount }));
+  const listText = defs.novel_plot.output.render({}, plotList)[0].text;
+  if (!listText.includes("未回收伏笔") || listText.includes("novel-plot-graph")) throw new Error("list 的 render 走了 graph 分支或被污染: " + listText.slice(0, 120));
+  const graphText = defs.novel_plot.output.render({}, graph)[0].text;
+  if (!graphText.includes("novel-plot-graph") || !graphText.includes("连续缺席")) throw new Error("graph 的 render 未渲染结构视图分区: " + graphText.slice(0, 200));
+  if (!graphText.includes(String(absentHero.from) + "–" + String(absentHero.to))) throw new Error("graph render 未显示缺席区间: " + graphText.slice(0, 400));
+  console.log("v5.0.0 结构视图 list 未受影响: " + plotList.entries.length + " 条（open " + openCount + " / done " + doneCount + "）| list 与 graph 的 render 各自走对应分支 ✓");
+})();
+
+// ---------- v5.0.0 全量实测后的 4 处修补回归（版本号不变，属同一次发布） ----------
+await (async function v500PostAuditFixes() {
+  const BOOK = "修补回归书";
+  const dir = join(testRoot, "novels", BOOK);
+  mkdirSync(dir, { recursive: true });
+  const put = (fname, txt) => writeFileSync(join(dir, fname), txt, "utf8");
+  // ①「文件名有标题」的章：H1 故意写成别的内容 → 标题必须以文件名为准，不被 H1 回退覆盖
+  put("第01章 初遇.md", "# 随便写的一级标题\n\n他把伞靠在墙角，抖了抖袖子上的水。桌上摆着一只冷掉的茶杯。\n");
+  // ②「文件名没标题」的章：H1 就是标题 → 清单必须回退读出它（旧行为显示空标题）
+  put("第02章.md", "# 她数了数台阶，一共四十七级\n\n她数了数台阶，第四级缺了一角，边上压着半块砖。\n");
+
+  // ③ novel_new_chapter 的 title 必须进文件名（清单标题取自文件名，否则显示为空标题）
+  const created = await defs.novel_new_chapter.execute({ book: BOOK, title: "靠岸之后", content: "小艇靠上码头的时候是清晨六点十分。", root: testRoot }, exec);
+  assertOutputContract(defs.novel_new_chapter, created, "novel_new_chapter(title)");
+  if (!/靠岸之后/.test(created.file ?? "")) throw new Error("title 未进文件名（清单标题会显示为空）: " + created.file);
+  if (!String(created.file).startsWith("第03章 ")) throw new Error("带标题的文件名丢了章号前缀: " + created.file);
+  const sanitized = await defs.novel_new_chapter.execute({ book: BOOK, chapter: 9, title: 'A/B:C*D?E"F<G>H|I', content: "x", root: testRoot }, exec);
+  if (/[\\/:*?"<>|]/.test(sanitized.file ?? "")) throw new Error("标题里的非法文件名字符没被剥掉: " + sanitized.file);
+
+  // ④ 清单标题口径：文件名优先，文件名没有才回退 H1
+  const chList = await defs.novel_chapters.execute({ book: BOOK, root: testRoot }, exec);
+  assertOutputContract(defs.novel_chapters, chList, "novel_chapters(标题回退)");
+  const byFile = new Map(chList.chapters.map((c) => [c.file, c]));
+  if (byFile.get("第02章.md")?.title !== "她数了数台阶，一共四十七级") throw new Error("无标题文件名未回退读 H1: " + JSON.stringify(byFile.get("第02章.md")));
+  if (byFile.get("第03章 靠岸之后.md")?.title !== "靠岸之后") throw new Error("带标题文件名的标题应从文件名取: " + JSON.stringify(byFile.get("第03章 靠岸之后.md")));
+  if (byFile.get("第01章 初遇.md")?.title !== "初遇") throw new Error("文件名标题被 H1 回退覆盖了: " + JSON.stringify(byFile.get("第01章 初遇.md")));
+
+  // ⑤ fix_plan 清单渲染必须带 itemId（否则 mark 前得先自己去读 planFile）
+  const plan = await defs.novel_fix_plan.execute({ book: BOOK, chapter: "第02章", action: "plan", root: testRoot }, exec);
+  const planText = defs.novel_fix_plan.output.render({}, plan)[0].text;
+  if (plan.items.length > 0 && !planText.includes("id：" + plan.items[0].id)) throw new Error("清单渲染未带 itemId: " + planText.slice(0, 300));
+  // ⑥ verify 在 id 精确命中时也要显示人工标记（正文没动时 id 必然精确命中，第二轮兜底走不到）
+  if (plan.items.length > 0) {
+    const target = plan.items[0];
+    await defs.novel_fix_plan.execute({ book: BOOK, chapter: "第02章", action: "mark", itemId: target.id, state: "done", root: testRoot }, exec);
+    const verified = await defs.novel_fix_plan.execute({ book: BOOK, chapter: "第02章", action: "verify", root: testRoot }, exec);
+    const markedItem = verified.checked.find((c) => c.id === target.id);
+    if (!/人工标记 done/.test(markedItem?.detail ?? "")) throw new Error("verify 未显示人工标记: " + JSON.stringify(markedItem));
+  }
+  // ⑦ 非法 state 的报错要点明合法取值（不能让人以为"没传参数"）
+  let badState = "";
+  try { await defs.novel_fix_plan.execute({ book: BOOK, chapter: "第02章", action: "mark", itemId: "fix-x-0-0000000", state: "finished", root: testRoot }, exec); } catch (e) { badState = String(e?.message ?? e); }
+  if (!/done/.test(badState) || !/skip/.test(badState) || !/收到/.test(badState)) throw new Error("非法 state 的报错文案不合格: " + badState);
+  let noState = "";
+  try { await defs.novel_fix_plan.execute({ book: BOOK, chapter: "第02章", action: "mark", itemId: "fix-x-0-0000000", root: testRoot }, exec); } catch (e) { noState = String(e?.message ?? e); }
+  if (!/缺少 state/.test(noState)) throw new Error("缺 state 的报错文案未区分「没传」: " + noState);
+  console.log("v5.0.0 修补回归: title 进文件名 + 非法字符剥离 ✓ | 文件名优先、无标题回退 H1 ✓ | 清单渲染带 itemId ✓ | verify 显示人工标记 ✓ | state 报错区分「没传/非法值」✓");
 })();
 
 // 清理缓存文件（保留状态文件）

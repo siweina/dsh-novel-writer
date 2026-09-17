@@ -2,12 +2,13 @@
 /**
  * dsh-novel-writer — stdio MCP 服务器
  *
- * 让 Claude Desktop / Cursor / 任何 MCP 客户端直接使用插件的 novel_* 工具（当前 16 个）。
+ * 让 Claude Desktop / Cursor / 任何 MCP 客户端直接使用插件的 novel_* 工具（当前 18 个）。
  * 实现方式：不复制任何业务逻辑——用 stub ctx 启动插件（lib/index.js 的 apply()），
  * 捕获它注册的 { name, description, parameters, execute, output } 工具定义，
  * 再把 MCP 的 tools/list / tools/call 映射到这些定义上。
- * v4.3.0 修正：工具数与 stub ctx 暴露的服务面（tools/systemPrompt/inject 的 webServer+skills+effect）
- * 不变时本文件无需改动；插件新增工具或改用别的宿主服务时，需同步 EXPECTED_TOOL_COUNT 与 stub ctx。
+ * v4.3.0 修正：工具数与 stub ctx 暴露的服务面（tools/systemPrompt/inject 的 webServer+skills+effect）。
+ * v5.0.0：工具数校验改为从 lib/core.js 的 ALL_TOOLS 派生（不再硬编码），因此**插件新增工具时本文件无需改动**；
+ *         只有插件改用别的宿主服务时才需要同步下面的 stub ctx。
  *
  * 协议：换行分隔的 JSON-RPC 2.0（stdio），stdout 只走协议帧，日志一律写 stderr。
  * 依赖：仅 Node 内置模块（不依赖 @modelcontextprotocol/sdk）。
@@ -37,7 +38,6 @@ let negotiatedVersion = PROTOCOL_VERSION;
 const BATCHING_REMOVED_SINCE = "2025-06-18";
 const SERVER_NAME = "dsh-novel-writer";
 const SERVER_VERSION = readPackageVersion();
-const EXPECTED_TOOL_COUNT = 16;
 // v4.3.0：单行 JSON-RPC 报文长度上限（字节）。超限行整行丢弃并记 stderr——readline 本身不设上限，
 // 一条畸形超长行（或忘记换行的巨型 payload）会让缓冲区无界增长直到 OOM。
 const MAX_LINE_BYTES = 4 * 1024 * 1024;
@@ -142,7 +142,7 @@ const { root: LIBRARY_ROOT, source: ROOT_SOURCE } = resolveLibraryRoot(process.a
 const ALLOW_EXTERNAL_SRC = process.argv.slice(2).includes("--allow-external-src");
 
 // ---------------------------------------------------------------------------
-// 用 stub ctx 启动插件，捕获 16 个工具定义
+// 用 stub ctx 启动插件，捕获全部工具定义
 // ---------------------------------------------------------------------------
 const registry = [];
 const ctx = {
@@ -187,8 +187,18 @@ try {
 
 const toolMap = new Map(registry.map((definition) => [definition.name, definition]));
 log(`已注册 ${toolMap.size} 个工具；书库根目录 = ${LIBRARY_ROOT}（来源：${ROOT_SOURCE}）`);
-if (toolMap.size !== EXPECTED_TOOL_COUNT) {
-  log(`警告：工具数 ${toolMap.size} != 预期 ${EXPECTED_TOOL_COUNT}（插件升级后请同步检查）`);
+// v5.0.0：预期工具数不再硬编码，改为从 lib/core.js 的 ALL_TOOLS **单一事实源**派生。
+// 旧版写死 16，插件一加工具就必然失配——5.0.0 新增两个工具时每次启动都会打一条假告警
+// （"工具数 18 != 预期 16"），而真正该被发现的是"注册表与 ALL_TOOLS 不一致"。
+// 动态取放在插件加载之后、且带 try：与插件加载共用同一条降级路径，取不到就跳过这项校验，
+// 不让它把整个服务器拖挂（--ignore-plugin-load-error 的语义保持不变）。
+let expectedToolCount = null;
+try {
+  const { ALL_TOOLS } = await import(pathToFileURL(join(PLUGIN_DIR, "lib", "core.js")).href);
+  expectedToolCount = ALL_TOOLS.length;
+} catch { /* 取不到就跳过数量校验 */ }
+if (expectedToolCount !== null && toolMap.size !== expectedToolCount) {
+  log(`警告：实际注册 ${toolMap.size} 个工具，而 ALL_TOOLS 声明 ${expectedToolCount} 个（注册表与 ALL_TOOLS 不一致，请检查 lib/index.js 的 apply()）`);
 }
 
 // ---------------------------------------------------------------------------

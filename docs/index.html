@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>dsh-novel-writer — 文风，可量化</title>
-<meta name="description" content="面向中文小说作者的本地章节分析工具：16 个工具进行句式、情感与风格基线测量，提供六维文笔基线带、十二维氛围光谱、本地语义检索与伏笔设定管理。模型随包分发，无 token 消耗，稿件不出本机。">
+<meta name="description" content="面向中文小说作者的本地章节分析工具：18 个工具进行句式、情感与风格基线测量，提供六维文笔基线带、十二维氛围光谱、本地语义检索、伏笔设定管理与动笔前的材料装配。模型随包分发，无 token 消耗，稿件不出本机。">
 <meta name="theme-color" content="#3964fe">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>">
 <link rel="stylesheet" href="styles.css">
@@ -12,15 +12,15 @@
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="dsh-novel-writer">
 <meta property="og:title" content="dsh-novel-writer — 文风，可量化">
-<meta property="og:description" content="面向中文小说作者的本地章节分析工具：16 个工具进行句式、情感与风格基线测量，提供六维文笔基线带、十二维氛围光谱、本地语义检索与伏笔设定管理。模型随包分发，无 token 消耗，稿件不出本机。">
+<meta property="og:description" content="面向中文小说作者的本地章节分析工具：18 个工具进行句式、情感与风格基线测量，提供六维文笔基线带、十二维氛围光谱、本地语义检索、伏笔设定管理与动笔前的材料装配。模型随包分发，无 token 消耗，稿件不出本机。">
 <meta property="og:url" content="https://siweina.github.io/dsh-novel-writer/">
 <meta property="og:locale" content="zh_CN">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="dsh-novel-writer — 文风，可量化">
-<meta name="twitter:description" content="面向中文小说作者的本地章节分析工具：16 个工具进行句式、情感与风格基线测量，提供六维文笔基线带、十二维氛围光谱、本地语义检索与伏笔设定管理。模型随包分发，无 token 消耗，稿件不出本机。">
+<meta name="twitter:description" content="面向中文小说作者的本地章节分析工具：18 个工具进行句式、情感与风格基线测量，提供六维文笔基线带、十二维氛围光谱、本地语义检索、伏笔设定管理与动笔前的材料装配。模型随包分发，无 token 消耗，稿件不出本机。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"dsh-novel-writer","alternateName":"网文写作体检","description":"面向中文小说作者的本地章节分析工具：16 个工具进行句式、情感与风格基线测量，提供六维文笔基线带、十二维氛围光谱、本地语义检索与伏笔设定管理。模型随包分发，无 token 消耗，稿件不出本机。","url":"https://siweina.github.io/dsh-novel-writer/","applicationCategory":"DeveloperApplication","applicationSubCategory":"写作辅助 / 文本分析","operatingSystem":"Windows, macOS, Linux","softwareVersion":"4.3.1","softwareRequirements":"Node.js >= 22.3","license":"https://opensource.org/licenses/MIT","isAccessibleForFree":true,"inLanguage":"zh-CN","offers":{"@type":"Offer","price":"0","priceCurrency":"CNY"},"codeRepository":"https://github.com/siweina/dsh-novel-writer","downloadUrl":"https://www.npmjs.com/package/dsh-novel-writer","author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"featureList":["文笔六维基线（μ±σ 对照）","风格自检与偏差清单","本地语义检索（bge-small-zh，离线）","氛围光谱 12 维","伏笔与设定管理","连贯性审计（衔接 / OOC / 大纲走偏）","创作资料与原创模式"],"keywords":"中文小说,网文,写作辅助,文风分析,风格基线,句式分析,情感分析,本地推理,MCP,DeepSeek Harness,DSH 插件"}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"dsh-novel-writer — 文风，可量化","url":"https://siweina.github.io/dsh-novel-writer/","inLanguage":"zh-CN","description":"面向中文小说作者的本地章节分析工具：16 个工具进行句式、情感与风格基线测量，提供六维文笔基线带、十二维氛围光谱、本地语义检索与伏笔设定管理。模型随包分发，无 token 消耗，稿件不出本机。"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"dsh-novel-writer","alternateName":"网文写作体检","description":"面向中文小说作者的本地章节分析工具：18 个工具进行句式、情感与风格基线测量，提供六维文笔基线带、十二维氛围光谱、本地语义检索、伏笔设定管理与动笔前的材料装配。模型随包分发，无 token 消耗，稿件不出本机。","url":"https://siweina.github.io/dsh-novel-writer/","applicationCategory":"DeveloperApplication","applicationSubCategory":"写作辅助 / 文本分析","operatingSystem":"Windows, macOS, Linux","softwareVersion":"5.0.0","softwareRequirements":"Node.js >= 22.3","license":"https://opensource.org/licenses/MIT","isAccessibleForFree":true,"inLanguage":"zh-CN","offers":{"@type":"Offer","price":"0","priceCurrency":"CNY"},"codeRepository":"https://github.com/siweina/dsh-novel-writer","downloadUrl":"https://www.npmjs.com/package/dsh-novel-writer","author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"featureList":["文笔六维基线（μ±σ 对照）","风格自检与偏差清单","开写包（动笔前的材料装配）","改稿台（带定位的待办清单与复测）","本地语义检索（bge-small-zh，离线）","氛围光谱 12 维","伏笔与设定管理","结构视图（伏笔生命周期 / 人物出场矩阵）","连贯性审计（衔接 / OOC / 大纲走偏）","创作资料与原创模式"],"keywords":"中文小说,网文,写作辅助,文风分析,风格基线,句式分析,情感分析,本地推理,MCP,DeepSeek Harness,DSH 插件"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"dsh-novel-writer — 文风，可量化","url":"https://siweina.github.io/dsh-novel-writer/","inLanguage":"zh-CN","description":"面向中文小说作者的本地章节分析工具：18 个工具进行句式、情感与风格基线测量，提供六维文笔基线带、十二维氛围光谱、本地语义检索、伏笔设定管理与动笔前的材料装配。模型随包分发，无 token 消耗，稿件不出本机。"}</script>
 </head>
 <body>
 
@@ -37,7 +37,7 @@
         </svg>
       </span>
       <span class="brand__text">dsh-novel-writer</span>
-      <span class="brand__ver">v4.3.1</span>
+      <span class="brand__ver">v5.0.0</span>
     </a>
 
     <nav class="nav__links" id="navLinks" aria-label="主导航">
@@ -67,7 +67,7 @@
   <div class="wrap hero__inner">
     <p class="pill reveal">
       <span class="pill__dot" aria-hidden="true"></span>
-      <a href="https://github.com/siweina/dsh-novel-writer/releases/tag/v4.3.1" target="_blank" rel="noopener">v4.3.1 已发布</a>
+      <a href="https://github.com/siweina/dsh-novel-writer/releases/tag/v5.0.0" target="_blank" rel="noopener">v5.0.0 已发布</a>
       <span class="pill__sep" aria-hidden="true">·</span>
       <span class="pill__label">已收录于</span>
       <a href="https://www.npmjs.com/package/dsh-novel-writer" target="_blank" rel="noopener">npm</a>
@@ -80,7 +80,7 @@
     <h1 class="hero__title reveal">文风，可量化</h1>
 
     <p class="hero__sub reveal">
-      16 个工具，将「这一章与原著不一致」转化为可对照的量化指标。<br>
+      18 个工具，将「这一章与原著不一致」转化为可对照的量化指标。<br>
       全部推理在本机完成——<strong>无 token 消耗，正文不外传</strong>。
     </p>
 
@@ -103,7 +103,7 @@
     </div>
 
     <dl class="stats reveal">
-      <div class="stat"><dt>16</dt><dd>个工具</dd></div>
+      <div class="stat"><dt>18</dt><dd>个工具</dd></div>
       <div class="stat"><dt>6</dt><dd>维文笔基线</dd></div>
       <div class="stat"><dt>12</dt><dd>维氛围光谱</dd></div>
       <div class="stat"><dt>24<span>MB</span></dt><dd>本地中文模型</dd></div>
@@ -152,7 +152,7 @@
 <section class="sec sec--tint" id="features">
   <div class="wrap">
     <p class="eyebrow reveal">能力概览</p>
-    <h2 class="h2 reveal">16 个工具，覆盖设定至成稿的完整流程</h2>
+    <h2 class="h2 reveal">18 个工具，覆盖设定至成稿的完整流程</h2>
     <p class="lede reveal">测量与判断分离：插件仅输出测量数据，不生成风格结论；判断结果可回传存盘，用于保持续写一致性。<b>将光标停留在任一能力项上约 1 秒，可展开详细说明。</b></p>
 
     <div class="grid grid--3">
@@ -252,6 +252,7 @@
           <div class="card__more-in">
             <dl>
               <dt>伏笔</dt><dd>以 open / done 维护状态，scan 可扫描全书自动记录每条伏笔被提及的章节。</dd>
+              <dt>结构视图</dt><dd><code>action: "graph"</code> 对全书做跨章计算：伏笔生命周期与埋设距离、人物出场矩阵与连续缺席（≥ 5 章）、线索活跃度与最大空档、时间线登记顺序核对、大纲方向行对照。只读，不写盘。</dd>
               <dt>设定</dt><dd>人物、地点、道具、时间线、世界观用语规范五张表按类别增删改查，并可自动判断作品的文化基准（东 / 西 / 混合）。</dd>
               <dt>摘要</dt><dd>章节摘要按章管理，供长篇续写时快速回忆前情。</dd>
             </dl>
@@ -278,12 +279,47 @@
       </article>
 
       <article class="card reveal">
+        <div class="card__icon" aria-hidden="true">🎒</div>
+        <h3><a class="card__doc" href="tools/novel-chapter-brief.html">开写包</a></h3>
+        <p>把「动笔前需要读的一切」装配成一次调用，从结构上消除漏读。</p>
+        <ul class="tags"><li>承接口</li><li>未回收伏笔</li><li>六维基线</li><li>禁用清单</li></ul>
+        <button class="card__toggle" aria-expanded="false" aria-controls="more-8">详细说明<i aria-hidden="true"></i></button>
+        <div class="card__more" id="more-8" role="region" aria-label="开写包 详细说明">
+          <div class="card__more-in">
+            <dl>
+              <dt>用途</dt><dd>续写一章之前，一次拿到上一章结尾原文（承接口）、上一章钩子、本章大纲方向行、应出场的人物卡、未回收伏笔及埋设距离、世界观禁用词、全书六维基线、原著锚段与句式骨架。</dd>
+              <dt>方法</dt><dd>只读装配：材料来自既有的伏笔表、设定表、创作资料与分析缓存，不新增任何测量口径，六维基线复用分章测量缓存（长书首次调用仍需读全书算一遍）。</dd>
+              <dt>输出</dt><dd>材料字段 + 三段式计划（上一章状态 → 本章目标 → 检查清单）+ 降级说明。<code>chapter</code> 默认「下一章」，文件尚未创建也可调用；材料缺失时返回空值并说明原因，绝不报错。</dd>
+            </dl>
+          </div>
+        </div>
+      </article>
+
+      <article class="card reveal">
+        <div class="card__icon" aria-hidden="true">🧰</div>
+        <h3><a class="card__doc" href="tools/novel-fix-plan.html">改稿台</a></h3>
+        <p>把风格偏差变成按优先级排好的待办清单，改完可复测。</p>
+        <ul class="tags"><li>段落定位</li><li>严重度排序</li><li>复测三态</li></ul>
+        <button class="card__toggle" aria-expanded="false" aria-controls="more-9">详细说明<i aria-hidden="true"></i></button>
+        <div class="card__more" id="more-9" role="region" aria-label="改稿台 详细说明">
+          <div class="card__more-in">
+            <dl>
+              <dt>用途</dt><dd>不再自己把「数据」组织成「行动」：直接拿到带段落行号的待办清单，改完还能复测。</dd>
+              <dt>方法</dt><dd>复用风格自检的测量结果（句式偏离、情感过直、抽象度过高、留白异常、禁用词、语用不符、衔接缺失、伏笔未回收），按严重度降序、改写代价升序、行号升序排序。</dd>
+              <dt>输出</dt><dd>每项含类型、原文定位与节选、现值与目标区间、可照改的原著锚段，以及一句<strong>改写方向</strong>；<code>action: "verify"</code> 给「已回到带内 / 仍偏离 / 新增偏离」三态。</dd>
+              <dt>边界</dt><dd>只给改写方向，<strong>不生成改写后的正文句子</strong>——正文仍由作者完成，插件不做替代。</dd>
+            </dl>
+          </div>
+        </div>
+      </article>
+
+      <article class="card reveal">
         <div class="card__icon" aria-hidden="true">🌱</div>
         <h3><a class="card__doc" href="tools/novel-outline.html">原创模式与创作资料</a></h3>
         <p>从零开始创作时，先确立设定再推进正文，避免剧情跳跃与角色走形。</p>
         <ul class="tags"><li>多书独立设定库</li><li>钩子记录</li><li>创作状态卡</li></ul>
-        <button class="card__toggle" aria-expanded="false" aria-controls="more-8">详细说明<i aria-hidden="true"></i></button>
-        <div class="card__more" id="more-8" role="region" aria-label="原创模式与创作资料 详细说明">
+        <button class="card__toggle" aria-expanded="false" aria-controls="more-10">详细说明<i aria-hidden="true"></i></button>
+        <div class="card__more" id="more-10" role="region" aria-label="原创模式与创作资料 详细说明">
           <div class="card__more-in">
             <dl>
               <dt>流程</dt><dd>创作设定 → 剧情大纲 → 钩子记录，按 10 / 20 / 30 章动态分批推进。</dd>
@@ -299,11 +335,11 @@
         <h3><a class="card__doc" href="tools/novel-sentence-config.html">侧边栏开关面板</a></h3>
         <p>按需启用工具与功能，控制分析范围与资源占用。</p>
         <ul class="tags"><li>总开关</li><li>分组开关</li><li>运行状态</li></ul>
-        <button class="card__toggle" aria-expanded="false" aria-controls="more-9">详细说明<i aria-hidden="true"></i></button>
-        <div class="card__more" id="more-9" role="region" aria-label="侧边栏开关面板 详细说明">
+        <button class="card__toggle" aria-expanded="false" aria-controls="more-11">详细说明<i aria-hidden="true"></i></button>
+        <div class="card__more" id="more-11" role="region" aria-label="侧边栏开关面板 详细说明">
           <div class="card__more-in">
             <dl>
-              <dt>开关</dt><dd>总开关、16 个工具的分组开关与 5 项功能开关，均可独立控制。</dd>
+              <dt>开关</dt><dd>总开关、18 个工具的分组开关与 5 项功能开关，均可独立控制。</dd>
               <dt>状态</dt><dd>显示数据目录占用与语义引擎运行状态，便于判断是否需要重建索引。</dd>
               <dt>附加</dt><dd>书库统计（各作品章数、总字数、近 7 天活跃字数）、体验演示（内置示例，不写入磁盘）与报告历史。</dd>
             </dl>
@@ -414,7 +450,7 @@ fixAnchors：<span class="c-num">3</span> 条原著锚段
           <tr><th scope="row">费用</th><td class="is-us"><b>0（本地推理）</b></td><td>按 token 计费</td><td>需自建</td></tr>
           <tr><th scope="row">中文小说专用</th><td class="is-us"><b>是</b></td><td>通用</td><td>否</td></tr>
           <tr><th scope="row">风格基线（μ±σ）</th><td class="is-us"><b>提供</b></td><td>少见</td><td>无</td></tr>
-          <tr><th scope="row">与 DSH 集成</th><td class="is-us"><b>16 个工具 + 侧边栏开关</b></td><td>无</td><td>无</td></tr>
+          <tr><th scope="row">与 DSH 集成</th><td class="is-us"><b>18 个工具 + 侧边栏开关</b></td><td>无</td><td>无</td></tr>
           <tr><th scope="row">非 DSH 用户可用</th><td class="is-us"><b>可以（MCP）</b></td><td>可以</td><td>需自行封装</td></tr>
         </tbody>
       </table>
@@ -447,7 +483,7 @@ fixAnchors：<span class="c-num">3</span> 条原著锚段
 
     <div class="panels reveal">
       <div class="panel is-active" id="t1" role="tabpanel">
-        <p class="panel__note">插件形态，提供 16 个 <code>novel_*</code> 工具与侧边栏面板。</p>
+        <p class="panel__note">插件形态，提供 18 个 <code>novel_*</code> 工具与侧边栏面板。</p>
         <div class="code">
           <pre><code><span class="c-dim">$</span> dsh plugin --profile web add dsh-novel-writer</code></pre>
           <button class="copy" data-copy="dsh plugin --profile web add dsh-novel-writer" aria-label="复制">复制</button>
@@ -463,7 +499,7 @@ fixAnchors：<span class="c-num">3</span> 条原著锚段
       </div>
 
       <div class="panel" id="t3" role="tabpanel">
-        <p class="panel__note">包内自带 stdio MCP 服务器（<code>mcp/server.mjs</code>），可将 16 个工具原样提供给 Claude Desktop、Cursor 等任意 MCP 客户端。该进程在本机运行，无需服务器与网络连接。</p>
+        <p class="panel__note">包内自带 stdio MCP 服务器（<code>mcp/server.mjs</code>），可将 18 个工具原样提供给 Claude Desktop、Cursor 等任意 MCP 客户端。该进程在本机运行，无需服务器与网络连接。</p>
         <div class="code">
           <pre><code><span class="c-dim">$</span> npx -y -p dsh-novel-writer dsh-novel-writer-mcp --root /你的小说库路径</code></pre>
           <button class="copy" data-copy="npx -y -p dsh-novel-writer dsh-novel-writer-mcp --root /你的小说库路径" aria-label="复制">复制</button>
@@ -512,12 +548,12 @@ fixAnchors：<span class="c-num">3</span> 条原著锚段
     <div class="grid grid--4 reveal">
       <a class="trust" href="https://www.npmjs.com/package/dsh-novel-writer" target="_blank" rel="noopener">
         <b>npm</b>
-        <span class="trust__val">latest = 4.3.1</span>
+        <span class="trust__val">latest = 5.0.0</span>
         <em>dsh-novel-writer</em>
       </a>
       <a class="trust" href="https://glama.ai/mcp/servers/siweina/dsh-novel-writer" target="_blank" rel="noopener">
         <b>Glama</b>
-        <span class="trust__val">rated B · 16 tools</span>
+        <span class="trust__val">rated B · 18 tools</span>
         <em>MCP 目录收录</em>
       </a>
       <a class="trust" href="https://registry.modelcontextprotocol.io/?q=dsh-novel-writer" target="_blank" rel="noopener">
@@ -562,7 +598,7 @@ fixAnchors：<span class="c-num">3</span> 条原著锚段
 
     <details class="faq reveal">
       <summary>不使用 DSH 时，能否在其他 MCP 客户端中使用？</summary>
-      <p>可以。包内自带 stdio MCP 服务器，可将 16 个工具提供给任意 MCP 客户端，一行 <code>npx</code> 命令即可启动，无需常驻服务。</p>
+      <p>可以。包内自带 stdio MCP 服务器，可将 18 个工具提供给任意 MCP 客户端，一行 <code>npx</code> 命令即可启动，无需常驻服务。</p>
     </details>
   </div>
 </section>
@@ -591,7 +627,7 @@ fixAnchors：<span class="c-num">3</span> 条原著锚段
             <path d="M20 5.5A1.5 1.5 0 0 0 18.5 4H14a2 2 0 0 0-2 2v13a2 2 0 0 1 2-2h4.5a1.5 1.5 0 0 0 1.5-1.5z"/>
           </svg>
         </span>
-        <p class="foot__desc">面向中文小说作者的本地章节分析工具。16 个工具，约 24MB 中文模型在本机运行，稿件不外传。</p>
+        <p class="foot__desc">面向中文小说作者的本地章节分析工具。18 个工具，约 24MB 中文模型在本机运行，稿件不外传。</p>
         <p class="foot__badges">
           <a href="https://www.npmjs.com/package/dsh-novel-writer" target="_blank" rel="noopener"><img src="https://img.shields.io/npm/v/dsh-novel-writer.svg?style=flat-square&amp;color=blue" alt="npm 版本" height="18" loading="lazy"></a>
           <a href="https://glama.ai/mcp/servers/siweina/dsh-novel-writer" target="_blank" rel="noopener"><img src="https://glama.ai/mcp/servers/@siweina/dsh-novel-writer/badges/score.svg" alt="Glama 评分" height="18" loading="lazy"></a>

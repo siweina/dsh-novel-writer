@@ -12,7 +12,7 @@ FROM node:22-slim
 
 # 固定到当前已发布版本，保证内省结果可复现。
 # 每次发版请与 package.json / server.json 一同更新此版本号。
-ARG DSH_NOVEL_WRITER_VERSION=4.3.1
+ARG DSH_NOVEL_WRITER_VERSION=5.0.0
 
 RUN npm install --global --no-fund --no-audit "dsh-novel-writer@${DSH_NOVEL_WRITER_VERSION}"
 

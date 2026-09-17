@@ -19,6 +19,12 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://siweina.github.io/dsh-novel-writer/tools/novel-chapter-brief.html</loc>
+    <lastmod>2026-09-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://siweina.github.io/dsh-novel-writer/tools/novel-chapters.html</loc>
     <lastmod>2026-09-16</lastmod>
     <changefreq>monthly</changefreq>
@@ -26,6 +32,12 @@
   </url>
   <url>
     <loc>https://siweina.github.io/dsh-novel-writer/tools/novel-continuity-check.html</loc>
+    <lastmod>2026-09-16</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://siweina.github.io/dsh-novel-writer/tools/novel-fix-plan.html</loc>
     <lastmod>2026-09-16</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>

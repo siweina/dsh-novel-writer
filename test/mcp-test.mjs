@@ -1,4 +1,4 @@
-// v4.0.0 MCP 测试：stdio JSON-RPC 协议握手、16 工具清单、真实工具调用、错误隔离、stdout 纯净性、root 优先级
+// v4.0.0 MCP 测试：stdio JSON-RPC 协议握手、全量工具清单（v5.0.0 起与 ALL_TOOLS 对齐）、真实工具调用、错误隔离、stdout 纯净性、root 优先级
 // v4.3.0 补：render 快速路径（插件 render 返回 [{type:"text",text}] 时 MCP 收到精修文本而非整包 JSON）、
 //            -32700 Parse error 帧、带 id 的 notifications/* 回 -32600、取消通知、batch 扩展、jsonrpc 字段校验
 // 用法：node test/mcp-test.mjs（独立于其他四套测试，不依赖任何外部服务）
@@ -15,13 +15,10 @@ const PLUGIN_DIR = join(HERE, "..");
 const SERVER = join(PLUGIN_DIR, "mcp", "server.mjs");
 const PKG = JSON.parse(readFileSync(join(PLUGIN_DIR, "package.json"), "utf8"));
 
-// 期望的 16 个工具（硬编码=强回归断言：少注册/改名即失败，与 lib/core.js ALL_TOOLS 对齐）
-const EXPECTED_TOOLS = [
-  "novel_books", "novel_chapters", "novel_read", "novel_keywords", "novel_new_chapter",
-  "novel_import", "novel_sentence_analysis", "novel_sentence_config", "novel_style_check", "novel_plot",
-  "novel_settings", "novel_summary", "novel_continuity_check", "novel_semantic_search", "novel_style_report",
-  "novel_outline"
-];
+// 期望的工具清单：v5.0.0 起改为从 lib/core.js 的 ALL_TOOLS **单一事实源**派生
+// （旧版硬编码 16 项，每加一个工具就要改测试；现在改 ALL_TOOLS 一处即可，测试自动跟随）
+import { ALL_TOOLS } from "../lib/core.js";
+const EXPECTED_TOOLS = [...ALL_TOOLS];
 
 let pass = 0;
 let fail = 0;
@@ -206,7 +203,7 @@ ok("notifications/initialized 无响应（无游离消息）", a.stray.length ==
 
 const list = await a.request("tools/list");
 const tools = Array.isArray(list.result?.tools) ? list.result.tools : [];
-ok("tools/list 返回 16 个工具", tools.length === 16, "n=" + tools.length);
+ok("tools/list 返回全部工具", tools.length === EXPECTED_TOOLS.length, "n=" + tools.length + "/" + EXPECTED_TOOLS.length);
 const names = tools.map((tool) => tool.name).sort();
 ok("工具名与 ALL_TOOLS 完全一致", JSON.stringify(names) === JSON.stringify([...EXPECTED_TOOLS].sort()), names.join(","));
 const schemaOk = tools.every((tool) => tool
@@ -235,7 +232,7 @@ if (booksValue !== null) {
   ok("文本输出含书名与章节数", booksText.includes(BOOK) && booksText.includes("2"), booksText.slice(0, 120));
   ok("文本输出含书库根目录", booksText.includes(testRoot), booksText.slice(0, 120));
 }
-// v4.3.0：render 快速路径必须真的生效——插件 16 个 render 都返回 [{type:"text",text}]，
+// v4.3.0：render 快速路径必须真的生效——插件全部 render 都返回 [{type:"text",text}]，
 // 旧实现只认字符串 → 这里收到的会是整包 JSON（以 "{" 开头），精修文本被丢弃。
 ok("输出走插件 render 精修文本（不是 JSON 兜底）",
   booksText.startsWith("<path>") && booksText.includes("<type>novel-library</type>") && !booksText.startsWith("{"),
@@ -295,7 +292,7 @@ ok("未知工具返回 -32602 协议错误（符合 MCP Tools 规范）",
 ok("未知工具不再是 isError 结果（不再混入\"工具执行错误\"分类）",
   unknownTool.result === undefined && unknownTool.jsonrpc === "2.0", JSON.stringify(unknownTool.result ?? null));
 ok("未知工具的 error.data.hint 给出可用工具数",
-  unknownTool.error?.data?.availableToolCount === 16 && String(unknownTool.error?.data?.hint ?? "").includes("tools/list"),
+  unknownTool.error?.data?.availableToolCount === EXPECTED_TOOLS.length && String(unknownTool.error?.data?.hint ?? "").includes("tools/list"),
   JSON.stringify(unknownTool.error?.data ?? null));
 const unknownMethod = await a.request("foo/bar");
 ok("未知方法返回 -32601", unknownMethod.error?.code === -32601 && unknownMethod.jsonrpc === "2.0", JSON.stringify(unknownMethod.error ?? null));
@@ -325,7 +322,7 @@ ok("stray 仅含预期的 -32700（无其它游离响应）",
   a.stray.every((message) => message && message.error && message.error.code === -32700),
   JSON.stringify(a.stray.map((m) => m && (m.error ? m.error.code : m.id))));
 ok("stdout 无非 JSON 行（协议通道纯净）", a.badLines.length === 0, a.badLines.join(" | ").slice(0, 200));
-ok("日志写 stderr（含注册信息）", a.stderrText().includes("已注册 16 个工具"), a.stderrText().split("\n")[0]?.slice(0, 120));
+ok("日志写 stderr（含注册信息）", a.stderrText().includes("已注册 " + EXPECTED_TOOLS.length + " 个工具"), a.stderrText().split("\n")[0]?.slice(0, 120));
 // v4.3.0：stderr 不得回显非法行正文（旧实现打前 200 字符；正文可能是用户稿件片段）
 ok("stderr 不回显非法行正文（只记长度）",
   a.stderrText().includes("非法 JSON 行") && !a.stderrText().includes("这不是 JSON"), a.stderrText().split("\n").filter((l) => l.includes("非法 JSON"))[0] ?? "(无)");

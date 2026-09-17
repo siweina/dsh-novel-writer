@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_new_chapter — 新建章节｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_new_chapter 的实现细节：章号解析与文件名归一、wx 独占写入的防覆盖语义、标题与正文的合成文本口径、强制风格基线与风格锚包的生成规则，以及对调用方模型的约束。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_new_chapter","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-new-chapter.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_new_chapter — 新建章节｜dsh-novel-writer 技术文档","description":"novel_new_chapter 的实现细节：章号解析与文件名归一、wx 独占写入的防覆盖语义、标题与正文的合成文本口径、强制风格基线与风格锚包的生成规则，以及对调用方模型的约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-new-chapter.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"4.3.1","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_new_chapter, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_new_chapter — 新建章节｜dsh-novel-writer 技术文档","description":"novel_new_chapter 的实现细节：章号解析与文件名归一、wx 独占写入的防覆盖语义、标题与正文的合成文本口径、强制风格基线与风格锚包的生成规则，以及对调用方模型的约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-new-chapter.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"5.0.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_new_chapter, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -43,7 +43,7 @@
         <tbody>
           <tr><th><code>book</code></th><td>string</td><td>是</td><td>书名，即 <code>novels/</code> 下的子目录名。经 <code>sanitizeSegment</code> 清洗：剥离 <code>\ / : * ? " &lt; &gt; |</code>、首尾点与空白，Windows 保留名（CON / NUL 等）加下划线前缀；清洗后为空则报错。目录不存在时自动创建。</td></tr>
           <tr><th><code>chapter</code></th><td>integer</td><td>否</td><td>显式章号，须为 <strong>1–99999 的整数</strong>。省略时取现有最大可解析章号 + 1。</td></tr>
-          <tr><th><code>title</code></th><td>string</td><td>否</td><td>章节标题，写为正文首行 <code># 标题</code>。空串或纯空白视为未提供。</td></tr>
+          <tr><th><code>title</code></th><td>string</td><td>否</td><td>章节标题，写为正文首行 <code># 标题</code>，并（v5.0.0 起）<strong>一并进文件名</strong>：<code>第NN章 标题.md</code>。空串或纯空白视为未提供。</td></tr>
           <tr><th><code>content</code></th><td>string</td><td>否</td><td>初始正文。空串或纯空白视为未提供。</td></tr>
           <tr><th><code>root</code></th><td>string</td><td>否</td><td>章节库根目录。缺省回退顺序：<code>args.root</code> → <code>config.root</code> → 会话工作目录。MCP 形态下必须落在启动参数 <code>--root</code> 之内。</td></tr>
         </tbody>
@@ -57,7 +57,7 @@
         <tbody>
           <tr><th><code>book</code></th><td>string</td><td><strong>必返</strong>。清洗后的书名</td></tr>
           <tr><th><code>number</code></th><td>integer</td><td><strong>必返</strong>。本次实际使用的章号</td></tr>
-          <tr><th><code>file</code></th><td>string</td><td><strong>必返</strong>。文件名，固定为 <code>第NN章.md</code>（章号左补零到至少 2 位）</td></tr>
+          <tr><th><code>file</code></th><td>string</td><td><strong>必返</strong>。文件名：无 <code>title</code> 时为 <code>第NN章.md</code>（章号左补零到至少 2 位）；<strong>给了 <code>title</code> 时为 <code>第NN章 标题.md</code></strong>（v5.0.0 修正：标题经 <code>sanitizeSegment</code> 剥掉 <code>\ / : * ? " &lt; &gt; |</code> 等非法字符并截断到 24 字；标题全是非法字符则退回不带标题的文件名，<strong>不因此拒绝创建</strong>）</td></tr>
           <tr><th><code>path</code></th><td>string</td><td><strong>必返</strong>。落盘绝对路径</td></tr>
           <tr><th><code>chars</code></th><td>integer</td><td><strong>必返</strong>。写入文本的字符数（合成文本整体长度，含标题行与结尾换行）</td></tr>
           <tr><th><code>baseline</code></th><td>string</td><td>全书六维基线 μ 摘要，形如「标签 值 / 标签 值 …」，无法计算时为缺失</td></tr>

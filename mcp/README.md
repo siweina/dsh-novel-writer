@@ -1,12 +1,13 @@
 # dsh-novel-writer — stdio MCP 服务器
 
-把 **dsh-novel-writer** 插件的 16 个 `novel_*` 小说写作工具，以标准 **MCP（Model Context Protocol）stdio 服务器**暴露给
+把 **dsh-novel-writer** 插件的 18 个 `novel_*` 小说写作工具，以标准 **MCP（Model Context Protocol）stdio 服务器**暴露给
 Claude Desktop、Cursor 等任何 MCP 客户端。
 
 - **零业务复制**：服务器不重写任何逻辑，而是用 stub ctx 启动插件（`lib/index.js` 的 `apply()`），捕获它注册的
   `{ name, description, parameters, execute, output }` 工具定义，再把 MCP 的 `tools/list` / `tools/call` 映射过去。
-  **工具数（当前 16）与 stub ctx 暴露的服务面不变时本服务器无需改动**；插件新增工具或改用别的宿主服务
-  （如新增 `ctx.xxx` 注入）时，需同步本文件的 `EXPECTED_TOOL_COUNT` 与 `ctx` 桩。
+  **工具数（当前 18）与 stub ctx 暴露的服务面不变时本服务器无需改动**；插件新增工具或改用别的宿主服务
+  （如新增 `ctx.xxx` 注入）时，需同步 `mcp/server.mjs` 的 `ctx` 桩。工具数不再硬编码——`server.mjs` 启动时从
+  `lib/core.js` 的 `ALL_TOOLS` 派生并与实际注册表比对（v5.0.0 起），所以改名/增删工具只需改 `ALL_TOOLS` 一处。
 - **零外部依赖**：只使用 Node 内置模块，手写 JSON-RPC 2.0（不依赖 `@modelcontextprotocol/sdk`）。
 - **stdout 只走协议帧**，所有日志写 stderr，绝不污染协议通道。
 
@@ -138,7 +139,7 @@ printf '%s\n' \
 
 ---
 
-## 4. 工具清单（16 个）
+## 4. 工具清单（18 个）
 
 | # | 工具 | 用途 |
 |---|---|---|
@@ -149,15 +150,17 @@ printf '%s\n' \
 | 5 | `novel_new_chapter` | 创建新章节文件（自动附风格基线 μ 摘要与原著锚包） |
 | 6 | `novel_import` | 批量导入原稿件（scan 预览 / apply 落盘） |
 | 7 | `novel_sentence_analysis` | 句式模式分析（九类句式、转移、节奏、情感曲线、风格指纹） |
-| 8 | `novel_sentence_config` | 查看/修改功能开关（enabled / autoAnalyze / 各工具开关） |
+| 8 | `novel_sentence_config` | 查看/修改功能开关（enabled / autoAnalyze / 各工具开关 / promptScene 提示词场景） |
 | 9 | `novel_style_check` | 章节风格自检（与全书基线对比，输出偏差与锚段） |
-| 10 | `novel_plot` | 伏笔/剧情线登记表（open 待回收 / done 已回收） |
+| 10 | `novel_plot` | 伏笔/剧情线登记表（open 待回收 / done 已回收）；新增 `action:"graph"` 结构视图（伏笔埋设跨度 / 人物连续缺席 / 剧情线空档 / 时间线顺序 / 大纲对照，只读） |
 | 11 | `novel_settings` | 五张设定表（人物/地点/道具/时间线/世界观用语规范） |
 | 12 | `novel_summary` | 章节摘要的增删改查 |
 | 13 | `novel_continuity_check` | 连贯性审计（矛盾候选、衔接、OOC、大纲对照） |
 | 14 | `novel_semantic_search` | 本地语义检索（embedding，无需关键词） |
 | 15 | `novel_style_report` | 风格画像报告（六维基线 + 锚包） |
 | 16 | `novel_outline` | 创作资料维护（创作设定/人物/大纲/钩子/状态卡） |
+| 17 | `novel_chapter_brief` | 开写包：动笔前一次调用取齐材料（上一章承接口/本章方向/相关人物/待回收伏笔/用语规范/风格基线/锚段与骨架/禁用清单/开写清单），只读不写盘 |
+| 18 | `novel_fix_plan` | 改稿台：把风格诊断变成按优先级排好的待办（带行号定位与锚段），`plan`/`verify`/`mark` 三态，只给方向不生成正文 |
 
 每个工具的 `inputSchema` 就是插件注册时声明的 `parameters`（原样透传，未做任何改写）。
 
@@ -174,7 +177,7 @@ printf '%s\n' \
 | `initialize` | 返回协商后的 `protocolVersion`、`capabilities: { tools: {} }`、`serverInfo: { name: "dsh-novel-writer", version: <package.json version> }` |
 | `notifications/initialized` | 通知，无响应（`notifications/cancelled`、`notifications/progress` 等同样静默） |
 | `notifications/cancelled` | 通知，无响应；**会真的取消在途请求**：`params.requestId` 命中的 `tools/call` 会被 abort（服务器把 `exec.signal` 传给插件） |
-| `tools/list` | `{ tools: [{ name, description, inputSchema }] }`，共 16 个 |
+| `tools/list` | `{ tools: [{ name, description, inputSchema }] }`，共 18 个 |
 | `tools/call` | 参数 `{ name, arguments }`；成功 → `{ content: [{ type: "text", text }] }` |
 | `tools/call`（未知工具） | 回**协议错误 `-32602`**（`Unknown tool: <name>`），可读提示在 `error.data.hint`/`availableToolCount`（v4.3.0 起符合规范） |
 | `ping` | `{}` |
@@ -204,7 +207,7 @@ v4.3.0 曾有两处**刻意保留的偏差**，v4.3.0 已全部按规范修正�
 优先使用插件 `output.render(args, value)` 的返回值：
 
 - 返回**字符串** → 直接采用；
-- 返回 **`[{ type: "text", text }]` 数组**（DSH 宿主契约，本插件 16 个工具全部是这种）→ 过滤出 `type === "text"` 的
+- 返回 **`[{ type: "text", text }]` 数组**（DSH 宿主契约，本插件 18 个工具全部是这种）→ 过滤出 `type === "text"` 的
   `text` 后 `join("\n")` 作为 MCP 文本内容；
 - 两者都不是 / `render` 抛错 → 回退 `JSON.stringify(value, null, 2)`。
 
@@ -249,7 +252,7 @@ node test/client-test.mjs       # 客户端模块加载 + 面板渲染断言，�
 ```
 
 `test/mcp-test.mjs` 会在系统临时目录里现造一本 2 章的书，`spawn` 真实服务器进程，覆盖：
-握手与版本、每条响应含 `jsonrpc:"2.0"`、通知无响应、16 工具清单与 schema 透传、
+握手与版本、每条响应含 `jsonrpc:"2.0"`、通知无响应、18 工具清单与 schema 透传、
 `novel_books`/`novel_read`/`novel_sentence_config`/`novel_sentence_analysis`/`novel_style_report` 真实调用、
 render 精修文本（非 JSON 兜底）、`novel_import` 的 src 越界拦截、root 注入与显式 root 优先、
 工具抛错隔离、未知工具/未知方法、带 id 的通知类请求、`-32700` 与 `-32600` 错误帧、
@@ -271,5 +274,5 @@ render 精修文本（非 JSON 兜底）、`novel_import` 的 src 越界拦截�
 | `错误：工具 … 当前已在「写作助手功能」UI 中关闭` | 用 `novel_sentence_config` 重新开启，或在 DSH 侧边栏面板打开。 |
 | 首次语义检索/风格分析较慢 | `novel_semantic_search` 会加载本地 embedding 模型并建索引，首次调用耗时较长属正常；中途不想等可发 `notifications/cancelled`（带 `requestId`）取消。 |
 | 正文乱码 | 章节文件需为 UTF-8；GBK 文件请先转码。 |
-| 客户端看不到工具 | 确认 `args` 中 `server.mjs` 为绝对路径、`node` 在 PATH；查看客户端 MCP 日志中的 stderr 输出（应能看到「已注册 16 个工具」）。用 `npx` 时必须写 `-p dsh-novel-writer dsh-novel-writer-mcp`（包名 ≠ bin 名）。 |
+| 客户端看不到工具 | 确认 `args` 中 `server.mjs` 为绝对路径、`node` 在 PATH；查看客户端 MCP 日志中的 stderr 输出（应能看到「已注册 18 个工具」）。用 `npx` 时必须写 `-p dsh-novel-writer dsh-novel-writer-mcp`（包名 ≠ bin 名）。 |
 | Windows 路径报错 | JSON 中反斜杠需转义 `\\`，或直接使用正斜杠 `/`。 |

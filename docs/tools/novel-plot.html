@@ -4,21 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>novel_plot — 伏笔登记表｜dsh-novel-writer 技术文档</title>
-<meta name="description" content="novel_plot 的实现细节：伏笔条目的字段结构、open/done 状态机、id 生成规则、scan 的提及扫描算法与关键词提取口径、落盘路径与并发事务语义。">
+<meta name="description" content="novel_plot 的实现细节：伏笔条目的字段结构、open/done 状态机、id 生成规则、scan 的提及扫描算法与关键词提取口径、action: graph 结构视图的五项跨章计算（伏笔生命周期 / 人物出场矩阵与连续缺席 / 线索活跃度 / 时间线顺序 / 大纲对照）、落盘路径与并发事务语义。">
 <link rel="stylesheet" href="../styles.css">
 <link rel="stylesheet" href="docs.css">
 <link rel="canonical" href="https://siweina.github.io/dsh-novel-writer/tools/novel-plot.html">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="dsh-novel-writer">
 <meta property="og:title" content="novel_plot — 伏笔登记表｜dsh-novel-writer 技术文档">
-<meta property="og:description" content="novel_plot 的实现细节：伏笔条目的字段结构、open/done 状态机、id 生成规则、scan 的提及扫描算法与关键词提取口径、落盘路径与并发事务语义。">
+<meta property="og:description" content="novel_plot 的实现细节：伏笔条目的字段结构、open/done 状态机、id 生成规则、scan 的提及扫描算法与关键词提取口径、action: graph 结构视图的五项跨章计算（伏笔生命周期 / 人物出场矩阵与连续缺席 / 线索活跃度 / 时间线顺序 / 大纲对照）、落盘路径与并发事务语义。">
 <meta property="og:url" content="https://siweina.github.io/dsh-novel-writer/tools/novel-plot.html">
 <meta property="og:locale" content="zh_CN">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="novel_plot — 伏笔登记表｜dsh-novel-writer 技术文档">
-<meta name="twitter:description" content="novel_plot 的实现细节：伏笔条目的字段结构、open/done 状态机、id 生成规则、scan 的提及扫描算法与关键词提取口径、落盘路径与并发事务语义。">
+<meta name="twitter:description" content="novel_plot 的实现细节：伏笔条目的字段结构、open/done 状态机、id 生成规则、scan 的提及扫描算法与关键词提取口径、action: graph 结构视图的五项跨章计算（伏笔生命周期 / 人物出场矩阵与连续缺席 / 线索活跃度 / 时间线顺序 / 大纲对照）、落盘路径与并发事务语义。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_plot","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-plot.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_plot — 伏笔登记表｜dsh-novel-writer 技术文档","description":"novel_plot 的实现细节：伏笔条目的字段结构、open/done 状态机、id 生成规则、scan 的提及扫描算法与关键词提取口径、落盘路径与并发事务语义。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-plot.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"4.3.1","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_plot, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_plot — 伏笔登记表｜dsh-novel-writer 技术文档","description":"novel_plot 的实现细节：伏笔条目的字段结构、open/done 状态机、id 生成规则、scan 的提及扫描算法与关键词提取口径、action: graph 结构视图的五项跨章计算（伏笔生命周期 / 人物出场矩阵与连续缺席 / 线索活跃度 / 时间线顺序 / 大纲对照）、落盘路径与并发事务语义。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-plot.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"5.0.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_plot, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -34,15 +34,19 @@
     <article class="doc">
       <h1>novel_plot</h1>
       <p class="doc__lead">
-        伏笔 / 剧情钩子登记表。以「一部作品一个 JSON 文件」维护伏笔条目，用 <code>status</code> 区分 <code>open</code>（待回收）与 <code>done</code>（已回收）；<code>scan</code> 动作把伏笔内容切成关键词后遍历章节正文，自动在条目上标注「在哪几章被提及」。<strong>纯本地文本包含判定</strong>，不做语义推理，也不调用在线模型。
+        伏笔 / 剧情钩子登记表。以「一部作品一个 JSON 文件」维护伏笔条目，用 <code>status</code> 区分 <code>open</code>（待回收）与 <code>done</code>（已回收）；<code>scan</code> 动作把伏笔内容切成关键词后遍历章节正文，自动在条目上标注「在哪几章被提及」；<code>action: "graph"</code> 是<strong>结构视图</strong>，对全书做跨章计算——伏笔生命周期、人物出场矩阵与连续缺席、线索活跃度、时间线登记顺序、大纲与正文的对照。<strong>纯本地文本统计与包含判定</strong>，不做语义推理，也不调用在线模型。
       </p>
+
+      <div class="note">
+        <b>为什么要有结构视图。</b>伏笔表、人物表、时间线在这之前都是<strong>离散静态表</strong>：能查、能改，但没有任何跨章计算。而长篇崩掉通常不是因为某一章文笔差，而是<strong>线断了、人丢了、伏笔忘了</strong>——这三件事都只有跨章才看得出来。结构视图不新增数据，只把已有登记表按章号轴算一遍距离与空档。它并入本工具而不新建工具，是因为伏笔生命周期本就属于 <code>novel_plot</code> 的领域，且 <code>action</code> 已是枚举，加分支向后兼容。
+      </div>
 
       <h2>参数</h2>
       <table>
         <thead><tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr></thead>
         <tbody>
           <tr><th><code>book</code></th><td>string</td><td>是</td><td>书名，即 <code>novels/</code> 下的子目录名。经 <code>sanitizeSegment</code> 过滤。</td></tr>
-          <tr><th><code>action</code></th><td>string</td><td>否</td><td>枚举六值，见下表。非枚举取值与省略一律按 <code>list</code> 处理。</td></tr>
+          <tr><th><code>action</code></th><td>string</td><td>否</td><td>枚举七值，见下表。非枚举取值与省略一律按 <code>list</code> 处理。</td></tr>
           <tr><th><code>id</code></th><td>string</td><td>否</td><td><code>update</code> / <code>done</code> / <code>delete</code> 必需：目标伏笔 id，必须已存在。</td></tr>
           <tr><th><code>content</code></th><td>string</td><td>否</td><td><code>add</code> 必需；<code>update</code> 可选：伏笔内容描述。</td></tr>
           <tr><th><code>chapter</code></th><td>string</td><td>否</td><td>伏笔出现的章节。<code>scan</code> 时用作「只扫该章」的章节标识。</td></tr>
@@ -52,6 +56,7 @@
           <tr><th><code>relatedCharacters</code></th><td>string[]</td><td>否</td><td>关联人物。<code>add</code> 写入；<code>update</code> 整组替换。</td></tr>
           <tr><th><code>locations</code></th><td>string[]</td><td>否</td><td>关联地点。<code>add</code> 写入；<code>update</code> 整组替换。</td></tr>
           <tr><th><code>payoffCondition</code></th><td>string</td><td>否</td><td>回收条件。</td></tr>
+          <tr><th><code>absenceThreshold</code></th><td>integer</td><td>否</td><td><strong>仅 <code>graph</code> 使用</strong>：人物连续缺席多少章才算一条 <code>absences</code>（默认 <strong>5</strong>）。只接受正整数，其它值按默认处理。其余动作忽略该参数。</td></tr>
           <tr><th><code>root</code></th><td>string</td><td>否</td><td>章节库根目录。缺省时取插件配置的 <code>root</code>，再缺省取会话工作目录。</td></tr>
         </tbody>
       </table>
@@ -66,6 +71,7 @@
           <tr><th><code>done</code></th><td>标记已回收（<code>status → done</code>）。</td><td><code>id</code> 且存在</td><td>全表</td></tr>
           <tr><th><code>delete</code></th><td>删除条目。</td><td><code>id</code> 且存在</td><td>全表</td></tr>
           <tr><th><code>scan</code></th><td>扫描章节正文，更新 <code>open</code> 条目的提及章节。</td><td>作品目录下至少一个章节文件</td><td>全表 + 统计文案</td></tr>
+          <tr><th><code>graph</code></th><td>结构视图：对全书做跨章计算，输出伏笔生命周期、人物出场矩阵、线索活跃度、时间线顺序与大纲对照。</td><td>无（材料缺失时按字段降级）</td><td>五项计算结果 + 汇总 + 降级说明</td></tr>
         </tbody>
       </table>
 
@@ -76,8 +82,9 @@
         <tbody>
           <tr><th><code>book</code></th><td>string</td><td>净化后的书名</td></tr>
           <tr><th><code>action</code></th><td>string</td><td>归一后的动作（可能与传入值不同）</td></tr>
-          <tr><th><code>entries</code></th><td>object[]</td><td>伏笔条目数组，见下</td></tr>
-          <tr><th><code>message</code></th><td>string</td><td>操作结果文案，例如「已登记伏笔 #m1x2k9ab3f」「扫描 12 章，更新 3 条伏笔的提及记录」</td></tr>
+          <tr><th><code>entries</code></th><td>object[]</td><td>伏笔条目数组，见下。<strong><code>graph</code> 分支恒返回空数组 <code>[]</code></strong>——它不为放松共享 <code>output.schema</code> 的 <code>required: ["book","action","entries"]</code> 而改动契约（放松会让另外 6 个动作少一层断言），因此用一个空数组占位；结构视图的数据全部在 <code>plotLifecycle</code> 等专用字段里。</td></tr>
+          <tr><th><code>message</code></th><td>string</td><td>操作结果文案，例如「已登记伏笔 #m1x2k9ab3f」「扫描 12 章，更新 3 条伏笔的提及记录」。<strong><code>graph</code> 不返回该字段</strong>（改用 <code>summary</code>）。</td></tr>
+          <tr><th><code>totalChapters</code> / <code>plotLifecycle</code> / <code>characterMatrix</code> / <code>threadActivity</code> / <code>timelineOrder</code> / <code>planVsActual</code> / <code>summary</code> / <code>degraded</code></th><td>—</td><td><strong>仅 <code>graph</code> 返回</strong>：五项跨章计算结果与章数、概览文案、降级说明，见下文「结构视图」。</td></tr>
         </tbody>
       </table>
       <p><code>entries</code> 的元素契约（<code>required: ["id","content","status"]</code>）：</p>
@@ -157,6 +164,116 @@
       <p>任一关键词在章节正文中出现即算该章提及：把 <code>chapter.file</code> 追加进 <code>mentionedIn</code>（已在数组内则跳过），同时刷新 <code>lastMentioned</code> 与 <code>updatedAt</code>。计数器只在「本条目本不存在于该章」时递增，因此返回文案里的更新条数反映的是新增的提及，而不是命中总数。</p>
       <p>遍历范围有限定：<strong>只处理 <code>status === "open"</code> 的条目</strong>——已回收的伏笔不再更新提及记录；<code>chapter</code> 参数存在时只扫该章（先用 <code>findChapter</code> 解析，找不到则报错），否则扫全部章节。</p>
 
+      <h2>结构视图 <code>action: "graph"</code></h2>
+      <p>纯读、纯计算的跨章视图：除 <code>book</code>（与可选的 <code>root</code> / <code>absenceThreshold</code>）外不需要任何参数，<strong>不写任何文件</strong>（与 <code>scan</code> 不同——<code>scan</code> 会更新提及记录），也不复用会在旧位置迁移写盘的 <code>readPlots</code>。它把三张登记表（伏笔 / 设定 / 创作资料）放到同一条章号轴上，输出五项结果。</p>
+      <p><strong>章号轴的口径</strong>：章号取自 <code>scanChapters</code> 的 <code>number</code>；<strong>解析不出章号的文件按扫描顺序占位编号（<code>i + 1</code>）</strong>参与计算，并在 <code>degraded</code> 里点名（否则它们会被「全书最大章号」口径整段吞掉）。<code>totalChapters</code> 是章节文件个数，而所有距离 / 空档计算的基准上界是 <code>maxChapter</code>= <strong>现有章节里最大的章号</strong>——章号不连续（如缺第 5 章）时两者不相等，距离按章号之差而非文件序号之差计算。</p>
+      <div class="warn note">
+        <b>唯一的抛错路径是作品目录不存在。</b>缺伏笔表 / 缺人物表 / 缺时间线 / 缺大纲 / 空书 / 单章读失败一律返回空值 + <code>degraded</code> 说明。<code>assembleGraph</code> 内部若有异常数据或 IO 事故，也会兜底返回<strong>字段齐全的空结构</strong>并写清中文原因，保证调用方永远拿得到同一套字段。
+      </div>
+
+      <h3>1 · <code>plotLifecycle</code> 伏笔生命周期</h3>
+      <div class="formula">只收 status === "open" 的伏笔（done 只进 summary 的条数，不进本数组）
+
+埋设章号 firstChapter = min( 三处来源能解析出的章号 )：
+    ① 全书正文关键词命中    ← plotKeywords(content) 在该章正文里做包含判定：
+                              ≥3 字长词命中 1 个即算；2 字短词需命中 ≥ 2 个
+    ② entry.mentionedIn[]   ← scan 写入的章节文件名，逐个 parseChapterNumber
+    ③ entry.chapter         ← 登记时的章节字段
+    一处都没有 → firstChapter 省略、distance 省略（并在 degraded 点名）
+
+distance = maxChapter − firstChapter        （maxChapter = 全书最大章号；
+                                              maxChapter 为 0 时 distance 省略）
+输出     = &#123; id, content, priority, type, firstChapter, distance, status: "open" &#125;
+           priority / type 原样透传（priority 缺失时为空串，不做归一）
+排序     = firstChapter 升序（未知排最后）→ id 字典序     ← 先看最早的线索</div>
+      <p>这是 <a href="novel-chapter-brief.html">novel_chapter_brief</a> 的 <code>openPlots[].distance</code> 的<strong>全书版</strong>，但两者口径<strong>并不完全相同</strong>：开写包只从登记字段（<code>chapter</code> / <code>mentionedIn</code> / <code>lastMentioned</code>）推最早提及章号，本视图<strong>还会拿伏笔内容的关键词去全书正文里找首次命中章</strong>，因此「从未 scan 过」的伏笔在本视图里更可能算出 <code>firstChapter</code>。已回收条目不在本数组中，只以条数出现在 <code>summary</code> 里。</p>
+
+      <h3>2 · <code>characterMatrix</code> 人物出场矩阵与连续缺席</h3>
+      <div class="formula">characters = 设定表 characters 表里 name ≥ 2 字的名字（去重；alias 同表格里 <2 字的别名被忽略并记 degraded）
+rows[章]   = &#123; chapter: 章节<strong>文件名</strong>, number: 章号,
+               present: [ 该章正文中出现名字或其任一别名的人物名 ] &#125;
+absences[] = &#123; name, from, to, length &#125;
+    仅统计「首次出场之后」的区间（首次出现之前的章不算缺席）
+    连续缺席的<strong>章数</strong> ≥ 阈值（默认 5，可用参数 absenceThreshold 覆盖）才输出
+    length = 该区间内连续缺席的<strong>章数</strong>（按章序计数）
+             —— 章号不连续时 length 与 to − from 不相等
+    到书末仍未再出场时 to 取最后一章的章号
+排序       = name 中文拼音序 → from 升序</div>
+      <p><strong>只统计「首次出场之后」的区间</strong>：人物在第 20 章才登场，前 19 章当然没有他，那不是缺席。判定为纯字符串包含（含别名），不做语义推理——别名登记不全时会漏判出场，进而把正常出场误报为缺席，因此结果应视为<strong>候选</strong>。全书都未出场的人物<strong>不进 <code>absences</code></strong>，而是单独产出一条 <code>degraded</code> 提示。</p>
+      <div class="note">
+        <b><code>length</code> 是「连续缺席的章数」，不是「章号之差」。</b>这与 <code>threadActivity</code> 的 <code>length</code> / <code>gap</code> 口径<strong>不同</strong>——后两者算的是章号之差。同一条缺席区间 <code>from: 8, to: 14</code> 在章号连续时 <code>length = 7</code>；若中间缺了第 10 章，<code>length</code> 仍是实际缺席的章数（6），而 <code>to − from = 6</code> 恰好相等只是巧合，一般情形下二者不等。另外，设定表登记了 <code>firstSeen</code> 时，还会与正文实际首现章做一次交叉核对，不一致时产出一条以「注：」开头的 <code>degraded</code> 提示（与「缺数据」类降级原因区分开）。
+      </div>
+
+      <h3>3 · <code>threadActivity</code> 线索活跃度</h3>
+      <div class="formula">聚类（三层启发式，并查集取传递闭包，按可靠性从高到低）：
+    ① 两条的 relatedCharacters / locations 有交集（用户显式登记，最可靠）
+    ② 两条的内容关键词共享 ≥ 3 字的片段（plotKeywords 里长度 ≥ 3 的部分）
+    ③ 某条的登记实体名出现在另一条的内容里（A 登记「林昭」、B 的内容提到「林昭」）
+    聚不出来 → 每条独立成线
+
+每条线计算：
+    活跃章号 chapters = 簇内成员「被提及章号」的并集（每条的被提及章号 = 正文关键词命中 ∪
+                        mentionedIn ∪ chapter 三处解析结果），升序去重
+    跨度 length = max(chapters) − min(chapters) → 只活跃 1 章时为 0
+    最大空档 gap = 相邻活跃章号之差的最大值   → 只活跃 1 章时为 0
+    线名 thread：优先「多条共享的人物/地点」（≥ 2 条出现的）取最多 2 个，其次簇内任意登记实体，
+                 再次多条共享的内容关键词，最后退化为首条伏笔内容前 16 字
+输出 = &#123; thread, chapters, length, gap &#125;（每簇一项）
+排序 = 首次活跃章升序（无活跃线索的排最后）→ 线名中文拼音序</div>
+      <p><strong><code>length</code> 与 <code>gap</code> 都是「章号之差」而不是「章数」</strong>：只活跃 1 章的线 <code>length = 0</code>、<code>gap = 0</code>；活跃于第 1 / 2 / 3 / 7 章的线 <code>gap = 4</code>。跨度大而最大空档也大的线，通常就是「断了」的那条：人物还在、地点还在，但这条线上的伏笔连续十几章没有任何推进。<code>plotIds</code> 只在内部使用，<strong>不出现在返回体</strong>里。聚类只基于 <code>open</code> 伏笔；已回收的条数只进 <code>summary</code>。</p>
+
+      <h3>4 · <code>timelineOrder</code> 时间线登记顺序核对</h3>
+      <div class="formula">遍历设定表 timeline 表（<strong>数组顺序 = 登记顺序</strong>），逐条产出：
+    &#123; day, event, chapter, number, issue &#125;
+      day     = entry.day ?? entry.name
+      event   = entry.event ?? entry.description
+      chapter = entry.chapter 转成字符串（缺失 = 空串）
+      number  = parseChapterNumber(chapter)；解析不出 → 省略
+      issue   = "" 或一条固定文案
+
+判定（单趟扫描，维护 maxSoFar）：
+    number 省略的行     → 跳过，不参与判定，也不更新 maxSoFar
+    number &lt; maxSoFar   → 该行 issue = "章号顺序与登记顺序不一致"
+                          注意：命中后<strong>不</strong>更新 maxSoFar（避免把「已经倒退过」当成新的基准）
+    否则                → maxSoFar = number</div>
+      <p>也就是说：<code>issue</code> 只标在「<strong>章号小于此前已登记过的最大章号</strong>」的那些行上——即登记顺序与章号升序不一致；章号相同的并列<strong>不算</strong>不一致，章号解析不出的行既不判错也不影响后续基准。时间线表是手工维护的，这种不一致通常意味着「补登记时插在了中间」或「章号写错了」。本项只<strong>指出不一致</strong>，不自动重排表——重排会掩盖登记时的真实意图。</p>
+
+      <h3>5 · <code>planVsActual</code> 大纲方向行对照</h3>
+      <div class="formula">读 novels/创作资料/&lt;书名&gt;/剧情大纲.md，只取形如「- 12 本章方向…」的<strong>方向行</strong>：
+    行正则 ^[-*]\s+\d{1,4}\s+\S  →  number = 行首数字，direction = 去掉「- N」之后的正文
+
+关键词提取（方向行，最多 12 个）：
+    主路径 core.extractKeywords(direction, 12) 取 .word
+        ← 注意 extractKeywords 只保留「出现次数 &gt; 1」的词，十几字的方向行
+           几乎必然产出空集，所以实现里有明确的退化分支
+    主路径产出 &lt; 2 个 → 退化为「方向行的相邻二字片段」
+        按非汉字切分成 CJK 连续段，每段取全部相邻二字片段，
+        丢掉「两个字都是停用字」的片段（CJK_STOP_CHARS），与 novel_continuity_check 同口径
+    两者并集去重后截断到 12 个
+
+逐条方向行计算：
+    number 找不到对应章节文件（章节 number 逐一对齐）→ unwritten += 1，
+        该行<strong>不进 rows</strong>（大纲通常会预先列出尚未动笔的章节）
+    keywords 为空 → noKeywords += 1，rows 补一条 &#123; number, direction, overlap: 0, keywords: [] &#125;
+    否则 hit = keywords.filter(k =&gt; 该章正文.includes(k))     ← 对正文做<strong>子串包含</strong>判定
+         rows.push(&#123; number, direction, overlap: 四舍五入到 3 位小数(hit.length / keywords.length),
+                     keywords: hit &#125;)      ← keywords 放的是<strong>命中的</strong>子集，不是全部方向行关键词</div>
+      <p>输出的是一行一条方向行的记录，<strong>不是一章一条</strong>：没有正文的章节不产生记录，只累加 <code>unwritten</code> 与一条 <code>degraded</code> 说明；关键词为空的记 <code>overlap: 0</code> 并单独计数。返回体里没有「全部方向行关键词」这一项——<code>keywords</code> 字段就是<strong>命中列表</strong>，因此它同时也说明了「命中了哪几个词」。这是 <a href="novel-continuity-check.html">novel_continuity_check</a> 大纲走偏模式的<strong>全书版</strong>：彼处一次只比对一章，此处一次列出全书各章的重合率趋势，便于发现「连续若干章都在偏离大纲」这类系统性走偏。</p>
+
+      <h3>汇总与降级</h3>
+      <table>
+        <thead><tr><th>字段</th><th>类型</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr><th><code>totalChapters</code></th><td>integer</td><td>章节文件个数（<code>scanChapters</code> 的结果长度）。<strong>它是章数，不是章号上界</strong>——距离 / 空档计算的基准是「全书最大可解析章号」。</td></tr>
+          <tr><th><code>summary</code></th><td>string</td><td>一句话汇总，固定按此顺序拼接：全书 N 章；未回收伏笔 X 条（已回收 Y 条）；人物 Z 名，连续缺席区间 W 处；剧情线 V 条，最大空档 G 章；时间线 T 条（若有逆序则补「（K 条章号顺序与登记顺序不一致）」）；大纲方向 K 条，平均重合率 P%（若有 <code>overlap &lt; 0.2</code> 的章则补「（L 章低于 20%，可能偏离方向）」）或「大纲方向未计算」；若 <code>degraded</code> 非空则补「降级 D 项（见 degraded）」。最后追加一段【风险】：空档最大的线、缺席最长的人物、埋得最久的伏笔（三者各取第一）。</td></tr>
+          <tr><th><code>degraded</code></th><td>array</td><td>取不到的材料与原因，元素是<strong>字符串</strong>（不是对象）。<strong>空数组表示材料完整。</strong>除「少了什么数据」外，人物首现章与登记不符这类提示也以「注：」开头出现在这里。</td></tr>
+        </tbody>
+      </table>
+      <p>无伏笔表 / 无人物表 / 无时间线 / 无大纲 / 全书只有 1 章等情形，一律<strong>返回空值 + <code>degraded</code> 说明，绝不抛错</strong>：跨章视图在资料不全时仍然可用（能算的那几项照算），只是结果不完整。</p>
+      <div class="note">
+        <b><code>graph</code> 与其它动作的差别。</b><code>list</code> / <code>add</code> / <code>update</code> / <code>done</code> / <code>delete</code> 面向单条伏笔的增删改查，<code>scan</code> 面向提及记录的回填（有副作用），<code>graph</code> 面向全书的跨章关系（只读）。四类动作的输出形状互不相同，调用方应以返回体里的 <code>action</code> 字段判断实际执行的是哪一个。
+      </div>
+
       <h2>约束与边界</h2>
       <ul>
         <li><strong>book 必填</strong>，经 <code>sanitizeSegment</code>：剥除 <code>\ / : * ? " &lt; &gt; |</code>、首尾点与空白；命中 Windows 保留名（<code>con</code> / <code>nul</code> / <code>com1</code>…）时前置下划线；清洗后为空则报错终止。</li>
@@ -169,24 +286,29 @@
         <li><strong>并发语义是「整表读-改-写 + 按文件串行」</strong>：同一部作品的并发 <code>add</code> 会依次串行，不会互相覆盖；但这也意味着跨进程（插件进程 + 另一个直接改 JSON 的脚本）没有锁保护，手改文件的并行写入可能被整表覆盖。</li>
         <li><strong>返回体形态依动作而异</strong>：<code>add</code> / <code>update</code> 只返回被操作的那条；<code>list</code> / <code>done</code> / <code>delete</code> / <code>scan</code> 返回全表。想在 <code>done</code> 后只取单条，需要在返回的 <code>entries</code> 里按 id 自行筛选。</li>
         <li><strong>跨版本口径</strong>：v0.8.0 起数据文件由 <code>.novel-writer/&lt;book&gt;.json</code> 迁到 <code>plots/</code> 子目录（读取时自动迁移）；v3.5.0 起非 <code>done</code> 的 <code>status</code> 统一归一为 <code>open</code>；v4.0.0 起 <code>scan</code> 的关键词集合改为进入章节循环前预计算，并对 <code>null</code> / 标量脏条目做守卫（旧版会在坏数据上抛 <code>TypeError</code> 打挂整个工具）。跨版本对同一份数据的扫描耗时与容错表现不同，提及结果本身的口径未变。</li>
+        <li><strong><code>graph</code> 是只读分支</strong>：不更新提及记录、不写盘、不改表，也<strong>不经过 <code>withFileTx</code> 写事务与 <code>readPlots</code></strong>（后者在「新位置缺失、旧位置存在」时会迁移写盘）；只有 <code>scan</code> 会写（更新 <code>mentionedIn</code> / <code>lastMentioned</code>），其余增量动作走 <code>writePlots</code>。想在不产生副作用的前提下看清全书结构，用 <code>graph</code>。</li>
+        <li><strong><code>graph</code> 依赖登记质量，但埋设章不只看登记</strong>：<code>plotLifecycle.firstChapter</code> 取「全书正文关键词命中 ∪ <code>mentionedIn</code> ∪ <code>chapter</code>」三者的最小值——<strong>从未 <code>scan</code> 过、也没写 <code>chapter</code> 的伏笔，只要内容关键词在正文里出现，仍能算出埋设章</strong>。三处都推不出时才把 <code>firstChapter</code> / <code>distance</code> 整键省略并记 <code>degraded</code>。人物出场靠<strong>纯字符串包含</strong>判定，别名未登记会漏判；时间线核对只认登记顺序，不推断意图。</li>
+        <li><strong><code>graph</code> 的缺席阈值是「连续 ≥ 5 章」</strong>：低于 5 章视为正常轮换，不列为缺席；阈值可用参数 <code>absenceThreshold</code> 改（只接受正整数）；且只统计<strong>首次出场之后</strong>的区间——人物登场之前的章节不计入缺席。<code>absences[].length</code> 是<strong>连续缺席的章数</strong>，与 <code>threadActivity</code> 的「章号之差」口径不同。</li>
+        <li><strong>章号轴包含「解析不出章号」的章节</strong>：这类文件按扫描顺序占位编号（<code>i + 1</code>）参与全部跨章计算，并记一条 <code>degraded</code>（占位编号可能与真实章号冲突）。所有距离 / 空档的基准是<strong>全书最大可解析章号</strong> <code>maxChapter</code>，不是 <code>totalChapters</code>；章号不连续时两者不等。</li>
         <li><strong>MCP 形态下的 root 限制</strong>：工具参数里的 <code>root</code> 必须落在服务器启动参数 <code>--root</code> 指定的书库根之内（含根本身），越界会被静默回退为书库根，同时记 stderr 日志。</li>
-        <li><strong>参数表禁止额外字段</strong>：<code>parameters.additionalProperties = false</code>，未声明的参数名不在契约内。</li>
+        <li><strong>参数表禁止额外字段</strong>：<code>parameters.additionalProperties = false</code>，未声明的参数名不在契约内。新增的 <code>graph</code> 分支要求 <code>output.schema</code> 同步声明其返回字段（schema 为 <code>additionalProperties: false</code>，漏声明会让宿主直接拒收返回体）。</li>
       </ul>
 
       <h2>相关工具</h2>
       <ul>
-        <li><a href="novel-settings.html">novel_settings</a> —— 人物 / 地点 / 道具 / 时间线 / 世界观用语规范五张设定表，伏笔里的关联人物与地点通常先在此登记。</li>
-        <li><a href="novel-outline.html">novel_outline</a> —— 创作资料（含「钩子记录.md」）：逐章结尾钩子的行级回填，与伏笔表是两套不同的追踪对象。</li>
-        <li><a href="novel-continuity-check.html">novel_continuity_check</a> —— 对照设定表扫描全书输出矛盾候选；世界观禁用词与语用规范检查在彼处实现。</li>
+        <li><a href="novel-settings.html">novel_settings</a> —— 人物 / 地点 / 道具 / 时间线 / 世界观用语规范五张设定表，伏笔里的关联人物与地点通常先在此登记；<code>graph</code> 的人物出场矩阵与时间线核对直接读这三张表。</li>
+        <li><a href="novel-outline.html">novel_outline</a> —— 创作资料（含「钩子记录.md」、「剧情大纲.md」）：逐章结尾钩子的行级回填与大纲方向行，与伏笔表是两套不同的追踪对象；<code>graph</code> 的 <code>planVsActual</code> 读的是大纲方向行。</li>
+        <li><a href="novel-continuity-check.html">novel_continuity_check</a> —— 对照设定表扫描全书输出矛盾候选；世界观禁用词与语用规范检查在彼处实现，大纲走偏的单章版亦在彼处。</li>
+        <li><a href="novel-chapter-brief.html">novel_chapter_brief</a> —— 动笔前的材料装配，其 <code>openPlots[].distance</code> 与 <code>graph</code> 的 <code>plotLifecycle.distance</code> 是<strong>同一族口径</strong>（都是「全书最大章号 − 最早提及章号」），但开写包只从登记字段推最早提及章号，本视图还会拿关键词去正文里找首次命中章，因此两者可能给出不同的 <code>firstChapter</code>。</li>
         <li><a href="novel-summary.html">novel_summary</a> —— 章节摘要，用于回忆前情而非追踪伏笔。</li>
       </ul>
 
       <h2>源码位置</h2>
       <ul>
-        <li><span class="src">lib/index.js</span> —— 工具注册与 <code>execute</code>：<code>registerNovelPlot</code>（约 2245–2434 行），含六个动作分支与返回体组装。</li>
-        <li><span class="src">lib/core.js</span> —— <code>plotsFile</code> / <code>legacyPlotsFile</code> / <code>readPlots</code> / <code>writePlots</code> / <code>plotKeywords</code> / <code>normalizePlotEntry</code>（约 1942–1998 行）。</li>
-        <li><span class="src">lib/core.js</span> —— <code>withFileTx</code>（约 969 行）、<code>atomicWriteJson</code>（约 942 行）、<code>sanitizeSegment</code>（约 211 行）、<code>scanChapters</code> / <code>findChapter</code>（约 236 / 376 行）。</li>
-        <li><span class="src">mcp/server.mjs</span> —— <code>buildArgs</code> / <code>isInsideRoot</code>（约 259–289 行）：root 越界回退与参数注入。</li>
+        <li><span class="src">lib/graph.js</span> —— 结构视图主体：<code>buildStoryGraph</code>（唯一对外导出）与内部的 <code>assembleGraph</code>（主流程：章节 → 设定表 → 摘要 → 伏笔 → 五项计算）、<code>buildPlotLifecycle</code> / <code>plotKeywordSets</code> / <code>textMentionsPlot</code>（伏笔埋设章）、<code>collectCharacters</code> / <code>characterPresent</code> / <code>computeAbsences</code>（人物矩阵与连续缺席）、<code>clusterPlots</code> / <code>threadLabel</code> / <code>buildThreadActivity</code>（剧情线聚类与活跃度）、<code>buildTimelineOrder</code>（时间线顺序核对）、<code>directionKeywords</code> / <code>pushBigrams</code> / <code>buildPlanVsActual</code>（方向行关键词与重合率）、<code>buildSummary</code> / <code>emptyGraph</code>（概览文案与空结构兜底）。</li>
+        <li><span class="src">lib/index.js</span> —— <code>registerNovelPlot</code>：工具注册、<code>action</code> 枚举（含 <code>graph</code>）、<code>absenceThreshold</code> 参数、输出 schema（含五项结果字段）、<code>graph</code> 的<strong>只读早返回</strong>分支（<code>{ ...graph, entries: [], action: "graph" }</code>，在 <code>withFileTx</code> 之外）与渲染文本。</li>
+        <li><span class="src">lib/core.js</span> —— <code>plotsFile</code> / <code>legacyPlotsFile</code> / <code>readPlots</code> / <code>writePlots</code> / <code>plotKeywords</code> / <code>normalizePlotEntry</code> / <code>normalizeSettingEntry</code>（伏笔与设定表的读写口径）；<code>withFileTx</code>、<code>atomicWriteJson</code>、<code>sanitizeSegment</code>、<code>scanChapters</code> / <code>findChapter</code>、<code>readSettings</code>、<code>readSummaries</code>、<code>creationDir</code> / <code>CREATION_FILES</code>（大纲方向行的读取路径）、<code>extractKeywords</code> / <code>CJK_STOP_CHARS</code>（方向行关键词的主路径与停用字集）。</li>
+        <li><span class="src">mcp/server.mjs</span> —— <code>buildArgs</code> / <code>isInsideRoot</code>：root 越界回退与参数注入。</li>
       </ul>
     </article>
 

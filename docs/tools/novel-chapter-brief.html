@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>novel_chapter_brief — 开写包｜dsh-novel-writer 技术文档</title>
+<meta name="description" content="novel_chapter_brief 的实现细节：一次只读调用装配动笔前的全部材料 —— 承接口 anchor、上一章钩子、大纲方向行、命中人物卡、未回收伏笔与 distance、世界观禁用词、六维基线、原著锚段与句式骨架、上一章自检结论、禁用清单与 plan；含 budget 两档截断口径与空库 / 无大纲 / 单章作品的优雅降级路径。">
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="docs.css">
+<link rel="canonical" href="https://siweina.github.io/dsh-novel-writer/tools/novel-chapter-brief.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="dsh-novel-writer">
+<meta property="og:title" content="novel_chapter_brief — 开写包｜dsh-novel-writer 技术文档">
+<meta property="og:description" content="novel_chapter_brief 的实现细节：一次只读调用装配动笔前的全部材料 —— 承接口 anchor、上一章钩子、大纲方向行、命中人物卡、未回收伏笔与 distance、世界观禁用词、六维基线、原著锚段与句式骨架、上一章自检结论、禁用清单与 plan；含 budget 两档截断口径与空库 / 无大纲 / 单章作品的优雅降级路径。">
+<meta property="og:url" content="https://siweina.github.io/dsh-novel-writer/tools/novel-chapter-brief.html">
+<meta property="og:locale" content="zh_CN">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="novel_chapter_brief — 开写包｜dsh-novel-writer 技术文档">
+<meta name="twitter:description" content="novel_chapter_brief 的实现细节：一次只读调用装配动笔前的全部材料 —— 承接口 anchor、上一章钩子、大纲方向行、命中人物卡、未回收伏笔与 distance、世界观禁用词、六维基线、原著锚段与句式骨架、上一章自检结论、禁用清单与 plan；含 budget 两档截断口径与空库 / 无大纲 / 单章作品的优雅降级路径。">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_chapter_brief","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-chapter-brief.html"}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_chapter_brief — 开写包｜dsh-novel-writer 技术文档","description":"novel_chapter_brief 的实现细节：一次只读调用装配动笔前的全部材料 —— 承接口 anchor、上一章钩子、大纲方向行、命中人物卡、未回收伏笔与 distance、世界观禁用词、六维基线、原著锚段与句式骨架、上一章自检结论、禁用清单与 plan；含 budget 两档截断口径与空库 / 无大纲 / 单章作品的优雅降级路径。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-chapter-brief.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"5.0.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_chapter_brief, dsh-novel-writer, MCP 工具文档"}</script>
+</head>
+<body class="docs">
+
+<header class="docs__top">
+  <a class="docs__brand" href="../index.html">← dsh-novel-writer</a>
+  <span class="docs__crumb">技术文档 / <code>novel_chapter_brief</code></span>
+</header>
+
+<div class="docs__layout">
+  <aside class="docs__side" id="docsSide"></aside>
+
+  <main class="docs__main">
+    <article class="doc">
+      <h1>novel_chapter_brief</h1>
+      <p class="doc__lead">
+        开写包。把「写这一章之前需要读的一切」装配成<strong>一次只读调用</strong>：上一章结尾原文（承接口）、上一章钩子、本章大纲方向行、按命中过滤的人物卡、未回收伏笔及其埋设距离、世界观禁用词与语用规范、全书六维基线、原著锚段与句式骨架、上一章风格自检结论，以及由此生成的三段式 <code>plan</code> 与本章禁用清单。<code>chapter</code> 取默认值 <code>"next"</code> 时指向「当前最大章号 + 1」，<strong>该文件可以尚未创建</strong>。
+      </p>
+
+      <div class="note">
+        <b>为什么要有它。</b>在 5.0.0 之前，「动笔前要读的东西」分散在 6~8 次工具调用里（基线、锚段、伏笔、设定、上一章正文、上一章钩子、大纲方向行…），全靠提示词叮嘱模型逐步执行。<strong>漏读没有任何人会察觉</strong>——而漏读正是文风漂移与设定矛盾的头号来源。本工具不新增任何测量能力，只是把已有材料<strong>装配成一次调用</strong>：材料出现在返回体里，就不再依赖模型记性。它是 <a href="novel-new-chapter.html">novel_new_chapter</a> 那套「基线 + 锚段 + 骨架」的<strong>抽离与扩容</strong>——建章节时附带的材料与本工具同源（同一测量缓存、同一锚包抽样），因此两处口径不会分叉。
+      </div>
+
+      <h2>参数</h2>
+      <table>
+        <thead><tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><th><code>book</code></th><td>string</td><td>是</td><td>书名，即 <code>novels/</code> 下的子目录名。空串或纯空白被拒绝，值经 <code>sanitizeSegment</code> 清洗。<strong>书名目录不存在是本工具唯一会抛错的情形</strong>（其余材料缺失一律降级，见下文）。</td></tr>
+          <tr><th><code>chapter</code></th><td>string</td><td>否</td><td>章节标识，四种形态：<code>"next"</code>（默认，= 当前最大章号 + 1，文件可能尚未创建）、章号（<code>1</code> / <code>01</code>）、文件名（<code>第01章.md</code>，可省略扩展名）或标题子串。解析规则与 <a href="novel-read.html">novel_read</a> 完全同源（<code>findChapter</code>：精确文件名优先于章号，纯数字不做子串兜底）。</td></tr>
+          <tr><th><code>budget</code></th><td>string</td><td>否</td><td>枚举 <code>"compact"</code>（默认） / <code>"full"</code>，控制各字段的截断档位。<strong>只裁剪返回体，不改变计算量</strong>——见下文「截断档位」。</td></tr>
+          <tr><th><code>root</code></th><td>string</td><td>否</td><td>章节库根目录。省略时按 <code>config.root</code> → 会话工作目录回退；MCP 形态下越界值被静默回退到启动参数 <code>--root</code> 指定的书库根。</td></tr>
+        </tbody>
+      </table>
+      <p>参数对象声明 <code>additionalProperties: false</code>；<code>budget</code> 省略时按 <code>compact</code> 处理。</p>
+
+      <h2>输出结构</h2>
+      <p>返回体共 <strong>16 个键</strong>（13 个契约必返 + <code>chapter</code> / <code>worldview</code> / <code>baseline</code> 三个「取不到就整键省略」）。<strong>材料取不到时字段缺省或为空数组，同时在 <code>degraded</code> 里写清是哪些材料、为什么取不到</strong>；调用方应以 <code>degraded</code> 判断「这份材料是否完整」，而不是以字段是否存在来猜测。返回前经 <code>dropNullDeep</code> 处理——值为 <code>null</code> / <code>undefined</code> 的键<strong>整键丢弃</strong>（含数组内的 null 元素），而不是置 <code>null</code>。</p>
+      <table>
+        <thead><tr><th>字段</th><th>类型</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr><th><code>book</code></th><td>string</td><td>净化后的书名（<code>sanitizeSegment</code> 的结果），可直接当目录名用。</td></tr>
+          <tr><th><code>chapter</code></th><td>object</td><td>目标章标识：<code>&#123; file, number, title &#125;</code>。<code>isNext = true</code> 时 <code>file</code> 为<strong>推导出的预期文件名</strong>（见下文「目标章定位」），<code>title</code> 取「剧情大纲」里该章的方向行（截 60 字），<strong>未排到该章时该键省略</strong>。目标章无法唯一确定时（同章号多文件、找不到章节）<code>chapter</code> <strong>整键省略</strong>，原因在 <code>degraded</code>。</td></tr>
+          <tr><th><code>isNext</code></th><td>boolean</td><td>是否指向「<strong>文件尚不存在的章</strong>」。判定是 <code>targetChapter === null &amp;&amp; targetNumber !== null</code>：<code>chapter</code> 取默认值或 <code>"next"</code> 时必为 <code>true</code>；此外传入一个<strong>尚未创建的章号</strong>（如 <code>chapter: "5"</code> 而磁盘上只有 1–4 章）也是 <code>true</code>——它同样按「将写此章」装配。</td></tr>
+          <tr><th><code>anchor</code></th><td>string</td><td><strong>承接口</strong>：上一章结尾原文。取 <code>prevText.slice(-anchorChars).trim()</code>，<code>compact</code> 截 300 字符（默认）、<code>full</code> 截 600 字符；取的是<strong>结尾</strong>片段而非开头，正文据此续接语感与场景。无上一章时为空串。</td></tr>
+          <tr><th><code>previousHook</code></th><td>string</td><td>上一章结尾钩子（创作资料「钩子记录.md」中该章的回填内容，按章号从「编号行」解析）。未回填时为空串并计入 <code>degraded</code>。</td></tr>
+          <tr><th><code>outlineDirection</code></th><td>string</td><td>本章的大纲方向行（创作资料「剧情大纲.md」中对应章号的那一行）。无大纲或未排到该章时为空串并计入 <code>degraded</code>。</td></tr>
+          <tr><th><code>characters</code></th><td>array</td><td>按命中过滤的人物卡（<strong>三源合并</strong>：<code>novel_settings</code> 人物表 + 创作资料「主要人物设定.md」「次要人物设定.md」）。命中 = 人物名或其别名（长度均 ≥ 2 字）出现在<strong>上一章正文或本章大纲方向行</strong>中。<code>compact</code> 取前 5 条，<code>full</code> 不截断；无人物卡或全部未命中时为空数组。<strong>恒为数组</strong>（契约必返）。</td></tr>
+          <tr><th><code>openPlots</code></th><td>array</td><td>未回收伏笔（<code>status !== "done"</code>），每条附加 <code>distance</code>。<strong>排序：优先级升档 → distance 降序 → id 字典序</strong>（<code>high</code> &gt; <code>medium</code> &gt; <code>low</code>；<code>priority</code> 缺失或非枚举值一律归一为 <code>medium</code>）。无伏笔表时为空数组并计入 <code>degraded</code>。<strong>恒为数组</strong>。</td></tr>
+          <tr><th><code>worldview</code></th><td>object</td><td>世界观用语规范：<code>&#123; basis, bannedWords, recommended, speechStyle &#125;</code>。该键由设定表<strong>全部 worldview 条目合并</strong>而成：<code>basis</code> 拼入各条的 <code>basis</code> / <code>description</code> / <code>ritual</code> / <code>notes</code>（去重后以「；」连接），<code>bannedWords</code> / <code>recommended</code> / <code>speechStyle</code> 分别做并集与浅合并。四项全空时 <strong><code>worldview</code> 整键省略</strong>并计入 <code>degraded</code>。</td></tr>
+          <tr><th><code>baseline</code></th><td>object</td><td>六维基线：每维 <code>&#123; mu, sigma, sigmaMeasured, sigmaUsed, sigmaClamped, low, high, recTol &#125;</code>（<code>recTol</code> = 作者自身波动的 1.5σ 换算成百分比，取整到 5、下限 10、上限 100）。语料为 <code>metricChaptersCached</code> 的逐章指标，<strong>目标章已存在时先把它排除出基线语料</strong>（与 <code>novel_style_check</code> 同口径）。语料为空时 <strong><code>baseline</code> 整键省略</strong>并计入 <code>degraded</code>。</td></tr>
+          <tr><th><code>anchors</code></th><td>array</td><td>原著锚段，元素 <code>&#123; label, text &#125;</code>：<code>compact</code> 取前 2 条、<code>full</code> 取前 5 条。抽样与分类规则与 <a href="novel-style-check.html">novel_style_check</a> 的 <code>fixAnchors</code> 同源。语料<strong>排除目标章自身</strong>（改稿场景下不能把「正在改的那一段」当原著范本），与 <code>novel_fix_plan</code> 的锚段口径一致；<code>chapter="next"</code> 时目标章不存在，等价于全用。</td></tr>
+          <tr><th><code>skeletons</code></th><td>array</td><td>句式骨架，元素 <code>&#123; type, text &#125;</code>：<code>compact</code> 取前 3 条、<code>full</code> 取 <code>slice(0, 8)</code>。注意 <code>buildStyleAnchorPackage</code> 自身最多只产出 <strong>4 条</strong>，因此 <code>full</code> 的 8 只是「不额外截断」，实际条数上限仍是 4。语料同 <code>anchors</code>（排除目标章）。</td></tr>
+          <tr><th><code>lastVerdict</code></th><td>string</td><td>上一章的六维对照结论，形如「第 N 章六维对照：&lt;judge.summary&gt;（由逐章指标缓存现算）」。<strong>它不是 <code>novel_style_check</code> 的落盘结论</strong>（插件从不落盘该结论），而是由缓存的逐章指标现算：以「除上一章外的其余章」为基线，容差由 <code>core.buildTolerance</code> 构造——<strong>与 <a href="novel-fix-plan.html">novel_fix_plan</a> 同一实现</strong>（<code>recTol</code> 为主，基线不足 3 章时下限抬到 25%，可被用户的 <code>styleTolerance</code> 覆盖同名维度）。除上一章外不足 <strong>2 章</strong>可测时不给结论（单章基线估不出 σ）；取不到时为<strong>空串</strong>并计入 <code>degraded</code>。</td></tr>
+          <tr><th><code>avoid</code></th><td>array</td><td><strong>本章禁用清单</strong>，<strong>三类</strong>来源合并，元素 <code>&#123; kind, detail &#125;</code>，<code>kind</code> 取值为 <code>已回收伏笔</code> / <code>禁词</code> / <code>已退场角色</code>。三类都取不到时为空数组。<strong>恒为数组</strong>。</td></tr>
+          <tr><th><code>plan</code></th><td>object</td><td>三段式行动框架：<code>&#123; previousState, goal, checklist &#125;</code>（<code>checklist</code> 为字符串数组），由上述材料生成，见下文「plan 的生成口径」。<strong>恒为对象</strong>。</td></tr>
+          <tr><th><code>degraded</code></th><td>array</td><td>降级说明，元素是<strong>字符串</strong>（不是对象），已按 <code>Set</code> 去重。<strong>空数组表示材料完整</strong>。</td></tr>
+        </tbody>
+      </table>
+      <div class="warn note">
+        <b><code>chapter</code> / <code>worldview</code> / <code>baseline</code> 是「有就返回、没有就整键省略」，其余 13 个键恒在。</b>调用方读 <code>worldview</code> 前必须先判存在性；读 <code>previousHook</code> / <code>outlineDirection</code> / <code>lastVerdict</code> 这类必返字段时则只需判空串。判「材料为什么缺」应一律读 <code>degraded</code>。
+      </div>
+
+      <h3><code>characters[]</code> 条目</h3>
+      <table>
+        <thead><tr><th>字段</th><th>类型</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr><th><code>name</code> / <code>role</code> / <code>description</code></th><td>string</td><td>人物名、角色档（<code>设定表</code> / <code>主要</code> / <code>次要</code>）与简介。同名人物会在三源之间合并：设定表条目给 <code>role: "设定表"</code>，创作资料「主要人物设定.md」命中则升为 <code>主要</code>，仅出现在「次要人物设定.md」时为 <code>次要</code>。</td></tr>
+          <tr><th><code>mentions</code></th><td>integer</td><td>人物名与全部别名在<strong>上一章正文</strong>中出现的次数合计（子串计数，非行数）。</td></tr>
+          <tr><th><code>sources</code></th><td>string[]</td><td>命中来源，取值 <code>上一章出场</code> / <code>大纲方向</code>。至少命中一个才会出现在 <code>characters</code> 里。</td></tr>
+          <tr><th><code>traits</code> / <code>relationships</code> / <code>alias</code></th><td>string / string[]</td><td>仅当对应字段非空时出现（<code>alias</code> 只保留长度 ≥ 2 的别名）。</td></tr>
+          <tr><th><code>offstage</code></th><td>boolean</td><td>仅当为 <code>true</code> 时出现：设定表的 <code>status</code> / <code>notes</code> / <code>description</code> / <code>traits</code> 或创作资料人物简介命中「退场 / 已死 / 死亡 / 身亡 / 殉 / 不再出场 / 下线 / 殁」之一。渲染层会据此标注「已退场，勿写其出场」。</td></tr>
+        </tbody>
+      </table>
+      <p>排序为：<code>mentions</code> 降序 → 「上一章出场」优先 → 名称中文拼音序。</p>
+
+      <h3><code>openPlots</code> 条目</h3>
+      <table>
+        <thead><tr><th>字段</th><th>类型</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr><th><code>id</code> / <code>content</code></th><td>string</td><td>伏笔表的条目 id 与内容描述，原样透传。</td></tr>
+          <tr><th><code>type</code> / <code>priority</code></th><td>string</td><td>伏笔类型（剧情 / 设定 / 道具 / 人物 / 其他）与优先级（<code>high</code> / <code>medium</code> / <code>low</code>）。<code>type</code> 缺失时为空串；<code>priority</code> <strong>缺失或非枚举值时归一为 <code>medium</code></strong>（不是最低档）。</td></tr>
+          <tr><th><code>firstChapter</code></th><td>integer | 省略</td><td><strong>最早提及章号</strong> = <code>chapter</code> / <code>mentionedIn[]</code> / <code>lastMentioned</code> 三处能解析出的章号取<strong>最小值</strong>；三处都解析不出时为 <code>null</code>，<strong>该键被整键丢弃</strong>（同时 <code>firstChapterKnown</code> 出现且为 <code>false</code>）。</td></tr>
+          <tr><th><code>distance</code></th><td>integer</td><td>埋设距离 = <strong>全书最大章号 − <code>firstChapter</code></strong>（下限 0）。全书最大章号取「现有章节里能解析出章号的最大值」，<strong>不是章文件个数</strong>。<code>firstChapter</code> 不可知时退化为<strong>全书最大章号</strong>（即「按全书起算」），并在 <code>degraded</code> 里点名。</td></tr>
+          <tr><th><code>note</code> / <code>payoffCondition</code> / <code>relatedCharacters</code> / <code>locations</code></th><td>—</td><td>仅当伏笔表里<strong>登记过</strong>且非空时透传（后两项要求是非空数组）。</td></tr>
+        </tbody>
+      </table>
+      <p>注意与 <code>novel_plot</code> 的 <code>entry.chapter</code> 区分：本工具返回的是<strong>解析后的章号 <code>firstChapter</code></strong>，不再返回原始的 <code>chapter</code> 文本字符串。</p>
+
+      <h2>计算与装配</h2>
+      <p>执行顺序：读创作资料（大纲 / 钩子）→ 定位目标章 → 定位上一章 → 逐章读正文 → 组装锚段与骨架 → 算六维基线 → 现算上一章结论 → 汇总伏笔 → 合并设定表与人物卡 → 生成本章禁用清单 → 生成 <code>plan</code> → 按 <code>budget</code> 截断。<strong>全程只读</strong>：除复用既有分析缓存（六维测量缓存文件由 <code>metricChaptersCached</code> 按内容哈希增量维护，这是既有行为）外不写任何文件——伏笔表也刻意不走 <code>core.readPlots</code>（它在「新位置缺失 + 旧位置存在」时会迁移写盘），改用只读版本按「新位置 → 旧位置」顺序自行解析。</p>
+
+      <h3>1 · 目标章定位与 <code>isNext</code></h3>
+      <div class="formula">maxNumber = max( 现有章节的可解析章号 )        ← 无可解析章号时为 0
+
+chapter 省略 或 === "next"：
+    number = maxNumber + 1                        ← 无可解析章号时为 1
+    file   = deriveChapterFileName(chapters, number)
+             优先沿用最后一章那种「纯章号文件名」的形态与数字宽度
+               第07章.md  → 第08章.md        01.md → 02.md
+             形态不规则（带标题等）时回退 → "第" + padStart(number, 2, "0") + "章.md"
+    isNext = true
+
+否则 → findChapter 解析（文件名优先于章号；同章号多文件抛错→ 降级为「目标不确定」）：
+    命中磁盘章节                  → isNext = false
+    未命中但参数能解析成章号      → number = 该章号，file 同上推导，isNext = true
+    两者都不成立                  → chapter 整键省略（degraded 说明）</div>
+      <p><code>isNext</code> 的语义是「<strong>这一章还没写</strong>」而不是「参数是 next」：因此本工具不会因为目标章文件不存在而报错，反而正是它最有用的时刻——此时上一章就是全书最后一章，承接口与钩子都指向它。已有的 <code>novel_style_check</code> 无法对未创建的文件工作，本工具则可以先给材料。</p>
+      <p>上一章的取法：<strong>章号小于目标章号的最后一章</strong>；目标章号不确定时退回「全书最后一章」并在 <code>degraded</code> 里说明。全书没有任何更早的章节时，<code>anchor</code> 与 <code>previousHook</code> 均为空串。</p>
+
+      <h3>2 · 承接口 <code>anchor</code> 与 <code>previousHook</code></h3>
+      <div class="formula">prev          = 章号小于目标章号的最后一章（isNext 时即全书末章）
+anchor        = prev 正文的结尾片段
+    compact → 末尾 300 字符        full → 末尾 600 字符
+previousHook  = 钩子记录.md 中 prev 那一行的回填内容
+    编号行形态：- 3 正文…  /  - 第3章 正文…  /  - 3、正文…（同章号只取第一条）</div>
+      <p>只给<strong>结尾</strong>而不给全章，是因为续写真正需要的接口是「上一句停在哪里、场景与语气是什么」；全章正文可通过 <a href="novel-read.html">novel_read</a> 按需补读，而全章塞进返回体只会挤占上下文。<code>hook</code> 未回填、或整份「钩子记录.md」都不存在时，两种情况在 <code>degraded</code> 里是<strong>不同的文案</strong>（「未初始化」与「没有该章的钩子」），便于区分「没建资料」与「忘了回填」。</p>
+
+      <h3>3 · 人物卡过滤 <code>characters</code></h3>
+      <div class="formula">pool = 设定表人物表（name ≥ 2 字，含 alias 别名，别名同样需 ≥ 2 字）
+     ∪ 创作资料「主要人物设定.md」（role = 主要）
+     ∪ 创作资料「次要人物设定.md」（role = 次要）        ← 同名以设定表为底，名称相同则合并
+hit  = 条目名或任一别名 出现在「上一章正文 ‖ 本章大纲方向行」中
+输出 = hit 条目，compact 取前 5 条、full 不截断；无人物卡时为空数组
+排序 = mentions 降序 → 「上一章出场」优先 → 名称中文拼音序</div>
+      <p>过滤器面向的是「这一章可能写到谁」，因此判据取<strong>上一章 + 本章大纲</strong>两份文本，而不是全书：全书命中会把整张人物表原样带出，等于没过滤。人物设定行的解析口径是 <code>- 名字：简介</code>，<strong>没有冒号也认</strong>（<code>novel_outline action=character</code> 只给名字不给简介时写出的就是 <code>- 名字</code>，旧正则会把插件自己写的人物卡静默丢掉）；冒号后为空同样算一张卡（描述为空串）。会跳过「角色设定 / 世界观 / 不允许的事件 / 主线目的 / 题材偏好 / 额外要求 / 用户原创设定 / 用户角色设定」这些模板段标签——它们不是人名。设定表与创作资料<strong>都没有</strong>人物卡时为空数组，并计入 <code>degraded</code>。</p>
+      <p>「已退场」判定是限定词表（退场 / 已死 / 死亡 / 身亡 / 殉 / 不再出场 / 下线 / 殁）正则命中设定表 <code>status</code> / <code>notes</code> / <code>description</code> / <code>traits</code> 或创作资料人物简介；命中即打上 <code>offstage: true</code>。<strong>宁可漏报不可误报</strong>——误报会让模型把活人写死。</p>
+
+      <h3>4 · 未回收伏笔与 <code>distance</code></h3>
+      <div class="formula">open      = 伏笔表中所有 status !== "done" 的条目     ← 非 done 即视为未回收
+firstChapter = min( 可解析章号 )，三处来源依次并入：
+                 entry.chapter          （登记时的章号）
+                 entry.mentionedIn[]    （scan 写入的章节<strong>文件名</strong>，逐个解析）
+                 entry.lastMentioned    （最近一次命中的文件名）
+               三处都解析不出 → firstChapter 省略、firstChapterKnown = false
+distance  = maxNumber − firstChapter                 ← maxNumber = 全书最大可解析章号
+                firstChapter 不可知时 → maxNumber（按全书起算，并在 degraded 点名）
+                结果为负时钳到 0
+排序       = priority 升档（high → medium → low，脏值归一为 medium）
+             → distance 降序 → id 字典序</div>
+      <p><code>distance</code> 是「埋了多久没回收」的直接量化：它把静态的伏笔表变成<strong>带时间压力的清单</strong>，让调用方先处理埋得最久、优先级最高的线。已回收（<code>done</code>）的伏笔不进入 <code>openPlots</code>，而是从另一个方向进入 <code>avoid</code>（见下节）。</p>
+
+      <h3>5 · 世界观 <code>worldview</code> 与禁用清单 <code>avoid</code></h3>
+      <div class="formula">worldview = 设定表 worldview 表<strong>全部条目合并</strong>后的
+            &#123; basis, bannedWords, recommended, speechStyle &#125;
+    basis       ← 各条的 basis / description / ritual / notes 去重后以「；」连接
+    bannedWords ← 各条并集（保序去重）
+    recommended ← 各条 Object.assign 浅合并
+    speechStyle ← 数组字段并集、对象字段浅合并、标量取最后一个非空值
+    四项全空 → worldview 整键省略
+
+avoid = ① 与本章方向行关键词有交集的<strong>已回收</strong>伏笔（kind = "已回收伏笔"）
+            关键词 = plotKeywords(content) ∪ plotKeywordsAll(content)
+            长词（≥ 3 字）命中 1 个即算；2 字短词需命中 ≥ 2 个，
+            且排除「是已登记人名/别名的子串」的短词（只共享人名不算重埋）
+            最多 5 条
+        ② worldview.bannedWords 的前 10 条（kind = "禁词"，有替代词时一并给出）
+        ③ 标记为已退场的角色，最多 5 条（kind = "已退场角色"）
+
+三类合并为同一数组；都取不到时为空数组</div>
+      <p>第 ① 类的用意是防止「把已经用掉的线当作新钩子再埋一次」——这是长篇里最常见的自我重复。第 ② 类沿用设定表里已经登记好的禁用词，<strong>只取前 10 条</strong>是为了控制返回体体积：完整的禁用词表仍可用 <a href="novel-settings.html">novel_settings</a> 查。第 ③ 类把「已退场角色」前置到清单里，避免与人物卡里的出场提示互相打架。</p>
+
+      <h3>6 · 六维基线 <code>baseline</code></h3>
+      <div class="formula">perCh    = metricChaptersCached( root, book, 全书章节文本 )   ← 自带缓存，不逐章重读
+corpus   = perCh 排除目标章（目标章尚不存在时 = perCh 全量）
+baseline = computeBaselineFromPerChapter( corpus )
+         → 每维 &#123; mu, sigma, sigmaMeasured, sigmaUsed, sigmaClamped, low, high, recTol &#125;
+         → 语料为空时整键省略</div>
+      <p>基线与 <a href="novel-style-report.html">novel_style_report</a>、<a href="novel-style-check.html">novel_style_check</a>、<a href="novel-new-chapter.html">novel_new_chapter</a> 走<strong>同一份分章测量缓存</strong>（<code>&lt;root&gt;/.novel-writer/analysis/&lt;book&gt;-chapters-metrics.json</code>），缓存键按内容哈希且与章序无关，因此四个工具交替调用不会互相击穿缓存。只有正文 <strong>≥ 40 字</strong>的章节才进入测量；<strong>性能</strong>：命中缓存时基线几乎零成本；长书<strong>首次</strong>调用仍需读全书算一遍分章指标（可能数秒），此后增量命中。</p>
+      <div class="warn note">
+        <b><code>budget</code> 不省计算。</b>两档只决定返回体里各字段截到什么程度，测量与抽样步骤完全相同。书很长且已经预热过缓存时，用 <code>compact</code> 只是让上下文更省，不会让工具跑得更快；反过来，首次调用无论哪一档都要付全书测量的代价。
+      </div>
+
+      <h3>7 · 锚段与骨架 <code>anchors</code> / <code>skeletons</code></h3>
+      <div class="formula">anchors   = buildStyleAnchorPackage( … ).anchors      ← 产出上限 5 条
+              compact → 前 2 条     full → 前 5 条（即全部）
+skeletons = buildStyleAnchorPackage( … ).skeletons    ← 产出上限 4 条
+              compact → 前 3 条     full → slice(0, 8)（实际仍受 4 条上限约束）
+
+锚段抽样：全书文本按 /\n+/ 切段 → 每段 trim 后长度 ≥ 40 字才参选
+    对话桶（含引号且 ≤ 200 字）取 2 条、心理桶（含 想/觉得/心/怕/慌/记忆 且无引号）取 1 条、
+    描写桶（无引号且 80–200 字）取 2 条；三桶皆空时退化为「原文」桶取 3 条
+    每个桶内按<strong>全书等距抽样</strong>（非取开头 n 条），每条截 200 字
+骨架抽样：全书文本按 [。！？…] 切句 → 去空白后长度 20–45 字才参选 → 去重后等距抽 4 条
+    按 对话 / 疑问 / 心理（想|觉得|仿佛|好像|似乎）/ 陈述 打标签</div>
+      <p>与 <a href="novel-new-chapter.html">novel_new_chapter</a>、<a href="novel-style-check.html">novel_style_check</a> 共用同一个锚包构建函数，因此三处口径不会分叉。<strong>锚段是「照它写」的样例，基线数字只是事后校验</strong>——两者都在返回体里，但用途不同。本书正文不满足抽样条件（所有段落都短于 40 字）时两个数组都为空，并计入 <code>degraded</code>。</p>
+
+      <h3>8 · 上一章结论 <code>lastVerdict</code></h3>
+      <div class="formula">base   = computeBaselineFromPerChapter( 除上一章外的其余章 )
+tol[key] = &#123; low: -recTol, high: recTol &#125;      ← recTol 缺失时回退 15
+         若 opts.featState.styleTolerance[key] 同时有 low/high 数字 → 覆盖该维
+judge  = judgeAgainstBaseline( 上一章指标, base, tol )
+lastVerdict = "第 N 章六维对照：" + judge.summary + "（由逐章指标缓存现算）"</div>
+      <p>这里刻意<strong>不做落盘</strong>：插件从不把 <code>novel_style_check</code> 的结论写进任何文件，因此「上一章自检结论」是每次由缓存的逐章指标现算的（口径与 <code>novel_style_check</code> 一致，并沿用侧边栏保存的自定义容差）。上一章正文不足 40 字、或除上一章外没有其它可测章节时为空串并计入 <code>degraded</code>。</p>
+
+      <h3>9 · <code>plan</code> 的生成口径</h3>
+      <table>
+        <thead><tr><th>字段</th><th>来源</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr><th><code>previousState</code></th><td><code>prevChapter</code> + <code>previousHook</code> / <code>anchor</code></td><td>「上一章停在哪里」的浓缩复述，三选一：有钩子 → 带上「结尾钩子：…」；无钩子但有正文 → 「正文已在 anchor（末 N 字），钩子未回填」；无正文 → 「正文为空」。全书开篇时为「无上一章（本章为全书开篇）」。</td></tr>
+          <tr><th><code>goal</code></th><td><code>outlineDirection</code> → <code>previousHook</code> → 开篇</td><td>本章目标，四级退化：有方向行 → 「按大纲方向行写：…」；无方向行但有钩子 → 「大纲未给方向，承接上一章钩子推进：…」；都没有但有上一章 → 「从上一章结尾（anchor）自然接续」；开篇 → 「按创作设定开篇」。</td></tr>
+          <tr><th><code>checklist</code></th><td>上述各材料</td><td>字符串数组，按固定顺序追加：先读锚段（固定首条）→ 承接钩子 / 承接上一章结尾（有钩子取前者，否则取后者；全书开篇时两条都不加）→ 按方向行推进 → <code>priority === "high"</code> 的未回收伏笔（最多 3 条，带 <code>distance</code>）→ 别重复埋已回收伏笔 → 避免使用的禁词（前 5 条）→ 已退场角色 → 本章相关人物（最多 5 个，退场者带标注）→ 写完对照基线与锚段跑自检 → 回填钩子的命令（<code>novel_outline action=hook number=N</code>）。</td></tr>
+        </tbody>
+      </table>
+      <p><code>plan</code> 是<strong>材料的索引，不是新信息</strong>：它不引入任何未在其它字段出现过的判断，只把散落的材料组织成「动笔前看一眼」的三段式；<strong>不编造剧情</strong>，所有文本都从已有字段派生（超长片段统一按 <code>clip</code> 截断加省略号）。字段本身不随 <code>budget</code> 截断。</p>
+
+      <h2>截断档位 <code>budget</code></h2>
+      <table>
+        <thead><tr><th>字段</th><th><code>compact</code>（默认）</th><th><code>full</code></th></tr></thead>
+        <tbody>
+          <tr><th><code>anchor</code></th><td>末尾 300 字符</td><td>末尾 600 字符</td></tr>
+          <tr><th><code>anchors</code></th><td>前 2 条</td><td>前 5 条（= 构建函数的产出上限，即全部）</td></tr>
+          <tr><th><code>skeletons</code></th><td>前 3 条</td><td><code>slice(0, 8)</code>——构建函数最多只产出 4 条，故实际仍是 4</td></tr>
+          <tr><th><code>characters</code></th><td>前 5 条</td><td>不截断</td></tr>
+          <tr><th>其余字段</th><td colspan="2">两档一致（<code>openPlots</code> / <code>worldview</code> / <code>baseline</code> / <code>avoid</code> / <code>plan</code> / <code>degraded</code> 不做档位裁剪）</td></tr>
+        </tbody>
+      </table>
+      <p>默认 <code>compact</code> 是因为本工具的目标场景是<strong>接着写下一章</strong>：承接口 300 字符足以承接语气，锚段 2 条 + 骨架 3 条足以定调。追求「和原著逐句对照」时应显式传 <code>full</code>，或改用 <a href="novel-style-check.html">novel_style_check</a> 的 <code>fixAnchors</code>（写完之后按偏差取锚段，比写之前更准）。<code>budget</code> 只接受 <code>"full"</code> 一个特殊值，传入任何其它值（含 <code>"compact"</code> 与未声明值）都按 <code>compact</code> 执行。</p>
+
+      <h2>优雅降级</h2>
+      <p>以下情形<strong>一律不报错</strong>：相应字段缺省或为空数组，同时在 <code>degraded</code> 里说明材料名与原因。这是刻意的设计——「书还没建大纲」不是调用错误，不应该让整个流程中断。</p>
+      <table>
+        <thead><tr><th>情形</th><th>返回</th></tr></thead>
+        <tbody>
+          <tr><td>没有创作资料（未 <code>init</code>）</td><td><code>previousHook</code> / <code>outlineDirection</code> / <code>chapter.title</code> 为空，<code>plan.goal</code> 退化；<code>degraded</code> 分别给出「创作资料未初始化」与「无钩子记录」两条说明</td></tr>
+          <tr><td>没有伏笔表</td><td><code>openPlots = []</code>，<code>avoid</code> 只保留禁词与已退场角色，<code>degraded</code> 说明</td></tr>
+          <tr><td>没有设定表</td><td><code>worldview</code> 整键省略、<code>characters</code> 为空数组（除非创作资料里有人物设定），<code>avoid</code> 只保留已回收伏笔一类</td></tr>
+          <tr><td>全书只有 1 章</td><td>无「上一章」→ <code>anchor</code> / <code>previousHook</code> 为空、<code>lastVerdict</code> 为空；除目标章外无其他可测章节 → <code>baseline</code> 整键省略</td></tr>
+          <tr><td>书太短算不出基线</td><td><code>baseline</code> 整键省略（不输出 μ=0 的假基线），<code>degraded</code> 区分「全书没有 ≥ 40 字的章节」与「除目标章外没有可测章节（书只有 1 章）」两种原因</td></tr>
+          <tr><td>目标章无法唯一确定</td><td><code>chapter</code> 整键省略、<code>isNext</code> 视 <code>number</code> 是否可解析而定，<code>degraded</code> 说明「同章号多文件」或「找不到章节」</td></tr>
+          <tr><td>锚包构建失败 / 无合格段落</td><td><code>anchors</code> / <code>skeletons</code> 为空数组，<code>degraded</code> 说明「抽样要求段落 ≥ 40 字」</td></tr>
+          <tr><td>单章读取失败（编码 / 权限 / 被占用）</td><td>该章按空正文处理，<code>degraded</code> 逐章点名（不影响其余材料）</td></tr>
+          <tr><td>上一章没有可对照的指标</td><td><code>lastVerdict</code> 为空串，<code>degraded</code> 分三种情形：「上一章无六维指标」「除上一章外没有可测章节」「除上一章外不足 2 章可测（估不出 σ，与 <code>novel_fix_plan</code> 同门槛）」</td></tr>
+          <tr><td><strong>书名目录不存在</strong></td><td><strong>抛错</strong>（唯一例外：无书可开写，返回空材料没有意义）</td></tr>
+        </tbody>
+      </table>
+      <p>取消信号（<code>exec.signal</code> / <code>AbortError</code>）<strong>不属于降级</strong>：它会原样向上传播，不被吞掉。</p>
+
+      <h2>约束与边界</h2>
+      <ul>
+        <li><strong>只读工具</strong>：除复用既有分析缓存（<code>metricChaptersCached</code> 维护的分章测量缓存，属既有行为）外<strong>不写任何文件</strong>——不建章节、不改伏笔状态、不落盘报告。伏笔表刻意不走会在旧位置迁移写盘的 <code>core.readPlots</code>，而是用本模块的只读版本。需要真正创建章节时用 <a href="novel-new-chapter.html">novel_new_chapter</a>。</li>
+        <li><strong>唯一抛错路径是书名目录不存在</strong>；材料缺失、缓存不可用、锚包失败、书太短都走降级。调用方不应把空字段读成「这本书没有伏笔」——必须读 <code>degraded</code> 区分「确实没有」与「取不到」。</li>
+        <li><strong><code>chapter</code> 与 <code>novel_read</code> 共用解析规则</strong>：精确文件名优先于章号；只给章号且命中多个同号文件时会报错并列出候选（本工具把它降级为「目标不确定」而不是中断）。纯数字参数不做子串兜底。</li>
+        <li><strong><code>isNext</code> 不等于「参数是 next」</strong>：它表示目标章文件<strong>尚不存在</strong>，因此传入一个未来的章号同样为 <code>true</code>。此时返回的 <code>file</code> 是预期文件名而非磁盘事实（可用 <a href="novel-chapters.html">novel_chapters</a> 核对）。</li>
+        <li><strong><code>avoid</code> 只取禁用词前 10 条</strong>：这是返回体预算的取舍，不是「只禁这 10 个词」。完整词表在设定表里，语用规范（称谓 / 客套 / 仪式禁式）通过 <code>worldview.speechStyle</code> 整体给出。</li>
+        <li><strong><code>distance</code> 依赖章号可解析</strong>：<code>chapter</code> / <code>mentionedIn</code> / <code>lastMentioned</code> <strong>三处</strong>都解析不出章号时，<code>firstChapter</code> 省略、<code>firstChapterKnown = false</code>，<code>distance</code> 退化为「全书最大章号」（相当于按全书起算），并在 <code>degraded</code> 里点名前 5 条。排序时这类条目按 <code>priority</code> 归一为 <code>medium</code>、再按已退化的 <code>distance</code> 参与比较——<strong>不会因此被排到最后</strong>，这是刻意的：距离未知不等于不重要。</li>
+        <li><strong>人物命中判定是纯字符串包含</strong>，不做语义推理：别名登记不全时会漏命中，同名不同人（如「小周」既指人物又指地名）时会误命中；名字与别名短于 2 字的一律跳过。这是零 token 本地实现的必然边界，命中结果应视为<strong>候选</strong>。</li>
+        <li><strong>首次调用可能较慢</strong>：长书且缓存未预热时需读全书算分章指标；这一点与 <code>budget</code> 无关（见上文）。</li>
+        <li><strong>工具开关</strong>：执行前经 <code>assertToolEnabled</code> 校验状态文件，被关闭时直接报错（可用 <a href="novel-sentence-config.html">novel_sentence_config</a> 重新开启）。本工具<strong>不受</strong>「写作助手功能」总开关约束——它与 <code>plan</code> / <code>verify</code> 那类引擎门禁无关。</li>
+      </ul>
+
+      <h2>相关工具</h2>
+      <ul>
+        <li><a href="novel-new-chapter.html">novel_new_chapter</a> —— 真正创建章节文件的工具；其附带的 baseline / anchors / skeletons 与本工具同源，本工具是那套材料的抽离与扩容（多了钩子、大纲方向行、人物卡、伏笔距离、禁用清单与 plan）。</li>
+        <li><a href="novel-style-check.html">novel_style_check</a> —— 写完之后的对照判定；其 <code>fixAnchors</code> 与 <code>lastVerdict</code> 分别为本工具锚段的同源材料与上一章结论的来源。</li>
+        <li><a href="novel-outline.html">novel_outline</a> —— 维护本工具读取的创作资料（钩子记录、剧情大纲方向行）。</li>
+        <li><a href="novel-plot.html">novel_plot</a> —— 伏笔登记表；<code>action: "graph"</code> 的结构视图给出跨章的伏笔生命周期，其 <code>plotLifecycle.distance</code> 与本工具的 <code>openPlots.distance</code> 是同族口径（都按「全书最大章号 − 最早提及章号」），但<strong>本工具的 <code>firstChapter</code> 只从登记字段（<code>chapter</code> / <code>mentionedIn</code> / <code>lastMentioned</code>）推导</strong>，而结构视图还会用伏笔内容的关键词去全书正文里找首次命中章，两者结果可能不同。</li>
+        <li><a href="novel-settings.html">novel_settings</a> —— 人物表与世界观用语规范（禁用词 / 推荐替代 / 语用规范）的维护入口。</li>
+        <li><a href="novel-read.html">novel_read</a> —— 需要上一章全文（而非仅结尾 300 字）时按行号补读。</li>
+      </ul>
+
+      <h2>源码位置</h2>
+      <ul>
+        <li><span class="src">lib/brief.js</span> —— 开写包主体：<code>buildChapterBrief</code>（唯一的对外导出）与其内部各步——<code>BRIEF_BUDGETS</code>（两档预算常量）、<code>readPlotsReadOnly</code>（只读伏笔读取）、<code>readCreationFile</code> / <code>parseNumberedLines</code>（创作资料读取与编号行解析）、<code>deriveChapterFileName</code>（预期文件名推导）、<code>plotFirstChapter</code>（最早提及章号）、<code>mergeWorldview</code>（worldview 多条目合并）、<code>parseCharacterLines</code> / <code>OFFSTAGE_RE</code> / <code>countMentions</code>（人物卡三源合并与命中统计）、<code>plotKeywordsAll</code>（不截断的关键词版本，供「已回收伏笔 ∩ 方向行」使用）、<code>clip</code> / <code>isAbort</code>。</li>
+        <li><span class="src">lib/index.js</span> —— <code>registerNovelChapterBrief</code>：工具注册、参数校验（<code>budget</code> 归一）、输出 schema 与渲染文本。</li>
+        <li><span class="src">lib/core.js</span> —— <code>metricChaptersCached</code>（六维分章测量缓存）、<code>buildStyleAnchorPackage</code>（锚段与骨架的抽样与上限）、<code>readSettings</code>（设定表）、<code>plotsFile</code> / <code>legacyPlotsFile</code> / <code>normalizePlotEntry</code> / <code>plotKeywords</code>（伏笔表路径与条目归一）、<code>creationDir</code> / <code>CREATION_FILES</code>（创作资料路径）、<code>scanChapters</code> / <code>findChapter</code> / <code>readTextFile</code> / <code>parseChapterNumber</code>（章节定位、读取与章号解析）。</li>
+        <li><span class="src">lib/style-metrics.js</span> —— <code>computeBaselineFromPerChapter</code>（基线的 μ / σ / <code>recTol</code> 口径）/ <code>judgeAgainstBaseline</code>（上一章六维判定）/ <code>METRIC_ORDER</code> / <code>METRIC_LABELS</code>。</li>
+        <li><span class="src">lib/core.js</span> —— <code>ALL_TOOLS</code> / <code>TOOL_LABELS</code> 注册表条目（开关面板与关闭报错文案）。</li>
+      </ul>
+    </article>
+
+    <nav class="docs__pager" id="docsPager"></nav>
+  </main>
+
+  <aside class="docs__toc" id="docsToc"></aside>
+</div>
+
+<script src="docs.js"></script>
+</body>
+</html>

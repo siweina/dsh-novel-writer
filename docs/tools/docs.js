@@ -10,11 +10,13 @@
     { g: '章节与文稿', file: 'novel-chapters',     name: 'novel_chapters',     title: '列出章节' },
     { g: '章节与文稿', file: 'novel-read',         name: 'novel_read',         title: '阅读正文' },
     { g: '章节与文稿', file: 'novel-new-chapter',  name: 'novel_new_chapter',  title: '新建章节' },
+    { g: '章节与文稿', file: 'novel-chapter-brief', name: 'novel_chapter_brief', title: '开写包' },
     { g: '章节与文稿', file: 'novel-import',       name: 'novel_import',       title: '批量导入' },
     { g: '章节与文稿', file: 'novel-keywords',     name: 'novel_keywords',     title: '关键词统计' },
 
     { g: '分析与测量', file: 'novel-style-report',      name: 'novel_style_report',      title: '风格画像报告' },
     { g: '分析与测量', file: 'novel-style-check',       name: 'novel_style_check',       title: '风格自检' },
+    { g: '分析与测量', file: 'novel-fix-plan',          name: 'novel_fix_plan',          title: '改稿台' },
     { g: '分析与测量', file: 'novel-sentence-analysis', name: 'novel_sentence_analysis', title: '句式模式分析' },
     { g: '分析与测量', file: 'novel-semantic-search',   name: 'novel_semantic_search',   title: '语义检索' },
 

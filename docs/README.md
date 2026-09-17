@@ -10,17 +10,19 @@ styles.css                 宣传页设计系统（配色 / 排版 / 响应式 /
 script.js                  宣传页交互（滚动进场 / 能力卡展开 / 复制 / 分页 / 移动端菜单）
 README.md                  本文件
 tools/
-  index.html               技术文档总览（16 个工具的分组索引 + 共同约定）
+  index.html               技术文档总览（18 个工具的分组索引 + 该调哪个工具 + 共同约定）
   docs.css                 文档三栏布局（侧栏 / 正文 / 右侧目录）
   docs.js                  侧栏、目录、上下页的渲染（工具清单唯一数据源）
-  novel-books.html         以下 16 个为工具子页面，文件名即 docs.js 中的 file 字段
+  novel-books.html         以下 18 个为工具子页面，文件名即 docs.js 中的 file 字段
   novel-chapters.html
   novel-read.html
   novel-new-chapter.html
+  novel-chapter-brief.html
   novel-import.html
   novel-keywords.html
   novel-style-report.html
   novel-style-check.html
+  novel-fix-plan.html
   novel-sentence-analysis.html
   novel-semantic-search.html
   novel-plot.html
@@ -98,7 +100,7 @@ python -m http.server 8080
 |---|---|---|---|
 | 首屏 | `#top` | — | 主标题、副标题、两个按钮、安装命令、四个链接的胶囊、五个数字 |
 | 适用场景 | `#problems` | 适用场景 | 六组「问题 → 工具输出」 |
-| 能力概览 | `#features` | 能力概览 | 九张能力卡，每张含隐藏详情面板与子页面链接 |
+| 能力概览 | `#features` | 能力概览 | 十一张能力卡，每张含隐藏详情面板与子页面链接 |
 | 报告示例 | `#output` | 报告示例 | 四个终端风格的真实输出 |
 | 氛围光谱 | `#vibe` | — | 12 维示意（柱高改 HTML 里的 `style="--v:0.82"`） |
 | 本地化设计 | `#compare` | 本地化设计 | 对比表 + 权限边界四格 |
@@ -119,8 +121,13 @@ python -m http.server 8080
 
 ## 数据来源
 
-页面数字与链接取自插件仓库的实际状态（v4.3.1）：16 个工具、`bge-small-zh-v1.5` 量化模型约 24MB、Node ≥ 22.3、Glama 评分 B / 16 tools、npm latest 4.3.1。发新版后需同步首屏版本号与胶囊链接、`#trust` 区块、页脚链接。
+页面数字与链接取自插件仓库的实际状态（v5.0.0）：18 个工具、`bge-small-zh-v1.5` 量化模型约 24MB、Node ≥ 22.3、Glama 评分 B / 18 tools、npm latest 5.0.0。发新版后需同步首屏版本号与胶囊链接、`#trust` 区块、页脚链接。
 
-> **v4.3.1 已于 2026-09-17 发布**（站点与代码同一次推送）：全部 16 个工具页的 JSON-LD `softwareVersion` → 4.3.1；首屏品牌版本号、胶囊内的 Release 链接与 `#trust` 的 `latest` → 4.3.1；`novel-read` / `novel-chapters` / `novel-continuity-check` 三页各加一个 `v4.3.1` 变更提示块（`.warn.note`），并同步修正 `novel-read` 的查找顺序、`novel-keywords` 的章节解析顺序、`novel-summary` 的同章号共用槽位说明。**注意发版顺序**：站点与 tag 同一次推送时，Pages 重建与 CI 发包是并发的，会有 1–3 分钟窗口内「胶囊写着已发布但 Release/npm 还没就绪」。
+> **v5.0.0 已改好、尚未推送**（站点是公开在线的，改完后版本号先于发布指向 5.0.0）：全部页面（现 18 个工具页 + 宣传页 + 文档总览）的 JSON-LD `softwareVersion` → 5.0.0；首屏品牌版本号、胶囊内的 Release 链接与文字、`#trust` 的 `latest` → 5.0.0；`16 个工具` / `16 tools` → 18。**新增两个页面**：`tools/novel-chapter-brief.html`（开写包）与 `tools/novel-fix-plan.html`（改稿台），并同步了 `docs.js` 工具清单、`sitemap.xml`、`tools/index.html` 的工具卡与新增的「该调哪个工具」小节、`index.html` 的两张能力卡（能力卡由 9 张变 11 张，`more-8`/`more-9` 之后的编号顺延为 `more-10`/`more-11`）。`tools/novel-plot.html` 增加了 `action: "graph"` 结构视图（不新增工具）。**推送时请与 5.0.0 的 tag 同一次推送**，否则会出现「在线页面写着 5.0.0、Release 与 npm 仍是 4.3.1」的窗口期（与 v4.3.1 那次同型，只是这次窗口不会自动闭合，因为站点改动是提前做好的）。
+>
+> **同一轮的第二次改动：与落地的 5.0.0 实现对账**（只改站点，未动插件源码、未推送）。要点：① `tools/novel-fix-plan.html` 补回 `mark` 的取值参数 **`state`**（枚举 `done` / `skip`，与 `itemId` 同为必填，缺一报错），并写明 **`mark` 不重新测量、不受「写作助手功能」门禁约束**，而 `plan` / `verify` 依赖六维引擎、开关关闭时拒绝执行；② 逐项对齐 `lib/fixplan.js`：`items[]` 恒为 9 个字段、八类 `type` 的实际判定来源与量级门槛、排序补第四级 `id` 字典序、`verify` 三态改为 `resolved` / `pending` / `new` 并列出 `detail` 的三种文案、指标类段落归因口径（段落须同向且自身出带、每维最多 3 段、退化为全章 0/0 时 severity 降一档）、清单上限 **40 条**（旧文写作「不做上限」）；③ 对齐 `lib/brief.js`：补 `book` 为第 16 个返回字段、`isNext` 的真实语义（目标章文件不存在即为 true）、`openPlots` 收的是 `status !== "done"` 而非 `=== "open"`、`avoid` 实为三类来源（多出「已退场角色」）、`degraded` 元素是**字符串**、`chapter` / `worldview` / `baseline` 三键可整键省略、`skeletons` 实际上限 4 条、`lastVerdict` 是现算而非落盘结论；④ 对齐 `lib/graph.js`：`planVsActual.keywords` 放的是**命中的**子集且命中判定是子串包含、`timelineOrder.issue` 只标在「章号小于此前最大章号」的行上、`absences[].length` 是**连续缺席章数**（与 `threadActivity` 的章号之差口径不同）、`plotLifecycle` 的 `distance` 基准是**全书最大章号**而非 `totalChapters`、排序是 `firstChapter` 升序、`graph` 恒带一个空 `entries: []`、参数补 `absenceThreshold`；⑤ 新增一节「提示词档位与场景」（档位 × 场景正交、场景仅 `full` 档生效、只换提示词不改工具能力、老状态文件落到 `general`，既有工作流不变——仅在其中补入三条新工具的入口指引共 7 行，其余逐字沿用 4.x），并在参数与输出里补 `systemPromptMode` / `promptScene`。
+> **第四轮：装机全量实测（18 工具 × 全部 action）后的 4 处修补**（**版本号不变**，仍 5.0.0；只改站点 + 插件源码，未推送）。① `novel_new_chapter` 的 `title` 改为**一并进文件名**（`第NN章 标题.md`，`sanitizeSegment` 剥非法字符 + 截断 24 字，全是非法字符则退回不带标题），`novel_chapters` 增加**一级标题回退** `core.firstHeadingTitle`（`chapterStats` 顺带返回 `heading`，正文已读、零额外 IO）——修掉「写了 title 却在清单里显示空标题」。② `novel-fix-plan` 清单渲染每条待办增加一行 `id：fix-…`（此前要 `mark` 必须先读 `planFile`）。③ `verify` 的**第一轮（id 精确命中）**也拼「（人工标记 done/skip）」，与页面既有描述一致（此前只有按 type 兜底那轮才拼）。④ `mark` 的 `state` 报错区分「没传」与「传了非法值」。**反向确认无误、不改的**：`items[]` 返回体恒为 9 字段（`state`/`stateAt` 只写落盘文件，页面描述正确）、`timelineOrder` 省略 `number` 键被宿主正常接受、留白差值 8.36 < 门槛 12 被正确忽略。
+> **第三轮：审查（diff-only 子代理）后的修正**（只改站点 + 插件源码，未推送）。① **契约**：`timelineOrder[]` 的 `number` 从 `required` 移除，`lib/graph.js` 改为**省略**该键而不是写 `null`（宿主 schema 不支持 `type` 数组，写 null 会被 `dropNullDeep` 删键 → 与 required 冲突；`novel-plot.html` 早已写成「解析不出 → 省略」，这轮才让代码追上文档）；`test/e2e-test.mjs` 补一条只有 day/event 的时间线条目做回归。② **取消语义**：`core.isAbort` 提为唯一判据，`graph.js` / `fixplan.js` 的 6 处降级 catch 一律先放行 `AbortError`——此前一次被取消的调用会返回「成功但清单/结构为空」，被误读成「这一章没问题」。③ **口径统一**：容差公式上移为 `core.buildTolerance`（+ `MIN_BASELINE_CHAPTERS` / 小样本下限常量为 `core` 导出），`novel_fix_plan` 与**开写包的 `lastVerdict`** 共用同一实现与同一门槛。④ **清单文件名**：章键改取**解析后的章文件**（`plan("1")` 与 `plan("码头等船")` 不再各写一份，`verify` / `mark` 同口径），`verify` 改为先算再读、以返回值里的 `planFile` 为准。⑤ **开写包锚段**排除目标章自身（与 `novel_fix_plan` 一致）；人物设定行**没有冒号也认**（`novel_outline action=character` 只给名字时写出的正是 `- 名字`，旧正则把它静默丢掉）。⑥ 删死代码（`creationChars` / `inSettings` / `inCreation` / `numberResolved` / `plotIds` 与重复常量），`mcp/README.md` 不再提已删除的 `EXPECTED_TOOL_COUNT`。
+> **v4.3.1 已于 2026-09-17 发布**（站点与代码同一次推送）：全部工具页（当时 16 个）的 JSON-LD `softwareVersion` → 4.3.1；首屏品牌版本号、胶囊内的 Release 链接与 `#trust` 的 `latest` → 4.3.1；`novel-read` / `novel-chapters` / `novel-continuity-check` 三页各加一个 `v4.3.1` 变更提示块（`.warn.note`），并同步修正 `novel-read` 的查找顺序、`novel-keywords` 的章节解析顺序、`novel-summary` 的同章号共用槽位说明。**注意发版顺序**：站点与 tag 同一次推送时，Pages 重建与 CI 发包是并发的，会有 1–3 分钟窗口内「胶囊写着已发布但 Release/npm 还没就绪」。
 
-技术文档子页面的参数与公式均取自插件源码（`lib/index.js`、`lib/analysis.js`、`lib/style-metrics.js`、`lib/embedding.js`、`lib/core.js`、`mcp/server.mjs`），改动实现后请同步更新对应页面。
+技术文档子页面的参数与公式均取自插件源码（`lib/index.js`、`lib/analysis.js`、`lib/style-metrics.js`、`lib/embedding.js`、`lib/core.js`、`lib/brief.js`、`lib/fixplan.js`、`lib/graph.js`、`lib/prompts.js`、`mcp/server.mjs`），改动实现后请同步更新对应页面。

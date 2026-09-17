@@ -1,7 +1,5 @@
 # 📚 dsh-novel-writer — 给网文作者的本地章节体检
 
-> 🌐 **[在线主页](https://siweina.github.io/dsh-novel-writer/)** · [完整技术文档（16 个工具的实现细节、公式与约束）](https://siweina.github.io/dsh-novel-writer/tools/)
-
 [English](./README.en.md) | 中文
 
 [![npm version](https://img.shields.io/npm/v/dsh-novel-writer.svg?style=flat-square&color=blue)](https://www.npmjs.com/package/dsh-novel-writer)
@@ -12,11 +10,11 @@
 [![GitHub stars](https://img.shields.io/github/stars/siweina/dsh-novel-writer.svg?style=flat-square&color=orange)](https://github.com/siweina/dsh-novel-writer/stargazers)
 [![siweina/dsh-novel-writer MCP server](https://glama.ai/mcp/servers/siweina/dsh-novel-writer/badges/score.svg)](https://glama.ai/mcp/servers/siweina/dsh-novel-writer)
 
-**16 个工具，把"文风跑偏"变成可量化的数字。**
+**18 个工具，把"文风跑偏"变成可量化的数字。**
 句式 / 情感 / 风格基线全部**在本地算**：24MB 中文模型随包分发，**零 API 花费、正文不出本机**。
 为 DeepSeek Harness（DSH）打造；同一套能力也可作为 **MCP 服务器**给 Claude Desktop / Cursor 使用。
 
-[安装](#安装) · [60 秒上手](#60-秒上手) · [看看输出](#看看输出长什么样) · [16 个工具](#提供的工具16-个) · [MCP 服务器](#mcp-服务器非-dsh-用户也能用)
+[安装](#安装) · [60 秒上手](#60-秒上手) · [看看输出](#看看输出长什么样) · [18 个工具](#提供的工具18-个) · [MCP 服务器](#mcp-服务器非-dsh-用户也能用)
 
 ---
 
@@ -90,7 +88,7 @@ fixAnchors：3 条原著锚段（对话 / 心理 / 描写各一条，供逐句�
 | 花费 | **0（本地推理）** | 按 token 计费 | 自建 |
 | 中文小说专用 | **是** | 通用 | 否 |
 | 风格基线（μ±σ） | **有** | 少见 | 无 |
-| 与 DSH 集成 | **16 工具 + 侧边栏开关** | 无 | 无 |
+| 与 DSH 集成 | **18 工具 + 侧边栏开关** | 无 | 无 |
 | 非 DSH 用户可用 | **可以（MCP）** | 可以 | 需自己封装 |
 
 > **致非中文用户**：本插件为中文小说分析写作而设计——句式、情感、意象等核心能力以及内置的语义模型，全部针对中文语料构建与调优。在深耕中文的同时兼顾英文等其他语言，确实超出了我目前的能力范围。若因此给您带来不便，我深感抱歉，恳请谅解。
@@ -111,10 +109,11 @@ fixAnchors：3 条原著锚段（对话 / 心理 / 描写各一条，供逐句�
 10. **写作哨兵三件套**：`novel_continuity_check` 扩展——①**衔接检查**（chapter 参数：时间硬跳/语义距离/人物延续/钩子承接四路检测，带原文引用）②**OOC 检测**（ooc 参数：角色情绪基线偏离）③**大纲走偏**（outline 参数：方向行 vs 正文关键词重合）；报告工具支持 **brief 精简模式**。
 11. **原创模式与创作资料**：侧边栏填写创作设定（世界观/角色/禁忌/主线/题材/额外要求，留空=模型自定，多书独立设定库）；novel_outline 维护创作资料（创作设定/人物/剧情大纲/钩子记录/创作状态卡），原创强制「设定书→大纲→钩子」链，动态批次（10→20→30 章）防剧情跳跃与角色 OOC。
 12. **体验与统计**：主面板**书库统计卡**（每本章数/总字数/近 7 天活跃字数，活跃🔥标绿）、**🎬 体验演示**（内置示例不落盘跑六维基线）、**📊 报告历史**（analysis/style-reports 列表浏览）；错误提示带解决步骤；工具说明压缩省 token。
+13. **写作台三件套**：`novel_chapter_brief` **开写包**——动笔前**一次调用**取齐材料（上一章承接口 / 本章方向 / 相关人物 / 待回收伏笔 / 用语规范 / 风格基线 / 锚段与骨架 / 禁用清单 / 开写清单），取不到的材料进 `degraded` 并说明原因；`novel_fix_plan` **改稿台**——把风格诊断变成按优先级排好的待办（原句行号定位 + 当前值与目标值 + 原著锚段 + 改写方向），`plan` / `verify` / `mark` 三态复测，**只给方向、不生成正文**；`novel_plot { action: "graph" }` **结构视图**——伏笔埋设跨度 / 人物连续缺席 / 剧情线空档 / 时间线顺序 / 大纲对照。另有**场景化提示词**（general / writing / revising / auditing / setup，`general` 即旧行为）。
 
 ---
 
-## 提供的工具（16 个）
+## 提供的工具（18 个）
 
 | 工具 | 说明 |
 |------|------|
@@ -125,21 +124,23 @@ fixAnchors：3 条原著锚段（对话 / 心理 / 描写各一条，供逐句�
 | `novel_new_chapter` | 创建新章节文件 |
 | `novel_import` | 原稿件批量导入/分类 |
 | `novel_sentence_analysis` | 句式模式分析（九类/情感净化/量化/曲线/指纹） |
-| `novel_sentence_config` | 查看/修改工具与功能开关 |
+| `novel_sentence_config` | 查看/修改工具与功能开关（含提示词场景） |
 | `novel_style_check` | 风格自检（规则+语义双维度） |
 | `novel_style_report` | **风格画像报告**（6 维测量 + AI 判断分离） |
-| `novel_plot` | 伏笔/剧情线登记表 |
+| `novel_plot` | 伏笔/剧情线登记表；`action: "graph"` 结构视图（伏笔埋设跨度 / 人物连续缺席 / 剧情线空档 / 时间线顺序 / 大纲对照） |
 | `novel_settings` | 设定管理（人物/地点/道具/时间线/世界观） |
 | `novel_summary` | 章节摘要（长书续写辅助） |
 | `novel_continuity_check` | 连贯性审计 + **衔接/OOC/大纲走偏哨兵** |
 | `novel_semantic_search` | 语义检索（本地 embedding，0 token） |
 | `novel_outline` | **创作资料管理**（创作设定/人物/大纲/钩子/状态卡） |
+| `novel_chapter_brief` | **开写包**——动笔前一次调用取齐材料（上一章承接口/本章方向/相关人物/待回收伏笔/用语规范/风格基线/锚段与骨架/禁用清单/开写清单） |
+| `novel_fix_plan` | **改稿台**——把风格诊断变成按优先级排好的待办（带行号定位与锚段），改完可复测；**只给方向不生成正文** |
 
 ---
 
 ## MCP 服务器（非 DSH 用户也能用）
 
-包里自带一个 **stdio MCP 服务器**（`mcp/server.mjs`），把 16 个工具原样暴露给任何 MCP 客户端，
+包里自带一个 **stdio MCP 服务器**（`mcp/server.mjs`），把 18 个工具原样暴露给任何 MCP 客户端，
 例如 Claude Desktop、Cursor。**它是跑在你自己电脑上的本地进程，不需要服务器、不需要联网、不需要常驻。**
 
 ```bash
