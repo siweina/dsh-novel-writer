@@ -189,8 +189,7 @@ function renderElement(element, stats) {
     for (const item of element) renderElement(item, stats);
     return;
   }
-  if (typeof element.type === "function") {
-    stats.components += 1;
+  if (typeof element.type === "function") {    stats.components += 1;
     // 按组件函数复用实例（模拟 React 的组件实例）：hooks 槽位与 effect 依赖跨渲染保持
     let instance = instances.get(element.type);
     if (instance === undefined) {
@@ -223,11 +222,15 @@ function renderElement(element, stats) {
   if (typeof element.type === "string" && element.props && typeof element.props.className === "string") {
     for (const cls of element.props.className.split(/\s+/).filter(Boolean)) stats.classes.add(cls);
   }
+  // v5.1.1：收集按钮（vnode 级，不依赖 DOM 物化）——供"分段按钮必须可点"的断言使用
+  if (element.type === "button") stats.buttons.push(element);
   for (const child of element.children) renderElement(child, stats);
 }
 /** 驱动一次真实渲染：跑组件函数 + 遍历 vnode 树，返回统计（异常向上抛，由调用方 fail）。 */
 function runRender(element) {
-  const stats = { components: 0, nodes: 0, text: "", classes: new Set() };
+  // v5.1.1：新增 buttons 收集——面板里的分段按钮（档位/场景）此前只被"渲染出来"而从未被断言，
+  // 于是"场景按钮被 disabled 锁死"这个真机上立刻能看出来的问题，测试完全看不见。
+  const stats = { components: 0, nodes: 0, text: "", classes: new Set(), buttons: [] };
   reactRenderDepth += 1;
   try {
     renderElement(element, stats);
@@ -235,6 +238,14 @@ function runRender(element) {
     reactRenderDepth -= 1;
   }
   return stats;
+}
+/** 取 vnode 的纯文本（递归拼接字符串子节点），用于按文案定位按钮。 */
+function vnodeText(node) {
+  if (node === null || node === undefined) return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(vnodeText).join("");
+  if (typeof node === "object" && node.children) return vnodeText(node.children);
+  return "";
 }
 /** 测试收尾：执行 effect 返回的清理函数（取消订阅/清定时器），避免句柄泄漏。 */
 function cleanupHooks() {
@@ -374,6 +385,54 @@ console.log("视图/弹窗分支渲染: 共 " + renderLog.length + " 次渲染�
 const cardRender = runRender(reactStub.createElement(slotRegistered.component, { controller, toggle: () => {}, onOpenPanel: () => {} }));
 if (cardRender.components < 1 || cardRender.nodes < 3) fail("设置卡片组件体未执行（components=" + cardRender.components + " nodes=" + cardRender.nodes + "）");
 console.log("设置卡片渲染: 组件数 " + cardRender.components + " | vnode 节点 " + cardRender.nodes + " ✓");
+
+// ---------------------------------------------------------------------------
+// v5.1.1 回归：提示词「场景」分段按钮必须始终可点（真机反馈：档位=off 时五个场景按钮全灰、点不动）
+// 旧实现把 disabled 绑在 systemPromptMode !== "full" 上，用户默认档位（off/brief）下场景被锁死且无任何提示。
+// ---------------------------------------------------------------------------
+// 先落到"档位=关闭 + 不在加载中"——这正是用户遇到问题的现场（默认档位 off，场景行整行点不动）
+controller.set({ view: "main", loading: false, systemPromptMode: "off", promptScene: "general" }, { silent: true });
+const featsRender = renderLog[renderLog.length - 1];
+const segBtns = (featsRender.stats.buttons || []).filter((b) => String(b.props.className || "").includes("nwSegBtn"));
+if (segBtns.length !== 8) fail("主面板分段按钮数量异常（档位 3 + 场景 5 应为 8，实际 " + segBtns.length + "）");
+const SCENE_LABELS = ["通用", "写新章", "改稿", "审计", "建资料"];
+const MODE_LABELS = ["关闭", "精简", "完整"];
+const sceneBtns = segBtns.filter((b) => SCENE_LABELS.includes(vnodeText(b).trim()));
+const modeBtns = segBtns.filter((b) => MODE_LABELS.includes(vnodeText(b).trim()));
+if (sceneBtns.length !== 5) fail("未按文案定位到 5 个场景按钮（实际 " + sceneBtns.length + "："
+  + segBtns.map((b) => vnodeText(b).trim()).join("/") + "）");
+if (modeBtns.length !== 3) fail("未按文案定位到 3 个档位按钮（实际 " + modeBtns.length + "）");
+// 关键回归断言：档位=off（非 full）时，场景按钮必须可点——旧实现把它们 disabled 了，用户"点不了"
+const lockedScene = sceneBtns.filter((b) => b.props.disabled === true);
+if (lockedScene.length > 0) {
+  fail("档位非 full 时场景按钮被 disabled 锁死（用户点不了）：" + lockedScene.map((b) => vnodeText(b).trim()).join("/")
+    + "｜loading=" + controller.getSnapshot().loading + " mode=" + controller.getSnapshot().systemPromptMode);
+}
+const lockedMode = modeBtns.filter((b) => b.props.disabled === true);
+if (lockedMode.length > 0) fail("loading=false 时档位按钮仍被禁用：" + lockedMode.map((b) => vnodeText(b).trim()).join("/"));
+for (const b of sceneBtns) if (typeof b.props.onClick !== "function") fail("场景按钮缺 onClick：" + vnodeText(b).trim());
+const hintNode = featsRender.stats.text.includes("暂不注入");
+if (!hintNode) fail("档位非 full 时未给出「场景暂不注入」的说明（用户不知道为何没生效）");
+// 点一个非当前场景：必须真的回调 toggle({ promptScene })（把面板的 toggle 换成探针后再渲染）
+// 点一个非当前场景：必须真的回调 toggle({ promptScene })。
+// 用探针 props 直接渲染面板组件（与上面设置卡片同一手法）——比改 props 对象更可靠：
+// 组件内部若把 toggle 解构进局部变量，改 props 就失效了。
+const probe = [];
+const probeRender = runRender(reactStub.createElement(panelRender.element.type, {
+  controller,
+  toggle: (patch) => probe.push(patch),
+  onOpenPanel: () => {}
+}));
+const probeSegs = (probeRender.buttons || []).filter((b) => String(b.props.className || "").includes("nwSegBtn"));
+const writingBtn = probeSegs.find((b) => vnodeText(b).trim() === "写新章");
+if (!writingBtn) fail("探针渲染后找不到「写新章」按钮（找到：" + probeSegs.map((b) => vnodeText(b).trim()).join("/") + "）");
+writingBtn.props.onClick();
+if (probe.length !== 1 || probe[0].promptScene !== "writing") {
+  fail("点击场景按钮未提交 promptScene=writing（实际 " + JSON.stringify(probe) + "）");
+}
+const currentBtn = probeSegs.find((b) => b.props.className.includes("nwSegBtnOn") && SCENE_LABELS.includes(vnodeText(b).trim()));
+if (currentBtn && vnodeText(currentBtn).trim() !== "通用") fail("当前场景高亮错位：" + vnodeText(currentBtn).trim());
+console.log("场景按钮可点（v5.1.1）: 8 个分段按钮全部可点 | 点击「写新章」→ toggle({promptScene:\"writing\"}) ✓ | 档位非 full 时提示「暂不注入」✓");
 
 cleanupHooks(); // 执行 effect 清理（取消控制器订阅），避免残留句柄影响进程退出
 console.log("CLIENT OK");

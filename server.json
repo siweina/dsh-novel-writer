@@ -3,7 +3,7 @@
   "name": "io.github.siweina/dsh-novel-writer",
   "title": "dsh-novel-writer — 网文写作体检",
   "description": "Offline toolkit: 18 tools for Chinese web-novel style, plot-thread and continuity audits.",
-  "version": "5.1.0",
+  "version": "5.1.1",
   "repository": {
     "url": "https://github.com/siweina/dsh-novel-writer",
     "source": "github"
@@ -13,7 +13,7 @@
     {
       "registryType": "npm",
       "identifier": "dsh-novel-writer",
-      "version": "5.1.0",
+      "version": "5.1.1",
       "runtimeHint": "npx",
       "packageArguments": [
         {
