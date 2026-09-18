@@ -150,7 +150,7 @@ printf '%s\n' \
 | 5 | `novel_new_chapter` | 创建新章节文件（自动附风格基线 μ 摘要与原著锚包） |
 | 6 | `novel_import` | 批量导入原稿件（scan 预览 / apply 落盘） |
 | 7 | `novel_sentence_analysis` | 句式模式分析（九类句式、转移、节奏、情感曲线、风格指纹） |
-| 8 | `novel_sentence_config` | 查看/修改功能开关（enabled / autoAnalyze / 各工具开关 / promptScene 提示词场景） |
+| 8 | `novel_sentence_config` | 查看/修改功能开关（enabled / autoAnalyze / 各工具开关 / `promptScene` 提示词场景 / `leanWorkflow` 精简工作流） |
 | 9 | `novel_style_check` | 章节风格自检（与全书基线对比，输出偏差与锚段） |
 | 10 | `novel_plot` | 伏笔/剧情线登记表（open 待回收 / done 已回收）；新增 `action:"graph"` 结构视图（伏笔埋设跨度 / 人物连续缺席 / 剧情线空档 / 时间线顺序 / 大纲对照，只读） |
 | 11 | `novel_settings` | 五张设定表（人物/地点/道具/时间线/世界观用语规范） |

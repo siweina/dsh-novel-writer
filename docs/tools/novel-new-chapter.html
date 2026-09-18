@@ -4,21 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>novel_new_chapter — 新建章节｜dsh-novel-writer 技术文档</title>
-<meta name="description" content="novel_new_chapter 的实现细节：章号解析与文件名归一、wx 独占写入的防覆盖语义、标题与正文的合成文本口径、强制风格基线与风格锚包的生成规则，以及对调用方模型的约束。">
+<meta name="description" content="novel_new_chapter 的实现细节：章号解析与文件名归一、wx 独占写入的防覆盖语义、标题与正文的合成文本口径、风格基线 μ 摘要与风格锚包的生成规则、「基线怎么用」的非强制口径，以及对调用方模型的约束。">
 <link rel="stylesheet" href="../styles.css">
 <link rel="stylesheet" href="docs.css">
 <link rel="canonical" href="https://siweina.github.io/dsh-novel-writer/tools/novel-new-chapter.html">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="dsh-novel-writer">
 <meta property="og:title" content="novel_new_chapter — 新建章节｜dsh-novel-writer 技术文档">
-<meta property="og:description" content="novel_new_chapter 的实现细节：章号解析与文件名归一、wx 独占写入的防覆盖语义、标题与正文的合成文本口径、强制风格基线与风格锚包的生成规则，以及对调用方模型的约束。">
+<meta property="og:description" content="novel_new_chapter 的实现细节：章号解析与文件名归一、wx 独占写入的防覆盖语义、标题与正文的合成文本口径、风格基线 μ 摘要与风格锚包的生成规则、「基线怎么用」的非强制口径，以及对调用方模型的约束。">
 <meta property="og:url" content="https://siweina.github.io/dsh-novel-writer/tools/novel-new-chapter.html">
 <meta property="og:locale" content="zh_CN">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="novel_new_chapter — 新建章节｜dsh-novel-writer 技术文档">
-<meta name="twitter:description" content="novel_new_chapter 的实现细节：章号解析与文件名归一、wx 独占写入的防覆盖语义、标题与正文的合成文本口径、强制风格基线与风格锚包的生成规则，以及对调用方模型的约束。">
+<meta name="twitter:description" content="novel_new_chapter 的实现细节：章号解析与文件名归一、wx 独占写入的防覆盖语义、标题与正文的合成文本口径、风格基线 μ 摘要与风格锚包的生成规则、「基线怎么用」的非强制口径，以及对调用方模型的约束。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_new_chapter","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-new-chapter.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_new_chapter — 新建章节｜dsh-novel-writer 技术文档","description":"novel_new_chapter 的实现细节：章号解析与文件名归一、wx 独占写入的防覆盖语义、标题与正文的合成文本口径、强制风格基线与风格锚包的生成规则，以及对调用方模型的约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-new-chapter.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"5.0.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_new_chapter, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_new_chapter — 新建章节｜dsh-novel-writer 技术文档","description":"novel_new_chapter 的实现细节：章号解析与文件名归一、wx 独占写入的防覆盖语义、标题与正文的合成文本口径、风格基线 μ 摘要与风格锚包的生成规则、「基线怎么用」的非强制口径，以及对调用方模型的约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-new-chapter.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"5.1.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_new_chapter, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -34,7 +34,7 @@
     <article class="doc">
       <h1>novel_new_chapter</h1>
       <p class="doc__lead">
-        新建章节。为指定作品创建一个章节文件，章号可显式指定或自动取下一个，可同时写入 Markdown 一级标题与初始正文。<strong>同号章节一律拒绝创建，绝不覆盖既有稿件</strong>；创建成功后返回体自带全书六维风格基线 μ 摘要与「风格锚包」（原著代表性段落 + 句式骨架），使调用方模型在动笔前即可拿到测量数据与可照样写的样例，无需先调用风格报告工具。
+        新建章节。为指定作品创建一个章节文件，章号可显式指定或自动取下一个，可同时写入 Markdown 一级标题与初始正文。<strong>同号章节一律拒绝创建，绝不覆盖既有稿件</strong>；创建成功后返回体自带全书六维风格基线 μ 摘要与「风格锚包」（原著代表性段落 + 句式骨架），使调用方模型在动笔前即可拿到测量数据与用于<strong>校准语感</strong>的样例，无需先调用风格报告工具。
       </p>
 
       <h2>参数</h2>
@@ -61,7 +61,7 @@
           <tr><th><code>path</code></th><td>string</td><td><strong>必返</strong>。落盘绝对路径</td></tr>
           <tr><th><code>chars</code></th><td>integer</td><td><strong>必返</strong>。写入文本的字符数（合成文本整体长度，含标题行与结尾换行）</td></tr>
           <tr><th><code>baseline</code></th><td>string</td><td>全书六维基线 μ 摘要，形如「标签 值 / 标签 值 …」，无法计算时为缺失</td></tr>
-          <tr><th><code>reminder</code></th><td>string</td><td>强制流程提示：动笔前对照 baseline 与锚包、写完后必须调用 <code>novel_style_check</code> 对照。当前实现下恒有值</td></tr>
+          <tr><th><code>reminder</code></th><td>string</td><td>「<strong>基线怎么用</strong>」提示（v5.1.0 改口径：此前这段标题里带「强制」二字，现改为「基线怎么用」）：① <strong>锚段读一遍校准语感</strong>（<strong>不要照 <code>skeletons</code> 造句</strong>）② 写完<strong>建议</strong>跑一次 <code>novel_style_check</code> 自检，<strong>偏离明显时才逐句修正</strong>。当前实现下恒有值</td></tr>
           <tr><th><code>anchors</code></th><td>array</td><td>风格锚·原著段落，元素 <code>{ label, text }</code>，<strong>最多 5 条</strong></td></tr>
           <tr><th><code>skeletons</code></th><td>array</td><td>句式骨架，元素 <code>{ type, text }</code>，<strong>最多 4 条</strong></td></tr>
         </tbody>
@@ -100,7 +100,7 @@ title 与 content  → "# 标题" + "\n" + "\n" + 正文 + "\n"
 chars = text.length        ← UTF-16 码元数，不是纯正文长度</div>
       <p>标题行与正文之间由数组 join 产生的空行是格式的一部分，会一并计入 <code>chars</code>。该字段用于核对「是否真的写入了内容」，不代表正文字数。</p>
 
-      <h3>4 · 强制风格基线</h3>
+      <h3>4 · 风格基线 μ 摘要</h3>
       <div class="formula">bTexts  = 重扫目录后的全部章节（含刚创建的新章，其文本直接复用内存中的 text）
 perCh   = metricChaptersCached( root, book, bTexts )      ← 按内容哈希缓存六维测量
 excluding = perCh.filter( pc => pc.file !== 新章文件名 )
@@ -121,7 +121,7 @@ if ( excluding.length > 0 )
 骨架 = 按 /[。！？…]+/ 切句、去空白、长度 20–45 字、去重后等距取 4 条
   类型判定：含引号 → 对话；以 ？/? 结尾 → 疑问；含 想|觉得|仿佛|好像|似乎 → 心理；否则 陈述
 骨架全空 → 退化为 4 条 ≥ 15 字的陈述型段落（截 60 字）</div>
-      <p>锚包是「照样例写」的载体，数字基线只用于事后校验。整段同样被 <code>try/catch</code> 包裹，失败时返回空锚包。</p>
+      <p>锚包是「<strong>校准语感</strong>」的载体，不是造句模板：<code>anchors</code> 读一遍对上味道即可，<code>skeletons</code> <strong>只在写不出该类型句子时</strong>参考，<strong>不要照它造句、不要套句式模板</strong>；数字基线只用于事后校验。整段同样被 <code>try/catch</code> 包裹，失败时返回空锚包。</p>
 
       <h3>6 · 渲染文本</h3>
       <div class="formula">&lt;path&gt;…&lt;/path&gt;
@@ -129,11 +129,12 @@ if ( excluding.length > 0 )
 &lt;content&gt;
 已创建 第NN章（N 字）
 [可选] 【风格基线 μ】…
-[可选] 【风格锚·原著段落】动笔照此味道写（数字基线只做事后校验）：
+[可选] 【风格锚·原著段落】读一遍校准语感（数字基线只做事后校验）：
          [标签] 段落…
-[可选] 【句式骨架】按此形状造句：
+[可选] 【句式骨架】写不出该类型句子时才参考，不要照它造句：
          [类型] 句子…
-reminder
+reminder ← 【基线怎么用】块：① 锚段读一遍校准语感，不要照 skeletons 造句
+                        ② 写完建议自检，偏离明显才逐句修正
 &lt;/content&gt;</div>
 
       <h2>约束与边界</h2>
@@ -155,7 +156,7 @@ reminder
       <ul>
         <li><a href="novel-chapters.html">novel_chapters</a> —— 创建前查看现有章号，避免显式 <code>chapter</code> 撞号。</li>
         <li><a href="novel-read.html">novel_read</a> —— 按章号或标题读回刚创建的正文。</li>
-        <li><a href="novel-style-check.html">novel_style_check</a> —— <code>reminder</code> 规定的写后对照判定，用同一套六维基线与目标章比对。</li>
+        <li><a href="novel-style-check.html">novel_style_check</a> —— <code>reminder</code> <strong>建议</strong>的写后自检，用同一套六维基线与目标章比对；偏离明显时才据其修正。</li>
         <li><a href="novel-import.html">novel_import</a> —— 已有整批原稿件时的入库入口，替代逐章创建。</li>
       </ul>
 

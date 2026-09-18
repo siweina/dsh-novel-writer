@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_style_check — 风格自检｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_style_check 的实现细节：风格指纹 13 维向量的构造与余弦相似度分级，偏差清单的阈值，六维文笔基线「排除本章后现算」的口径，原著锚段的选取与语义风格相似度的降级文案。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_style_check","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-style-check.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_style_check — 风格自检｜dsh-novel-writer 技术文档","description":"novel_style_check 的实现细节：风格指纹 13 维向量的构造与余弦相似度分级，偏差清单的阈值，六维文笔基线「排除本章后现算」的口径，原著锚段的选取与语义风格相似度的降级文案。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-style-check.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"5.0.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_style_check, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_style_check — 风格自检｜dsh-novel-writer 技术文档","description":"novel_style_check 的实现细节：风格指纹 13 维向量的构造与余弦相似度分级，偏差清单的阈值，六维文笔基线「排除本章后现算」的口径，原著锚段的选取与语义风格相似度的降级文案。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-style-check.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"5.1.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_style_check, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -34,7 +34,7 @@
     <article class="doc">
       <h1>novel_style_check</h1>
       <p class="doc__lead">
-        风格自检。把目标章节与「全书除本章外的其余章」当作两个样本，先算句式指纹的余弦相似度并给出 high / medium / low 分级与偏差清单，再用同一套六维文笔指标做「本章值 vs 其他章基线 μ±σ」的带外判定，最后附上原著锚段供逐句对照修正。<strong>基线永远不含目标章</strong>：目标章只参与判定，不参与统计，否则风格漂移会把自己的基线一起拉走。
+        风格自检。把目标章节与「全书除本章外的其余章」当作两个样本，先算句式指纹的余弦相似度并给出 high / medium / low 分级与偏差清单，再用同一套六维文笔指标做「本章值 vs 其他章基线 μ±σ」的带外判定，最后附上原著锚段供对照<strong>校准语感</strong>。<strong>基线永远不含目标章</strong>：目标章只参与判定，不参与统计，否则风格漂移会把自己的基线一起拉走。
       </p>
 
       <h2>参数</h2>
@@ -63,7 +63,7 @@
           <tr><th><code>semantic</code></th><td>object</td><td>必返对象。<code>enabled:true</code> 时含 <code>similarity</code> 与 <code>note</code>；不可用时仅 <code>enabled:false</code> 与说明文案</td></tr>
           <tr><th><code>metric</code></th><td>object</td><td>六维对照。<code>enabled:true</code> 时含 <code>baseline</code> / <code>metrics</code> / <code>verdicts</code> / <code>outCount</code> / <code>skippedDims</code> / <code>summary</code>；不可用时仅 <code>enabled:false</code> 与 <code>note</code></td></tr>
           <tr><th><code>fixAnchors</code></th><td>array</td><td>原著锚段，元素为 <code>{label, text}</code>，最多 3 条；锚包构建失败时缺省</td></tr>
-          <tr><th><code>advice</code></th><td>string</td><td>面向生成端的建议文本，已与六维判定统一口径</td></tr>
+          <tr><th><code>advice</code></th><td>string</td><td>面向生成端的建议文本，已与六维判定统一口径。<strong>v5.1.0 起不再要求「逐句对比修正」</strong>：改为「<strong>先判断这是不是有意为之</strong>（章节类型不同本来就会偏离全书均值）；确实跑偏时才对照 <code>fixAnchors</code> 只调整那几处，<strong>不要整章重写，也不要为对齐数字改文</strong>」</td></tr>
         </tbody>
       </table>
       <p>渲染层（<code>render</code>）依次输出：检查章节、对比基线、风格相似度百分比与中文分级、偏差清单（无偏差时写「偏差: 无明显偏差」）、语义对比备注、原著锚段（带「逐句对比本章对应写法，只修跑偏部分，不得整章重写」的约束语）、本章指纹与基线指纹、文笔六维逐维「本章 v vs 基线 μ（±%，marks）」、<code>advice</code>。六维行的状态符号为 <code>⚠ 出带</code> / <code>△ 提醒</code> / <code>✓ 在带</code>；<code>metric.enabled === false</code> 时该段只打印 <code>note</code>。</p>
@@ -109,7 +109,11 @@ tol[k]      = { low: -allBaseline[k].recTol, high: +allBaseline[k].recTol }
 judge = judgeAgainstBaseline(measureStyleMetrics(目标章).metrics, b, tol)</div>
       <p>容差取「含目标章的全书推荐值」而非「排除目标章后的推荐值」，是因为排除后样本更少、σ 更不稳定；用户自定义容差只覆盖显式给出的维度，未设置的维度继续沿用全书推荐值。<code>recTol</code> 缺失或非有限值时回退 15。六维的定义、μ±σ 公式与 out / warn / ok 判据与 <code>novel_style_report</code> 完全同源，见<a href="novel-style-report.html">该页</a>「六个维度的定义与公式」与「基线带 μ±σ 的计算」两节。</p>
       <div class="note">
-        <b>advice 与六维判定统一口径。</b> 六维判定算完之后，若 <code>metric.outCount &gt; 0</code>，<code>advice</code> 会被覆写：指纹无偏差时改写为「句式指纹与全书高度一致，但 N 个维度超出容差带…」，有偏差时在原建议后追加「另：…」。此举避免了同一份输出既说「可以放心续写」又标「⚠ 需修正」的自相矛盾。
+        <b>advice 与六维判定统一口径（v5.1.0 改措辞）。</b> 六维判定算完之后，若 <code>metric.outCount &gt; 0</code>，<code>advice</code> 会被覆写：指纹无偏差时改写为「句式指纹与全书高度一致；六维层面：&lt;summary&gt;——<strong>单一维度出带属正常波动</strong>（带宽 = 作者自身波动的 1.5σ），只有偏离达到 2 倍容差以上、或那一处读起来确实别扭时才需要调整，不要为对齐数字改写文本」，有偏差时在原建议后追加「另（六维）：…——同上，轻微出带属正常波动，不必逐项消除」。此举避免了同一份输出既说「可以放心续写」又标「⚠ 需修正」的自相矛盾。<br>
+        <strong>v5.1.0 另修两处会诱导"反复打磨"的措辞</strong>：① 六维汇总行（<code>style-metrics.js</code> 的 <code>judge.summary</code>）由「N 个维度超出容差带，<strong>需修正</strong>」改为「N 个维度超出容差带<strong>（先判断是否为有意为之，偏离明显或读起来别扭才改）</strong>」；② 渲染层删掉了句尾那句「——请对照基线修正后再续写」——它与紧随其后的建议段自相矛盾，而模型会听更早、更硬的那半句。
+      </div>
+      <div class="note">
+        <b>v5.1.0：advice 只说「怎么判断」，不再说「逐句改」。</b>改写后的文本由「<strong>先判断这是不是有意为之</strong>（章节类型不同本来就会偏离全书均值）；确实跑偏时才对照 <code>fixAnchors</code> 只调整那几处，<strong>不要整章重写，也不要为对齐数字改文</strong>」构成。原来的「逐句对比修正」被执行成「把整章按锚段重写一遍」，而六维容差带本身是 <strong>1.5σ</strong>（约作者自身章节波动）——在这个带宽下，<strong>六维里至少有一维出带是常见现象</strong>，把它当成缺陷反复打磨只会把作者的写法磨掉。因此「出带」不是「必改」：只有偏离达到 <strong>2 倍容差</strong>以上、或那一处读起来确实别扭时才动笔。<code>fixAnchors</code> 的用途也随之收敛为「拿去对味、校准语感」，而不是「照着逐句仿写」。
       </div>
 
       <h3>4 · 原著锚段 fixAnchors</h3>

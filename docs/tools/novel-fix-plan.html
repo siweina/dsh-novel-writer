@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_fix_plan — 改稿台｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_fix_plan 的实现细节：plan / verify / mark 三个动作、mark 的 itemId + state 双必填与其不受引擎门禁约束的边界、待办项的稳定 id 与八类 type、severity 与 effort 的排序口径、locate 的段落级行号归因（宁可粗也不给错的行号）、hint 只给改写方向不生成正文的边界、fix-plan JSON 的原子写落盘，以及「正常文本不产出待办」的误报约束。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_fix_plan","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-fix-plan.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_fix_plan — 改稿台｜dsh-novel-writer 技术文档","description":"novel_fix_plan 的实现细节：plan / verify / mark 三个动作、mark 的 itemId + state 双必填与其不受引擎门禁约束的边界、待办项的稳定 id 与八类 type、severity 与 effort 的排序口径、locate 的段落级行号归因（宁可粗也不给错的行号）、hint 只给改写方向不生成正文的边界、fix-plan JSON 的原子写落盘，以及「正常文本不产出待办」的误报约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-fix-plan.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"5.0.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_fix_plan, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_fix_plan — 改稿台｜dsh-novel-writer 技术文档","description":"novel_fix_plan 的实现细节：plan / verify / mark 三个动作、mark 的 itemId + state 双必填与其不受引擎门禁约束的边界、待办项的稳定 id 与八类 type、severity 与 effort 的排序口径、locate 的段落级行号归因（宁可粗也不给错的行号）、hint 只给改写方向不生成正文的边界、fix-plan JSON 的原子写落盘，以及「正常文本不产出待办」的误报约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-fix-plan.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"5.1.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_fix_plan, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -57,7 +57,7 @@
           <tr><th><code>root</code></th><td>string</td><td>否</td><td>章节库根目录。省略时按 <code>config.root</code> → 会话工作目录回退；MCP 形态下越界值被静默回退到启动参数 <code>--root</code> 指定的书库根。</td></tr>
         </tbody>
       </table>
-      <p>参数对象声明 <code>additionalProperties: false</code>。本工具<strong>没有</strong>阈值类可调参数：严重度权重、类型判据与截断上限都是常量（截断上限恒为 <strong>40 条</strong>）。测量入口 <code>buildFixPlan</code> / <code>verifyFixPlan</code> 自身接受 <code>opts.tolerance</code> / <code>opts.maxItems</code> / <code>opts.plotStaleChapters</code> 三个内部选项，但工具层固定传 <code>{}</code>，<strong>不对调用方暴露</strong>。</p>
+      <p>参数对象声明 <code>additionalProperties: false</code>。本工具<strong>没有</strong>阈值类可调参数：严重度权重、类型判据与截断上限都是常量（截断上限恒为 <strong>12 条</strong>，v5.1.0 起由 40 收紧到 12）。测量入口 <code>buildFixPlan</code> / <code>verifyFixPlan</code> 自身接受 <code>opts.tolerance</code> / <code>opts.maxItems</code> / <code>opts.plotStaleChapters</code> 三个内部选项，但工具层固定传 <code>{}</code>，<strong>不对调用方暴露</strong>。</p>
 
       <h3><code>action</code> 取值</h3>
       <table>
@@ -97,7 +97,7 @@
           <tr><th><code>anchor</code></th><td>string</td><td>可照改的原著锚段（源自 <code>buildStyleAnchorPackage</code> 的抽样结果，与 <a href="novel-style-check.html">novel_style_check</a> 的 <code>fixAnchors</code> 同源）。<strong>只有指标类待办会带锚段</strong>，其余类别为空串。</td></tr>
           <tr><th><code>severity</code></th><td>integer</td><td>严重度 <strong>1–5</strong>（超出范围会被钳到边界）。指标类按 |σ| 分档：≥ 3σ → 5、≥ 2σ → 4、其余出带 → 3；<strong>退化成「全章层面」的指标项再降一档</strong>（<code>max(1, sev-1)</code>）。其余类别为固定值：禁用词 4、客套禁词 4、仪式禁式 4、称谓 3、情感过直 3、衔接缺失 2–4（时间硬跳 4 / 检查跳过 2 / 其余 3）、伏笔未回收 3–4（距离 ≥ 40 章或 <code>priority: "high"</code> → 4）。</td></tr>
           <tr><th><code>effort</code></th><td>integer</td><td>改写代价 <strong>1–3</strong>（超出范围会被钳到边界）：1 = 局部替换即可（有登记替代词的禁用词 / 客套词；衔接缺失里的<code>时间跳跃</code> / <code>时间过渡</code> / <code>钩子未接</code>），2 = 需要重写该句或该段（指标类段落项、情感过直、仪式禁式、称谓；衔接缺失里的<code>语义距离</code> / <code>人物断线</code>），3 = 需要通读全章或跨章处理（指标类的全章层面项、伏笔未回收；衔接缺失里的<code>检查跳过</code>）。同严重度时先做省事的项。</td></tr>
-          <tr><th><code>hint</code></th><td>string</td><td><strong>规则拼接的改写方向</strong>（一句话，含实测值与基线的对照，指标类还会带上「本段 X」与方向建议），例如「抽象度偏离：全章 41（基线 22，偏差 +86%），本段 48。这句抽象词过密，改成具体动作或物件。只改这一段的写法，不要整章重写。」<strong>不含改写后的正文句子。</strong></td></tr>
+          <tr><th><code>hint</code></th><td>string</td><td><strong>规则拼接的改写方向</strong>（一句话，含实测值与基线的对照，指标类还会带上「本段 X」与方向建议），例如「抽象度偏离：全章 41（基线 22，偏差 +86%），本段 48。这句抽象词过密，改成具体动作或物件。只改这一段的写法，不要整章重写。」<strong>不含改写后的正文句子。</strong><br><strong>软化后缀（v5.1.0 新增，只有三类带）</strong>：<code>abstractDensity</code> 抽象度 / <code>gapIndex</code> 留白指数 / <code>hedgeDensity</code> 不确定性三类指标的 <code>hint</code>，在原有前缀之后追加一句「（仅当这里读起来确实别扭才改；抒情、心理、留白段落属正常写法，可标记 skip 保留。）」。<strong>hint 前缀格式未变</strong>，只是句尾多这一句——它把这三维的默认处置从「改了」改成「先判断再决定」，抒情 / 心理 / 留白段落本来就该在这三维上偏离全书均值。</td></tr>
         </tbody>
       </table>
 
@@ -105,6 +105,7 @@
       <div class="formula">sort(items) = severity 降序 → effort 升序 → lineStart 升序 → id 字典序</div>
       <p>四级排序的用意依次是：先改影响文风判定最严重的；同严重度时先做便宜的（不让人卡在难改的一段上）；同权重同代价时按正文顺序自上而下，便于一次通读改完；最后一级只用于让完全同键的项<strong>结果可复现</strong>。<code>lineStart = 0</code> 的全章层面项排在同键项的最前（行号最小），调用方应显式分支处理，不要把它当作「第一段」。</p>
       <p><strong>渲染文本带 <code>id</code>（v5.0.0 修正）</strong>：<code>plan</code> 的渲染在每条待办的「类型 / 严重度 / 难度 / 位置」行下方紧跟一行 <code>id：fix-…</code>。此前 <code>id</code> 只在返回体与落盘文件里，模型要 <code>mark</code> 得先自己去读 <code>planFile</code> 才能拿到——现在清单里直接可复制，少一次往返。</p>
+      <p><strong>渲染文本带「处理建议」（v5.1.0 新增）</strong>：<code>plan</code> 的渲染在 <code>待办 N 条…</code> 之后多一行<strong>处理建议</strong>，内容是<strong>分批改</strong>——同一段落 / 同一类型的问题<strong>合并成一次修改</strong>；<strong>一轮只处理 3~5 条</strong>；<strong>不必逐条 <code>mark</code></strong>；<strong>改完最多 <code>verify</code> 一次</strong>。这是给调用方的<strong>节奏约束</strong>，不是新的返回字段：返回体形状未变（<code>items[]</code> 仍是 9 字段，<code>state</code> / <code>stateAt</code> 仍只落盘、只由 <code>mark</code> 写入）。改稿一次只动几处、一次改完整段，比按清单从上到下逐条打磨更接近真实改稿，也能避免「改一处、测一次」的往返成本把注意力耗在数字上。<strong>清单上有一条不等于必须改那一条</strong>：只有偏离达到 <strong>2 倍容差</strong>以上、或那一处读起来确实别扭时才动笔——容差带本身取 1.5σ，六维里有一维出带是常见现象，为对齐数字改文只会把作者的写法磨平；确实属于正常写法的（抒情 / 心理 / 留白段落）用 <code>mark state: "skip"</code> 留下记录即可。</p>
 
       <h2>八类待办的判定来源</h2>
       <p>类型字符串是第一列这<strong>八个中文词</strong>，没有其它取值。判定统一遵守文件头的硬约束：<strong>判定不出就跳过该类检查</strong>，绝不退化成默认词表兜底。</p>
@@ -140,7 +141,9 @@ for 每个章级出带的维度 v：
     for 每个段落 p：    （p.text.length ≥ 40 字才参与归因）
         if p 与全章「同向」偏离 且  judgeAgainstBaseline(测量(p)) 该维也出带：
             收下 { p, 本段值, |σ| }
-    按 |σ| 降序取前 3 段（MAX_PARAGRAPH_ITEMS_PER_METRIC = 3）
+    按 |σ| 降序取前 1 段（MAX_PARAGRAPH_ITEMS_PER_METRIC = 1）
+        ← v5.1.0：同一维度只报最严重的这 1 段，其余同类段落不再逐段列出，
+          只在 summary 的计数里体现（旧版该常量为 3）
     一段都没有 → 退化成一条「全章层面」项：lineStart = lineEnd = 0，severity 降一档、effort = 3
     有段落项 → lineStart/lineEnd = 该段行区间，excerpt = 该段原文截 80 字，effort = 2
 
@@ -189,8 +192,8 @@ mark   → 读-改-写该文件，只把 itemId 指定项的 state / stateAt 更
       </div>
 
       <h2>不误报</h2>
-      <p><strong>正常文本不产出待办项</strong>：各类型只在指标实际出带、命中禁用词 / 语用禁式或钩子确实未承接时才生成条目；全部合格时 <code>items</code> 为空数组，这是一次<strong>成功</strong>调用而不是失败。为了不误报，实现里设了四道闸：<strong>①</strong> 指标须同时越过相对容差带与<strong>绝对量级门槛</strong>；<strong>②</strong> 段落必须与全章<strong>同向</strong>偏离且自己也出带才被归因（同维最多 3 段）；<strong>③</strong> 无基线、无 worldview、无伏笔、无法判定章号时<strong>整类跳过</strong>，不退化成默认词表；<strong>④</strong> 章节正文短于 40 字时跳过全部指标类检查（空文本的六维全是 0，与基线一比必然「处处出带」）。</p>
-      <p>清单长度有上限：单次最多 <strong>40 条</strong>（<code>DEFAULT_MAX_ITEMS</code>），超出部分按排序<strong>截断</strong>，并在 <code>summary</code> 的备注里披露「待办超过 40 条，已按严重度从高到低截断 N 条（清单上限固定，先处理保留下来的高优先级项）」。若清单接近或撞到这个上限，说明这一章的偏离是系统性的（通常该整段重写，而不是逐项修）。注意上限<strong>不</strong>由调用方传参放宽：<code>buildFixPlan</code> 内部虽有 <code>opts.maxItems</code>，但工具层固定传 <code>{}</code>，提示里不会再出现「可传 opts.maxItems」这类做不到的建议。</p>
+      <p><strong>正常文本不产出待办项</strong>：各类型只在指标实际出带、命中禁用词 / 语用禁式或钩子确实未承接时才生成条目；全部合格时 <code>items</code> 为空数组，这是一次<strong>成功</strong>调用而不是失败。为了不误报，实现里设了四道闸：<strong>①</strong> 指标须同时越过相对容差带与<strong>绝对量级门槛</strong>；<strong>②</strong> 段落必须与全章<strong>同向</strong>偏离且自己也出带才被归因（同维最多 <strong>1</strong> 段，v5.1.0 起由 3 收紧到 1——同一维度只报最严重的那一段，其余同类段落由 <code>summary</code> 的计数体现，清单不再被同一维度的多段刷屏）；<strong>③</strong> 无基线、无 worldview、无伏笔、无法判定章号时<strong>整类跳过</strong>，不退化成默认词表；<strong>④</strong> 章节正文短于 40 字时跳过全部指标类检查（空文本的六维全是 0，与基线一比必然「处处出带」）。</p>
+      <p>清单长度有上限：单次最多 <strong>12 条</strong>（<code>DEFAULT_MAX_ITEMS</code>，v5.1.0 起由 40 收紧到 12），超出部分按排序<strong>截断</strong>，并在 <code>summary</code> 的备注里披露「待办超过 12 条，已按严重度从高到低截断 N 条（清单上限固定，<strong>先处理保留下来的高优先级项</strong>）」。上限收紧的用意是让清单<strong>可执行</strong>：一次抛出四十条，模型只会从上往下挑几条做，其余全部沦为空转；只留 12 条则每一条都是排序意义上最值得先动的，<strong>被截断的部分不是「漏掉了」，而是「这一轮先不管」</strong>——先按清单顺序处理保留下来的项，改完再跑一次 <code>plan</code>，原先被截断的项若仍成立会重新排进来（同一维度现在只报最严重的 1 段，因此回访时的清单也不会重新膨胀）。若清单接近或撞到这个上限，说明这一章的偏离是系统性的（通常该整段重写，而不是逐项修）。注意上限<strong>不</strong>由调用方传参放宽：<code>buildFixPlan</code> 内部虽有 <code>opts.maxItems</code>，但工具层固定传 <code>{}</code>，提示里不会再出现「可传 opts.maxItems」这类做不到的建议。</p>
 
       <h2>约束与边界</h2>
       <ul>

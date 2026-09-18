@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_sentence_config — 开关配置｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_sentence_config 的实现细节：get/set 参数白名单、状态文件字段与默认值、生效值优先级、工具开关与功能开关的语义、风格基线容差的钳制规则，以及 rawWriting 的写入位置。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_sentence_config","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-config.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_sentence_config — 开关配置｜dsh-novel-writer 技术文档","description":"novel_sentence_config 的实现细节：get/set 参数白名单、状态文件字段与默认值、生效值优先级、工具开关与功能开关的语义、风格基线容差的钳制规则，以及 rawWriting 的写入位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-config.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"5.0.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_sentence_config, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_sentence_config — 开关配置｜dsh-novel-writer 技术文档","description":"novel_sentence_config 的实现细节：get/set 参数白名单、状态文件字段与默认值、生效值优先级、工具开关与功能开关的语义、风格基线容差的钳制规则，以及 rawWriting 的写入位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-config.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"5.1.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_sentence_config, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -34,7 +34,7 @@
     <article class="doc">
       <h1>novel_sentence_config</h1>
       <p class="doc__lead">
-        写作助手开关的查看与修改。读取即返回「总开关 + 18 个工具开关 + 9 个功能开关 + 系统提示词档位与场景 + 风格基线容差 + 原创模式设定 + 语义引擎状态」的<strong>生效值</strong>；<code>action: "set"</code> 时把传入字段增量写入状态文件并强制回读。开关落在 <code>~/.dsh/dsh-novel-writer/state.json</code>，与 Web GUI 侧边栏读写同一文件（GUI 走插件自带的 <code>POST /api/dsh-novel-writer/state</code> 路由）。本工具自身<strong>禁止被关闭</strong>。
+        写作助手开关的查看与修改。读取即返回「总开关 + 18 个工具开关 + 9 个功能开关 + 系统提示词档位、场景与精简工作流 + 风格基线容差 + 原创模式设定 + 语义引擎状态」的<strong>生效值</strong>；<code>action: "set"</code> 时把传入字段增量写入状态文件并强制回读。开关落在 <code>~/.dsh/dsh-novel-writer/state.json</code>，与 Web GUI 侧边栏读写同一文件（GUI 走插件自带的 <code>POST /api/dsh-novel-writer/state</code> 路由）。本工具自身<strong>禁止被关闭</strong>。
       </p>
 
       <h2>参数</h2>
@@ -46,6 +46,7 @@
           <tr><th><code>autoAnalyze</code></th><td>boolean</td><td>否</td><td>分析作品时是否主动使用句式分析。仅布尔值参与写入。</td></tr>
           <tr><th><code>systemPromptMode</code></th><td>string</td><td>否</td><td>系统提示词<strong>档位</strong>：枚举 <code>off</code>（不注入） / <code>brief</code>（精简） / <code>full</code>（完整）。非枚举值<strong>静默忽略</strong>（不报错、不改盘）。</td></tr>
           <tr><th><code>promptScene</code></th><td>string</td><td>否</td><td>系统提示词<strong>场景</strong>：枚举 <code>general</code> / <code>writing</code> / <code>revising</code> / <code>auditing</code> / <code>setup</code>。仅 <code>full</code> 档生效；非枚举值静默忽略。<code>general</code> 是合法取值，用于把场景改回通用档。详见下文「提示词档位与场景」。</td></tr>
+          <tr><th><code>leanWorkflow</code></th><td>boolean</td><td>否</td><td>系统提示词<strong>精简工作流</strong>（v5.1.0 新增，英文标签 <code>Lean workflow</code>）：打开后注入 <code>LEAN_TEXT</code>，且<strong>优先于档位与场景</strong>。默认 <code>false</code>。<strong>只有真正的布尔值被采用</strong>，非法值（字符串 <code>"true"</code> / <code>1</code> / <code>null</code> …）静默忽略——与 <code>promptScene</code> 同一套「非法即丢弃、不报错不回显」的口径。详见下文「提示词档位与场景」。</td></tr>
           <tr><th><code>tools</code></th><td>object</td><td>否</td><td>各工具开关，形如 <code>{ novel_plot: false }</code>。键必须在 <code>ALL_TOOLS</code> 的 18 个名字内，值必须是布尔，其余<strong>静默忽略</strong>；<code>novel_sentence_config</code> 自身的键会被强制剔除。与现有值<strong>浅合并</strong>。</td></tr>
           <tr><th><code>features</code></th><td>object</td><td>否</td><td>功能开关。合法键仅 9 个（见下表），其余键静默忽略；与现有值浅合并。</td></tr>
           <tr><th><code>styleTolerance</code></th><td>object</td><td>否</td><td>风格基线容差，每维 <code>{ low, high }</code>（<code>low</code> 为负、<code>high</code> 为正）。<code>low</code> 钳到 <code>[-99, 0]</code>，<code>high</code> 钳到 <code>[0, 99]</code>，两者须同时为数字且 <code>low ≤ high</code>，否则该维被整体丢弃。传 <code>{}</code> 或 <code>null</code> 表示清除（恢复推荐值）。</td></tr>
@@ -61,7 +62,7 @@
       </div>
 
       <h2>输出结构</h2>
-      <p>契约必返字段（<code>output.schema.required</code>）：<code>file</code>、<code>enabled</code>、<code>autoAnalyze</code>、<code>tools</code>、<code>features</code>、<code>embedding</code>、<code>styleTolerance</code>、<code>creationProfile</code>。实现中还会恒定返回 <code>source</code>、<code>updated</code>、<code>systemPromptMode</code>、<code>promptScene</code>、<code>creationProfiles</code>。</p>
+      <p>契约必返字段（<code>output.schema.required</code>）：<code>file</code>、<code>enabled</code>、<code>autoAnalyze</code>、<code>tools</code>、<code>features</code>、<code>embedding</code>、<code>styleTolerance</code>、<code>creationProfile</code>。实现中还会恒定返回 <code>source</code>、<code>updated</code>、<code>systemPromptMode</code>、<code>promptScene</code>、<code>leanWorkflow</code>、<code>creationProfiles</code>。</p>
       <table>
         <thead><tr><th>字段</th><th>类型</th><th>内容</th></tr></thead>
         <tbody>
@@ -70,6 +71,7 @@
           <tr><th><code>autoAnalyze</code></th><td>boolean</td><td>生效的自动分析开关</td></tr>
           <tr><th><code>systemPromptMode</code></th><td>string</td><td><strong>写后回读</strong>的提示词档位：<code>off</code> / <code>brief</code> / <code>full</code>（盘上的非法值已在读取侧回退为默认 <code>brief</code>）</td></tr>
           <tr><th><code>promptScene</code></th><td>string</td><td><strong>写后回读</strong>的提示词场景：<code>general</code> / <code>writing</code> / <code>revising</code> / <code>auditing</code> / <code>setup</code>（非法值已回退为默认 <code>general</code>）。回读值与你要写入的值不一致 = 该参数被判为非法而<strong>静默丢弃</strong>，这是比 <code>updated</code> 可靠的校验方式</td></tr>
+          <tr><th><code>leanWorkflow</code></th><td>boolean</td><td><strong>写后回读</strong>的精简工作流开关（v5.1.0 新增）；盘上非布尔值已在读取侧回退为 <code>false</code>。老状态文件缺该键时同样为 <code>false</code>——<strong>即行为与 5.0.0 完全相同</strong></td></tr>
           <tr><th><code>source</code></th><td>string</td><td>生效值来源：<code>state 文件（GUI 开关）</code> / <code>v0.4.0 兼容文件 novel-writer.json</code> / <code>插件 config</code> / <code>默认值</code></td></tr>
           <tr><th><code>updated</code></th><td>boolean</td><td>本次 <code>set</code> 是否发生了实际写入（patch 为空则为 false）</td></tr>
           <tr><th><code>tools</code></th><td>object</td><td>18 个 <code>novel_*</code> 工具名到当前开关的映射，逐个由 <code>toolEnabled</code> 求值</td></tr>
@@ -81,7 +83,7 @@
         </tbody>
       </table>
       <div class="note">
-        <b>没有 brief 精简模式。</b>本工具的参数 schema 为 <code>additionalProperties: false</code>，不含 <code>brief</code>；渲染层也没有精简分支。渲染文本是一份固定格式的开关清单（<code>&lt;path&gt; / &lt;type&gt;novel-sentence-config&lt;/type&gt; / &lt;content&gt;</code>），逐行列出总开关、<code>autoAnalyze</code>、<strong>提示词档位与场景</strong>（<code>系统提示词: 档位=X 场景=Y</code>，<code>full</code> 档 + 非 <code>general</code> 场景时追加「（按场景注入）」）、来源、18 个工具开关与全部功能开关，体积由开关数量决定，不可再压缩。这里的 <code>brief</code> 指工具自身的精简输出参数，与提示词档位 <code>systemPromptMode: "brief"</code> 是<strong>两回事</strong>。
+        <b>没有 brief 精简模式。</b>本工具的参数 schema 为 <code>additionalProperties: false</code>，不含 <code>brief</code>；渲染层也没有精简分支。渲染文本是一份固定格式的开关清单（<code>&lt;path&gt; / &lt;type&gt;novel-sentence-config&lt;/type&gt; / &lt;content&gt;</code>），逐行列出总开关、<code>autoAnalyze</code>、<strong>提示词档位与场景</strong>（<code>系统提示词: 档位=X 场景=Y</code>，<code>full</code> 档 + 非 <code>general</code> 场景时追加「（按场景注入）」）、来源、18 个工具开关与全部功能开关，体积由开关数量决定，不可再压缩。这里的 <code>brief</code> 指工具自身的精简输出参数，与提示词档位 <code>systemPromptMode: "brief"</code> 是<strong>两回事</strong>；也与 <code>leanWorkflow</code> 是两回事——后者只让 <a href="novel-style-report.html">novel_style_report</a> / <a href="novel-sentence-analysis.html">novel_sentence_analysis</a> 在未显式传 <code>brief</code> 时默认精简，<strong>本工具的渲染不受它影响</strong>。
       </div>
 
       <h2>计算原理</h2>
@@ -92,16 +94,17 @@
 
 readSentenceState():
   文件不存在 或 JSON 解析失败 → { exists:false, ...SENTENCE_ANALYSIS_DEFAULTS }
-  SENTENCE_ANALYSIS_DEFAULTS = { enabled:true, autoAnalyze:true, systemPromptMode:"brief", promptScene:"general" }
+  SENTENCE_ANALYSIS_DEFAULTS = &#123; enabled:true, autoAnalyze:true, systemPromptMode:"brief", promptScene:"general", leanWorkflow:false &#125;
   存在 → 逐字段类型校验，不符即回退默认：
     enabled / autoAnalyze : 非 boolean → 默认值
     systemPromptMode      : 不在 ["off","brief","full"] → 默认值 "brief"
     promptScene           : 不在 PROMPT_SCENES 五值内（含缺失）→ 默认值 "general"
+    leanWorkflow          : 非 boolean（含缺失）→ 默认值 false      ← v5.1.0；与 promptScene 同一套「非法即丢弃」口径
     tools / features      : 非对象 → {}
     styleTolerance / creationProfile : 非对象 → null
     creationProfiles      : 非对象 → {}
     lastRoot              : 非字符串 → undefined</div>
-      <p><code>exists</code> 是读取侧由文件是否存在推导出的派生字段，<strong>不落盘</strong>（写盘前被显式剔除）。磁盘上真实的 <code>state.json</code> 字段为 <code>enabled</code>、<code>autoAnalyze</code>、<code>systemPromptMode</code>、<code>promptScene</code>、<code>tools</code>、<code>features</code>、<code>styleTolerance</code>、<code>creationProfile</code>、<code>creationProfiles</code>、<code>lastRoot</code>。<code>readSentenceStateSync</code>（系统提示词回调用的同步版）对这两个字段做<strong>同样的回退</strong>，因此老状态文件在两条读取路径下都落到 <code>brief</code> + <code>general</code>。</p>
+      <p><code>exists</code> 是读取侧由文件是否存在推导出的派生字段，<strong>不落盘</strong>（写盘前被显式剔除）。磁盘上真实的 <code>state.json</code> 字段为 <code>enabled</code>、<code>autoAnalyze</code>、<code>systemPromptMode</code>、<code>promptScene</code>、<code>leanWorkflow</code>、<code>tools</code>、<code>features</code>、<code>styleTolerance</code>、<code>creationProfile</code>、<code>creationProfiles</code>、<code>lastRoot</code>。<code>readSentenceStateSync</code>（系统提示词回调用的同步版）对这些字段做<strong>同样的回退</strong>，因此老状态文件在两条读取路径下都落到 <code>brief</code> + <code>general</code> + <code>leanWorkflow:false</code>。</p>
 
       <h3>2 · 生效值的优先级</h3>
       <p>返回体里的 <code>enabled</code> / <code>autoAnalyze</code> 不是文件原值，而是 <code>effectiveSentenceAnalysis</code> 的结果：</p>
@@ -218,21 +221,26 @@ error     = features.semanticEmbedding 为真 ? (st.error ?? "") : "semanticEmbe
       </div>
 
       <h2>提示词档位与场景</h2>
-      <p>本版把系统提示词的注入拆成<strong>两个正交维度</strong>：<strong>档位（<code>systemPromptMode</code>）决定「注入多少」，场景（<code>promptScene</code>）决定「注入什么」</strong>。它们都只影响「小说写作助手」这一段插件系统提示词，<strong>不改变任何工具的能力、参数、返回值或开关生效状态</strong>。</p>
+      <p>本版把系统提示词的注入拆成<strong>三个正交维度</strong>：<strong>档位（<code>systemPromptMode</code>）决定「注入多少」，场景（<code>promptScene</code>）决定「注入什么」，精简工作流（<code>leanWorkflow</code>）决定「要不要催促动作」</strong>。它们都只影响「小说写作助手」这一段插件系统提示词，<strong>不改变任何工具的能力、参数、返回值或开关生效状态</strong>。</p>
       <table>
         <thead><tr><th>维度</th><th>取值</th><th>含义</th></tr></thead>
         <tbody>
           <tr><th rowspan="3"><code>systemPromptMode</code><br>（档位）</th><th><code>off</code></th><td>不注入。<code>promptTextFor</code> 返回空串，DSH 侧过滤掉空段落，等于该段完全不存在。</td></tr>
           <tr><th><code>brief</code></th><td>精简档（默认）：只说明「已挂载 novel_* 工具、详细规范见 novel-writing 技能」，几乎不占上下文。<strong>该档与场景无关</strong>——不论 <code>promptScene</code> 取什么值，注入的都是同一段 <code>BRIEF_TEXT</code>。</td></tr>
           <tr><th><code>full</code></th><td>完整档：按<strong>场景</strong>注入对应的那一套工作流文本（见下表）。</td></tr>
-          <tr><th rowspan="5"><code>promptScene</code><br>（场景）</th><th><code>general</code></th><td><strong>通用写作工作流（默认）</strong>：章节库约定、分析方法、续写流程、导入整理、工具链提示等全量约定。<strong>这段文本就是 4.x 的 <code>WORKFLOW_TEXT</code>，逐字未改</strong>。</td></tr>
-          <tr><th><code>writing</code></th><td>写新章：先取材料（开写包）→ 简述计划 → 照锚段与骨架写 → 遵守禁用清单 → 建章节 → 强制自检对照 → 收尾三件（登记伏笔 / 回填钩子 / 存摘要）。</td></tr>
-          <tr><th><code>revising</code></th><td>改稿：先取改稿清单 → 按 severity 逐条改（只改问题处、不整章重写）→ 登记并复测三态 → 最后跑一次整体自检。</td></tr>
+          <tr><th rowspan="5"><code>promptScene</code><br>（场景）</th><th><code>general</code></th><td><strong>通用写作工作流（默认）</strong>：章节库约定、分析方法、续写流程、导入整理、工具链提示等全量约定。<strong>这段文本来自 4.x 的 <code>WORKFLOW_TEXT</code></strong>——结构逐字沿用，但 v5.1.0 把其中的「必做」改成了「按需」：<strong>基线由开写包 / 建章直接附带，不必专门去调 <code>novel_style_report</code></strong>；写完<strong>建议</strong>跑一次 <code>novel_style_check</code>，<strong>只有偏离明显时才修正</strong>（详见下方「出带不等于必改」）。</td></tr>
+          <tr><th><code>writing</code></th><td>写新章：先取材料（开写包）→ 简述计划 → <strong>读锚段校准语感</strong> → 遵守禁用清单 → 建章节 → <strong>建议</strong>跑一次自检（偏离明显才修）→ 收尾<strong>按需</strong>（不必每章全套）。</td></tr>
+          <tr><th><code>revising</code></th><td>改稿：先取改稿清单 → <strong>分批改</strong>（同段落 / 同类型合并成一次修改，一轮只处理最严重的 3~5 条，只改问题处、不整章重写）→ <strong>不要逐条 <code>mark</code>，也不要反复 <code>verify</code></strong>（一轮改完只跑一次 <code>verify</code>）。</td></tr>
           <tr><th><code>auditing</code></th><td>审计：只体检、只报告，<strong>不改正文、不写章节、不登记设定</strong>；结构 / 风格 / 手法三层各自的工具与「候选而非结论」的输出要求。</td></tr>
           <tr><th><code>setup</code></th><td>建资料：只维护创作资料与设定表，<strong>不写正文</strong>；初始化骨架、登记五张表、登记伏笔、扫描已有正文，最后用结构视图自查。</td></tr>
+          <tr><th rowspan="2"><code>leanWorkflow</code><br>（精简工作流）</th><th><code>false</code></th><td><strong>默认</strong>：按上面两个维度选择文本，与 5.0.0 行为一致。</td></tr>
+          <tr><th><code>true</code></th><td>注入 <code>LEAN_TEXT</code>（<strong>380 字符</strong>），且<strong>优先于档位与场景</strong>——档位与场景取什么值都不改变这一结果。该文本不再罗列流程，只保留最短的必要提醒，用来<strong>抑制模型「按流程逐项打勾」的冲动</strong>：不再催促每章都做完整套收尾、也不再要求把每条待办都标记一遍或反复复测。<strong>任何时候都能切换</strong>（不受 <code>full</code> 档限制）。另有两处联动：<a href="novel-style-report.html">novel_style_report</a> 与 <a href="novel-sentence-analysis.html">novel_sentence_analysis</a> 在调用方<strong>未显式指定 <code>brief</code></strong> 时，默认走精简输出。</td></tr>
         </tbody>
       </table>
-      <div class="formula">promptTextFor(mode, scene):
+      <div class="formula">生效文本的选择（v5.1.0 在档位 × 场景之前多插一层 leanWorkflow 判定）:
+    leanWorkflow === true                         → LEAN_TEXT（380 字符；优先于档位与场景）
+
+promptTextFor(mode, scene):
     mode === "off"                                → ""（空串，DSH 丢弃该段）
     mode === "brief"                              → BRIEF_TEXT
     mode === "full" 且 scene ∈ SCENE_TEXTS 四值    → 该场景文本（SCENE_TEXTS[scene]）
@@ -240,35 +248,46 @@ error     = features.semanticEmbedding 为真 ? (st.error ?? "") : "semanticEmbe
 
 SCENE_TEXTS = &#123; writing, revising, auditing, setup &#125;      ← general 不在表内，它就是 WORKFLOW_TEXT
 PROMPT_SCENES = ["general","writing","revising","auditing","setup"]   ← 合法枚举（含 general）
+leanWorkflow  = true | false（默认 false，只有真正的布尔值被采用）
 
 生效位置：DSH 系统提示词 section "novel-writing"，order = 150
     text 是函数 → 每轮组装提示词时实时读状态文件（下一轮生效，无需重启）
     读不到状态时回退 BRIEF_TEXT；rawWriting 是相邻的另一段（order = 151），与档位/场景无关</div>
-      <p><strong>场景只在 <code>full</code> 档下生效。</strong><code>off</code> 档恒为空串、<code>brief</code> 档恒为 <code>BRIEF_TEXT</code>，两者都会忽略 <code>promptScene</code> 的取值。反过来，<code>full</code> 档 + <code>general</code> 就是 4.x 的完整行为——因此「升级到 5.0.0」本身不会改变任何提示词内容，想按场景分流必须显式把 <code>promptScene</code> 改掉。</p>
+      <p><strong>场景只在 <code>full</code> 档下生效。</strong><code>off</code> 档恒为空串、<code>brief</code> 档恒为 <code>BRIEF_TEXT</code>，两者都会忽略 <code>promptScene</code> 的取值。反过来，<code>full</code> 档 + <code>general</code> 就是 4.x 的完整行为（v5.1.0 只把其中三处「必做」放宽成「按需」，见下）——因此「升级到 5.0.0」本身不会改变任何提示词内容，想按场景分流必须显式把 <code>promptScene</code> 改掉。</p>
+      <div class="note">
+        <b>v5.1.0：三处「必做」改「按需」，出带不等于必改。</b>五个场景文本里有三处硬性要求被放宽：<strong><code>writing</code></strong> 原先要求建完章节立刻做一次风格自检、并把收尾固定成一套动作；<strong><code>revising</code></strong> 原先要求按 severity 一条一条过、每改一批就登记并复测；<strong><code>general</code></strong> 原先把「动笔前先出风格报告」与「每写完一章都做风格自检」写成硬性前提——现在分别改为「写完<strong>建议</strong>跑一次自检，只有相似度明显偏低或某维偏离超过 2 倍容差时才修正」「收尾<strong>按需</strong>，不必每章全套」「基线由开写包 / 建章直接附带，不必专门去调工具，<strong>建议</strong>跑一次自检、偏离明显时才修正」。
+      </div>
+      <div class="note">
+        <b>新口径：出带不等于必改。</b>只有偏离达到 <strong>2 倍容差</strong>以上、<strong>或那一处读起来确实别扭</strong>时才改。理由是六维容差带本身取 <strong>1.5σ</strong>（约等于作者自身的章节波动），在这个带宽下<strong>六维里至少有一维出带是常见现象</strong>——正常波动不该被当成缺陷反复打磨，否则改到最后只是把作者的写法磨平、把数字对齐。相应地，「照骨架造句」也一并改口：<code>anchors</code> <strong>只用来校准语感</strong>，<strong>不要照 <code>skeletons</code> 造句、不要套句式模板</strong>（骨架仅在写不出该类型句子时参考）。</div>
+      <div class="note">
+        <b><code>leanWorkflow</code> 是覆盖层，不是第四个档位。</b>它不改变 <code>systemPromptMode</code> / <code>promptScene</code> 的磁盘值，也不参与「档位」的枚举；打开时只是在文本选择的最前面插一条命中分支。因此<strong>关掉它就能原样回到先前那套文本</strong>，不需要把档位与场景改回去。它同样不影响任何工具能力——「不要逐条 <code>mark</code>」是提示词对模型的约束，<code>novel_fix_plan</code> 的 <code>mark</code> 依然照常可用。</div>
       <div class="note">
         <b>场景只影响提示词内容，不影响工具能力。</b>切到 <code>revising</code> 不会禁用章节工具，切到 <code>auditing</code> 也不会把工具变成只读——「不改正文」是提示词对模型的约束，不是插件的运行时限制。工具开关与总开关仍由上面的 <code>tools</code> / <code>enabled</code> 独立控制，两者互不影响。
       </div>
       <div class="warn note">
-        <b>向后兼容：没有 <code>promptScene</code> 键的老状态文件落到 <code>general</code>，既有工作流不变。</b>两条读取路径（异步 <code>readSentenceState</code> 与同步 <code>readSentenceStateSync</code>）都以 <code>PROMPT_SCENES.includes(...)</code> 校验，缺失或非法一律回退 <code>general</code>；<code>general</code> 映射到通用档的 <code>WORKFLOW_TEXT</code>（4.x 原文，本版在其中补入三条新工具的入口指引共 7 行）。写入侧同理：非枚举值被<strong>静默忽略</strong>（不写盘、不报错），而 <code>general</code> 是显式合法值，用于把场景从四套流程改回通用档。
+        <b>向后兼容：没有 <code>promptScene</code> 键的老状态文件落到 <code>general</code>，既有工作流不变。</b>两条读取路径（异步 <code>readSentenceState</code> 与同步 <code>readSentenceStateSync</code>）都以 <code>PROMPT_SCENES.includes(...)</code> 校验，缺失或非法一律回退 <code>general</code>；<code>general</code> 映射到通用档的 <code>WORKFLOW_TEXT</code>（4.x 原文结构，本版在其中补入三条新工具的入口指引共 7 行，v5.1.0 又把三处「必做」放宽为「按需」）。写入侧同理：非枚举值被<strong>静默忽略</strong>（不写盘、不报错），而 <code>general</code> 是显式合法值，用于把场景从四套流程改回通用档。
       </div>
-      <p><strong>写入渠道有两个</strong>：本工具的 <code>action: "set"</code>（<code>systemPromptMode</code> / <code>promptScene</code> 参数）与 Web GUI 侧边栏首页开关走的 <code>POST /api/dsh-novel-writer/state</code>（GET 响应里同样回显这两个字段）。两条路径最终都调用同一个 <code>writeSentenceState</code>，写入与校验口径一致。</p>
+      <div class="warn note">
+        <b>向后兼容：没有 <code>leanWorkflow</code> 键的老状态文件落到 <code>false</code>，行为与 5.0.0 相同。</b>读取侧按「<strong>只有真正的布尔值被采用</strong>」处理：键缺失、为 <code>null</code>、为字符串 <code>"true"</code>、为数字 <code>1</code> 一律落到 <code>false</code>，且<strong>静默忽略</strong>（不写盘、不报错、不回显失败）——与 <code>promptScene</code> 的非法值口径一致。写入侧同样只接受布尔值。因此这个开关是<strong>纯增量</strong>的：不打开就等于 5.0.0 的提示词行为，升级本身不会改变任何注入文本。
+      </div>
+      <p><strong>写入渠道有两个</strong>：本工具的 <code>action: "set"</code>（<code>systemPromptMode</code> / <code>promptScene</code> / <code>leanWorkflow</code> 参数）与 Web GUI 侧边栏首页开关走的 <code>POST /api/dsh-novel-writer/state</code>（GET 响应里同样回显这三个字段）。两条路径最终都调用同一个 <code>writeSentenceState</code>，写入与校验口径一致。侧边栏「写作助手功能」面板里的<strong>精简工作流</strong>（英文标签 <code>Lean workflow</code>）一行位于「提示词档位」「提示词场景」<strong>下方</strong>，与它们并列，<strong>任何时候都能切换</strong>——不受 <code>full</code> 档限制，<code>brief</code> / <code>off</code> 档下同样可用。</p>
 
       <h2>约束与边界</h2>
       <ul>
         <li><strong>本工具不能被关闭。</strong>两条写入路径都强制剔除该键：工具侧写入前 <code>delete toolsPatch.novel_sentence_config</code>，GUI 路由侧同样在写入前删除。因此它通常<strong>不出现在 <code>state.json</code> 的 <code>tools</code> 里</strong>，读取时按 <code>!== false</code> 判定为开。这一设计是为避免「关掉开关后连开启的工具都调不到」的死锁。</li>
-        <li><strong>白名单之外的一切静默忽略。</strong><code>tools</code> 只认 18 个工具名，<code>features</code> 只认 9 个键，<code>systemPromptMode</code> / <code>promptScene</code> 只认各自的枚举；非布尔值、非对象、拼错的键都不会报错也不会回显。<code>updated</code> 只表示「发生过写入」，不能用来确认某个具体键被接受——要确认请读返回体里对应字段的回读值。</li>
+        <li><strong>白名单之外的一切静默忽略。</strong><code>tools</code> 只认 18 个工具名，<code>features</code> 只认 9 个键，<code>systemPromptMode</code> / <code>promptScene</code> 只认各自的枚举、<code>leanWorkflow</code> 只认布尔；非布尔值、非对象、拼错的键都不会报错也不会回显。<code>updated</code> 只表示「发生过写入」，不能用来确认某个具体键被接受——要确认请读返回体里对应字段的回读值。</li>
         <li><strong>非法容差维度是整体丢弃，不是钳到边界。</strong><code>low &gt; high</code>、只给一侧、非数字都会让该维<strong>不写入</strong>（保持此前磁盘值或推荐值）；<code>low</code> / <code>high</code> 本身的越界值会被钳到 <code>[-99, 0]</code> / <code>[0, 99]</code>。未知维度键会落盘但无消费点。</li>
         <li><strong><code>{}</code> 与 <code>null</code> 都是「清除」。</strong><code>styleTolerance</code> / <code>creationProfile</code> 传空对象或 null 即清空；<code>creationProfiles</code> 传空对象或 null 表示清除全部书的设定（并触发创作资料里的用户段移除与空壳目录清理）。宿主的 JSON Schema 若不支持 null 类型，一律用 <code>{}</code>。</li>
         <li><strong><code>set</code> 是增量而非整份替换。</strong>未传字段保持原值；<code>tools</code> / <code>features</code> / <code>creationProfiles</code> 为浅合并。<code>creationProfiles</code> 不提供「只删某键但保留该书其余字段」的语义——按书整体替换，值传 <code>null</code> 是删除该书。</li>
         <li><strong>生效值与磁盘值可能不同。</strong><code>source</code> 反映的是生效值从哪来：state 文件一旦存在，插件 <code>config.sentenceAnalysis</code> 与 v0.4.0 兼容文件都不再影响 <code>enabled</code> / <code>autoAnalyze</code>，但 <code>styleTolerance</code> 等其余字段本来也只从 state 文件读。</li>
         <li><strong>开关的关闭后果不统一。</strong>工具开关关闭 → 该工具 <code>execute</code> 抛错（硬拒绝）；总开关 <code>enabled=false</code> → <code>novel_sentence_analysis</code> 返回禁用桩、<code>novel_style_check</code> 抛错；<code>semanticSearch</code> 关闭 → 语义检索返回 <code>available:false</code> 的软降级对象。调用方不能假设「关闭 = 报错」或「关闭 = 空结果」。</li>
         <li><strong><code>autoAnalyze</code> 只影响提示词，不影响任何工具返回值。</strong>它被写进系统提示词第 4 条（<code>false</code> 时要求「仅在用户明确要求时调用」句式分析）；插件本身不据此改变输出。</li>
-        <li><strong>档位与场景是两个独立维度，且场景只在 <code>full</code> 档生效。</strong><code>off</code> 恒不注入、<code>brief</code> 恒注入精简文本，两者都忽略 <code>promptScene</code>；只有 <code>full</code> 档下 <code>general</code> / <code>writing</code> / <code>revising</code> / <code>auditing</code> / <code>setup</code> 才有区别。<code>full</code> + <code>general</code> 即 4.x 的原始行为。两个字段都<strong>不改变工具能力</strong>，只换提示词文本。</li>
+        <li><strong>档位、场景与精简工作流是三个独立维度，且场景只在 <code>full</code> 档生效。</strong><code>off</code> 恒不注入、<code>brief</code> 恒注入精简文本，两者都忽略 <code>promptScene</code>；只有 <code>full</code> 档下 <code>general</code> / <code>writing</code> / <code>revising</code> / <code>auditing</code> / <code>setup</code> 才有区别。<code>full</code> + <code>general</code> 即 4.x 的原始行为。第三个维度 <code>leanWorkflow</code> 是<strong>覆盖层</strong>：为 <code>true</code> 时注入 <code>LEAN_TEXT</code> 并优先于前两个维度（<strong>与档位是否 <code>full</code> 无关</strong>，任何时候都能切换），为 <code>false</code> 时三个维度退回成上面的两维关系。三个字段都<strong>不改变工具能力</strong>，只换提示词文本。</li>
         <li><strong>提示词改动下一轮生效，无需重启。</strong>该 section 的 <code>text</code> 是一个函数，在每轮组装系统提示词时现读状态文件；因此改完开关后<strong>当前这一轮</strong>仍用旧文本。状态读不到时回退精简档 <code>BRIEF_TEXT</code>。</li>
         <li><strong>跨进程写入不是事务。</strong>写入串行化（<code>stateWriteChain</code>）只在单个进程内生效。MCP 服务器是独立进程，它与 DSH 宿主内的 GUI 同时写同一文件时，读-合并-写可能互相覆盖；需要并发写入时应串行化调用而非并行。</li>
         <li><strong>写入失败与参数错误可区分。</strong>磁盘写不进去时抛出的错误带 <code>code = "ENOVELWRITEFAIL"</code>，GUI 路由据此返回 500；其余写入异常在路由层返回 400。首次 <code>set</code> 的返回值取自写后重读，因此不会出现「返回值与盘上状态相反」。</li>
         <li><strong>无 brief / 精简模式。</strong>参数 schema 为 <code>additionalProperties: false</code> 且不含 <code>brief</code>；需要控制 token 时应减少调用频次，而不是指望该工具压缩输出。</li>
-        <li><strong>跨版本差异。</strong><code>systemPromptMode</code> 为 v4.0.0 引入的字段，更早的状态文件没有该键，读取侧按默认 <code>brief</code> 处理；<code>promptScene</code> 为 v5.0.0 引入，老状态文件没有该键时按默认 <code>general</code> 处理——<code>general</code> 即 v4.x 的通用工作流（本版仅在其第 3、7 节补入三条新工具的入口指引，共 +7 行，其余逐字沿用），<strong>既有工作流不变</strong>；<code>rawWriting</code> 在明确设置前按 <code>FEATURE_DEFAULTS</code> 的 <code>false</code> 处理（旧版曾把它误报为 <code>true</code>）。</li>
+        <li><strong>跨版本差异。</strong><code>systemPromptMode</code> 为 v4.0.0 引入的字段，更早的状态文件没有该键，读取侧按默认 <code>brief</code> 处理；<code>promptScene</code> 为 v5.0.0 引入，老状态文件没有该键时按默认 <code>general</code> 处理——<code>general</code> 即 v4.x 的通用工作流（本版仅在其第 3、7 节补入三条新工具的入口指引，共 +7 行；<strong>v5.1.0 又把其中三处「必做」放宽为「按需」</strong>），<strong>既有工作流不变</strong>；<code>rawWriting</code> 在明确设置前按 <code>FEATURE_DEFAULTS</code> 的 <code>false</code> 处理（旧版曾把它误报为 <code>true</code>）；<code>leanWorkflow</code> 为 v5.1.0 引入，老状态文件没有该键时按默认 <code>false</code> 处理，<strong>行为与 5.0.0 相同</strong>。</li>
       </ul>
 
       <h2>相关工具</h2>
@@ -281,9 +300,10 @@ PROMPT_SCENES = ["general","writing","revising","auditing","setup"]   ← 合法
       <h2>源码位置</h2>
       <ul>
         <li><span class="src">lib/index.js</span> —— 工具注册与实现 <code>registerNovelSentenceConfig</code>：参数白名单（<code>tools</code> / <code>features</code> 的合法键列表）、写入分支、<code>source</code> 推导与返回体组装</li>
-        <li><span class="src">lib/prompts.js</span> —— 系统提示词文本与选择逻辑：<code>RAW_WRITING_PROMPT</code>、<code>WORKFLOW_TEXT</code>（<code>general</code> 场景的文本）、<code>BRIEF_TEXT</code>、<code>SCENE_TEXTS</code>（<code>writing</code> / <code>revising</code> / <code>auditing</code> / <code>setup</code> 四段）、<code>PROMPT_SCENES</code>（合法场景枚举）、<code>promptTextFor(mode, scene)</code>（档位 × 场景的纯函数选择器）。</li>
+        <li><span class="src">lib/prompts.js</span> —— 系统提示词文本与选择逻辑：<code>RAW_WRITING_PROMPT</code>、<code>WORKFLOW_TEXT</code>（<code>general</code> 场景的文本）、<code>BRIEF_TEXT</code>、<code>LEAN_TEXT</code>（v5.1.0 新增的精简工作流文本，380 字符）、<code>SCENE_TEXTS</code>（<code>writing</code> / <code>revising</code> / <code>auditing</code> / <code>setup</code> 四段）、<code>PROMPT_SCENES</code>（合法场景枚举）、<code>promptTextFor(mode, scene)</code>（档位 × 场景的选择器；<code>leanWorkflow</code> 为真时优先返回 <code>LEAN_TEXT</code>）。</li>
+        <li><span class="src">lib/client.js</span> —— 侧边栏「写作助手功能」面板的渲染与提交：新增<strong>精简工作流</strong>（<code>Lean workflow</code>）一行，位置在「提示词档位」「提示词场景」<strong>下方</strong>，与档位 / 场景并列且不受 <code>full</code> 档限制。</li>
         <li><span class="src">lib/index.js</span> —— <code>ctx.systemPrompt.section(&#123; name: "novel-writing", order: 150 &#125;)</code>：<code>text</code> 回调读 <code>readSentenceStateSync()</code> 后调用 <code>promptTextFor</code>；相邻的 <code>novel-writing:raw-writing</code>（order 151）与档位/场景无关。</li>
-        <li><span class="src">lib/core.js</span> —— <code>SENTENCE_ANALYSIS_DEFAULTS</code>（含 <code>systemPromptMode</code> / <code>promptScene</code> 默认值）、<code>ALL_TOOLS</code>、<code>FEATURE_DEFAULTS</code>、<code>featureEnabled</code>、<code>toolEnabled</code>、<code>assertToolEnabled</code>、<code>stateFilePath</code>、<code>readSentenceState</code> / <code>readSentenceStateSync</code>、<code>writeSentenceState</code>、<code>atomicWriteJson</code>、<code>clampStyleTolerance</code>、<code>effectiveSentenceAnalysis</code>、<code>makeStateRoutes</code>（GUI 侧 GET/POST <code>/api/dsh-novel-writer/state</code>，GET 回显 <code>systemPromptMode</code> / <code>promptScene</code>）</li>
+        <li><span class="src">lib/core.js</span> —— <code>SENTENCE_ANALYSIS_DEFAULTS</code>（含 <code>systemPromptMode</code> / <code>promptScene</code> / <code>leanWorkflow</code> 默认值）、<code>ALL_TOOLS</code>、<code>FEATURE_DEFAULTS</code>、<code>featureEnabled</code>、<code>toolEnabled</code>、<code>assertToolEnabled</code>、<code>stateFilePath</code>、<code>readSentenceState</code> / <code>readSentenceStateSync</code>、<code>writeSentenceState</code>、<code>atomicWriteJson</code>、<code>clampStyleTolerance</code>、<code>effectiveSentenceAnalysis</code>、<code>makeStateRoutes</code>（GUI 侧 GET/POST <code>/api/dsh-novel-writer/state</code>，GET 回显 <code>systemPromptMode</code> / <code>promptScene</code> / <code>leanWorkflow</code>）</li>
         <li><span class="src">lib/style-metrics.js</span> —— <code>METRIC_ORDER</code> / <code>METRIC_LABELS</code> / <code>computeBaselineFromPerChapter</code> 的 <code>recTol</code></li>
         <li><span class="src">lib/embedding.js</span> —— <code>status</code> / <code>isAvailable</code>（<code>embedding</code> 字段的来源）</li>
         <li><span class="src">mcp/server.mjs</span> —— MCP 侧只注入 <code>root</code>，不读写状态文件；因此 MCP 调用与本工具共享同一份 <code>state.json</code></li>

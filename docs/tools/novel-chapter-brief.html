@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_chapter_brief — 开写包｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_chapter_brief 的实现细节：一次只读调用装配动笔前的全部材料 —— 承接口 anchor、上一章钩子、大纲方向行、命中人物卡、未回收伏笔与 distance、世界观禁用词、六维基线、原著锚段与句式骨架、上一章自检结论、禁用清单与 plan；含 budget 两档截断口径与空库 / 无大纲 / 单章作品的优雅降级路径。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_chapter_brief","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-chapter-brief.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_chapter_brief — 开写包｜dsh-novel-writer 技术文档","description":"novel_chapter_brief 的实现细节：一次只读调用装配动笔前的全部材料 —— 承接口 anchor、上一章钩子、大纲方向行、命中人物卡、未回收伏笔与 distance、世界观禁用词、六维基线、原著锚段与句式骨架、上一章自检结论、禁用清单与 plan；含 budget 两档截断口径与空库 / 无大纲 / 单章作品的优雅降级路径。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-chapter-brief.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"5.0.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_chapter_brief, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_chapter_brief — 开写包｜dsh-novel-writer 技术文档","description":"novel_chapter_brief 的实现细节：一次只读调用装配动笔前的全部材料 —— 承接口 anchor、上一章钩子、大纲方向行、命中人物卡、未回收伏笔与 distance、世界观禁用词、六维基线、原著锚段与句式骨架、上一章自检结论、禁用清单与 plan；含 budget 两档截断口径与空库 / 无大纲 / 单章作品的优雅降级路径。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-chapter-brief.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"5.1.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_chapter_brief, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -202,7 +202,7 @@ skeletons = buildStyleAnchorPackage( … ).skeletons    ← 产出上限 4 条
     每个桶内按<strong>全书等距抽样</strong>（非取开头 n 条），每条截 200 字
 骨架抽样：全书文本按 [。！？…] 切句 → 去空白后长度 20–45 字才参选 → 去重后等距抽 4 条
     按 对话 / 疑问 / 心理（想|觉得|仿佛|好像|似乎）/ 陈述 打标签</div>
-      <p>与 <a href="novel-new-chapter.html">novel_new_chapter</a>、<a href="novel-style-check.html">novel_style_check</a> 共用同一个锚包构建函数，因此三处口径不会分叉。<strong>锚段是「照它写」的样例，基线数字只是事后校验</strong>——两者都在返回体里，但用途不同。本书正文不满足抽样条件（所有段落都短于 40 字）时两个数组都为空，并计入 <code>degraded</code>。</p>
+      <p>与 <a href="novel-new-chapter.html">novel_new_chapter</a>、<a href="novel-style-check.html">novel_style_check</a> 共用同一个锚包构建函数，因此三处口径不会分叉。<strong><code>anchors</code> 是「校准语感」的样例，不是造句模板</strong>——锚段读一遍对上味道即可，<code>skeletons</code> <strong>只在写不出该类型句子时</strong>参考，<strong>不要照它造句、不要套句式模板</strong>；基线数字只是事后校验。两者都在返回体里，但用途不同。本书正文不满足抽样条件（所有段落都短于 40 字）时两个数组都为空，并计入 <code>degraded</code>。</p>
 
       <h3>8 · 上一章结论 <code>lastVerdict</code></h3>
       <div class="formula">base   = computeBaselineFromPerChapter( 除上一章外的其余章 )
@@ -218,7 +218,7 @@ lastVerdict = "第 N 章六维对照：" + judge.summary + "（由逐章指标�
         <tbody>
           <tr><th><code>previousState</code></th><td><code>prevChapter</code> + <code>previousHook</code> / <code>anchor</code></td><td>「上一章停在哪里」的浓缩复述，三选一：有钩子 → 带上「结尾钩子：…」；无钩子但有正文 → 「正文已在 anchor（末 N 字），钩子未回填」；无正文 → 「正文为空」。全书开篇时为「无上一章（本章为全书开篇）」。</td></tr>
           <tr><th><code>goal</code></th><td><code>outlineDirection</code> → <code>previousHook</code> → 开篇</td><td>本章目标，四级退化：有方向行 → 「按大纲方向行写：…」；无方向行但有钩子 → 「大纲未给方向，承接上一章钩子推进：…」；都没有但有上一章 → 「从上一章结尾（anchor）自然接续」；开篇 → 「按创作设定开篇」。</td></tr>
-          <tr><th><code>checklist</code></th><td>上述各材料</td><td>字符串数组，按固定顺序追加：先读锚段（固定首条）→ 承接钩子 / 承接上一章结尾（有钩子取前者，否则取后者；全书开篇时两条都不加）→ 按方向行推进 → <code>priority === "high"</code> 的未回收伏笔（最多 3 条，带 <code>distance</code>）→ 别重复埋已回收伏笔 → 避免使用的禁词（前 5 条）→ 已退场角色 → 本章相关人物（最多 5 个，退场者带标注）→ 写完对照基线与锚段跑自检 → 回填钩子的命令（<code>novel_outline action=hook number=N</code>）。</td></tr>
+          <tr><th><code>checklist</code></th><td>上述各材料</td><td>字符串数组，按固定顺序追加：<strong>读一遍锚段校准语感——不要照 <code>skeletons</code> 造句</strong>（固定首条，v5.1.0 改口径）→ 承接钩子 / 承接上一章结尾（有钩子取前者，否则取后者；全书开篇时两条都不加）→ 按方向行推进 → <code>priority === "high"</code> 的未回收伏笔（最多 3 条，带 <code>distance</code>）→ 别重复埋已回收伏笔 → 避免使用的禁词（前 5 条）→ 已退场角色 → 本章相关人物（最多 5 个，退场者带标注）→ <strong>建议</strong>自检（<code>novel_style_check</code>；<strong>单一维度轻微出带属正常波动，不要为对齐数字改文</strong>）→ <strong>收尾按需</strong>，不必每章全套：确属新埋的伏笔才 <code>novel_plot add</code>；钩子与摘要在章节稳定后再回填（<code>novel_outline action=hook number=N</code>）。</td></tr>
         </tbody>
       </table>
       <p><code>plan</code> 是<strong>材料的索引，不是新信息</strong>：它不引入任何未在其它字段出现过的判断，只把散落的材料组织成「动笔前看一眼」的三段式；<strong>不编造剧情</strong>，所有文本都从已有字段派生（超长片段统一按 <code>clip</code> 截断加省略号）。字段本身不随 <code>budget</code> 截断。</p>
@@ -234,7 +234,7 @@ lastVerdict = "第 N 章六维对照：" + judge.summary + "（由逐章指标�
           <tr><th>其余字段</th><td colspan="2">两档一致（<code>openPlots</code> / <code>worldview</code> / <code>baseline</code> / <code>avoid</code> / <code>plan</code> / <code>degraded</code> 不做档位裁剪）</td></tr>
         </tbody>
       </table>
-      <p>默认 <code>compact</code> 是因为本工具的目标场景是<strong>接着写下一章</strong>：承接口 300 字符足以承接语气，锚段 2 条 + 骨架 3 条足以定调。追求「和原著逐句对照」时应显式传 <code>full</code>，或改用 <a href="novel-style-check.html">novel_style_check</a> 的 <code>fixAnchors</code>（写完之后按偏差取锚段，比写之前更准）。<code>budget</code> 只接受 <code>"full"</code> 一个特殊值，传入任何其它值（含 <code>"compact"</code> 与未声明值）都按 <code>compact</code> 执行。</p>
+      <p>默认 <code>compact</code> 是因为本工具的目标场景是<strong>接着写下一章</strong>：承接口 300 字符足以承接语气，锚段 2 条 + 骨架 3 条足以定调。追求更完整的锚段材料（锚段 5 条、承接口 600 字符）时应显式传 <code>full</code>，或改用 <a href="novel-style-check.html">novel_style_check</a> 的 <code>fixAnchors</code>（写完之后按偏差取锚段，比写之前更准）。<code>budget</code> 只接受 <code>"full"</code> 一个特殊值，传入任何其它值（含 <code>"compact"</code> 与未声明值）都按 <code>compact</code> 执行。</p>
 
       <h2>优雅降级</h2>
       <p>以下情形<strong>一律不报错</strong>：相应字段缺省或为空数组，同时在 <code>degraded</code> 里说明材料名与原因。这是刻意的设计——「书还没建大纲」不是调用错误，不应该让整个流程中断。</p>
@@ -271,7 +271,7 @@ lastVerdict = "第 N 章六维对照：" + judge.summary + "（由逐章指标�
       <h2>相关工具</h2>
       <ul>
         <li><a href="novel-new-chapter.html">novel_new_chapter</a> —— 真正创建章节文件的工具；其附带的 baseline / anchors / skeletons 与本工具同源，本工具是那套材料的抽离与扩容（多了钩子、大纲方向行、人物卡、伏笔距离、禁用清单与 plan）。</li>
-        <li><a href="novel-style-check.html">novel_style_check</a> —— 写完之后的对照判定；其 <code>fixAnchors</code> 与 <code>lastVerdict</code> 分别为本工具锚段的同源材料与上一章结论的来源。</li>
+        <li><a href="novel-style-check.html">novel_style_check</a> —— 写完之后的对照判定（<strong>建议</strong>跑一次，偏离明显时才据此修正）；其 <code>fixAnchors</code> 与 <code>lastVerdict</code> 分别为本工具锚段的同源材料与上一章结论的来源。</li>
         <li><a href="novel-outline.html">novel_outline</a> —— 维护本工具读取的创作资料（钩子记录、剧情大纲方向行）。</li>
         <li><a href="novel-plot.html">novel_plot</a> —— 伏笔登记表；<code>action: "graph"</code> 的结构视图给出跨章的伏笔生命周期，其 <code>plotLifecycle.distance</code> 与本工具的 <code>openPlots.distance</code> 是同族口径（都按「全书最大章号 − 最早提及章号」），但<strong>本工具的 <code>firstChapter</code> 只从登记字段（<code>chapter</code> / <code>mentionedIn</code> / <code>lastMentioned</code>）推导</strong>，而结构视图还会用伏笔内容的关键词去全书正文里找首次命中章，两者结果可能不同。</li>
         <li><a href="novel-settings.html">novel_settings</a> —— 人物表与世界观用语规范（禁用词 / 推荐替代 / 语用规范）的维护入口。</li>

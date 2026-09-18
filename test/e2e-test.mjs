@@ -585,10 +585,12 @@ if (res.status !== 200) throw new Error("allowLan route broken");
   mk("渲染书", "第02章.md", "日子照旧。她习惯了独自吃饭。窗外风急，雨打芭蕉。");
   const nc2 = await defs.novel_new_chapter.execute({ book: "渲染书", content: "正文。", root: testRoot }, exec);
   const ncText = defs.novel_new_chapter.output.render({}, nc2)[0].text;
-  for (const key of ["风格基线", "风格锚", "句式骨架", "强制流程"]) {
+  // v5.0.0 降本：原「强制流程」块已按需化（旧文案要求"必须调用 novel_style_check + 逐句修正"），
+  // 断言改为新文案的关键词「基线怎么用」——用法说明必须仍在渲染文本里。
+  for (const key of ["风格基线", "风格锚", "句式骨架", "基线怎么用"]) {
     if (!ncText.includes(key)) throw new Error("new_chapter render 缺 " + key + " 字段");
   }
-  console.log("render new_chapter: ✓ (基线/锚包/骨架/流程均在文本)");
+  console.log("render new_chapter: ✓ (基线/锚包/骨架/用法说明均在文本)");
   const sc2 = await defs.novel_style_check.execute({ book: "渲染书", chapter: "第01章", root: testRoot }, exec);
   const scText = defs.novel_style_check.output.render({}, sc2)[0].text;
   if (sc2.fixAnchors && sc2.fixAnchors.length > 0) {
