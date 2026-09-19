@@ -16,7 +16,9 @@ Sentence, emotion and semantic analysis all run **on your machine**: a 24MB Chin
 **zero API cost, your manuscript never leaves the device**. Built for DeepSeek Harness (DSH); the same engine is also
 exposed as a **stdio MCP server** for Claude Desktop / Cursor.
 
-[Install](#install) · [The writing loop](#the-writing-loop-end-to-end) · [60-second start](#60-second-start) · [See the output](#see-the-output) · [The 18 tools](#provided-tools-18) · [MCP server](#mcp-server-usable-outside-dsh)
+🔗 **Website & online tool manual**: <https://siweina.github.io/dsh-novel-writer/>
+
+[Website](https://siweina.github.io/dsh-novel-writer/) · [Install](#install) · [The writing loop](#the-writing-loop-end-to-end) · [60-second start](#60-second-start) · [See the output](#see-the-output) · [The 18 tools](#provided-tools-18) · [MCP server](#mcp-server-usable-outside-dsh)
 
 ---
 
@@ -181,6 +183,8 @@ fixAnchors：3 条原著锚段（对话 / 心理 / 描写各一条，供逐句�
 
 ## Provided Tools (18)
 
+> Parameters, return shapes and worked examples for every tool live in the [online tool manual](https://siweina.github.io/dsh-novel-writer/tools/).
+
 | Tool | Description |
 |------|-------------|
 | `novel_books` | List all books in library |
@@ -292,3 +296,7 @@ tool results; a plugin load failure cannot affect the DSH host process.
 ## License
 
 [MIT](./LICENSE)
+
+---
+
+🔗 [Website](https://siweina.github.io/dsh-novel-writer/) · [Online tool manual](https://siweina.github.io/dsh-novel-writer/tools/) · [GitHub](https://github.com/siweina/dsh-novel-writer) · [npm](https://www.npmjs.com/package/dsh-novel-writer) · [MCP server manual](./mcp/README.md)

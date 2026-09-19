@@ -2,6 +2,8 @@
 
 `dsh-novel-writer` 插件的宣传站与工具技术文档。纯静态、零依赖、零构建，双击 `index.html` 即可打开。
 
+线上地址：<https://siweina.github.io/dsh-novel-writer/>（GitHub Pages，发布源即本目录）。
+
 ## 目录结构
 
 ```
