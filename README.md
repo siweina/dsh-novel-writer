@@ -15,9 +15,9 @@
 句式 / 情感 / 语义全部**在本地算**：24MB 中文模型随包分发，**零 API 花费、正文不出本机**。
 为 DeepSeek Harness（DSH）打造；同一套能力也可作为 **MCP 服务器**给 Claude Desktop / Cursor 使用。
 
-🔗 **官网与在线工具手册**：<https://siweina.github.io/dsh-novel-writer/>
+🔗 **官网**：<https://siweina.github.io/dsh-novel-writer/> · **技术文档（18 个工具的参数与示例）**：<https://siweina.github.io/dsh-novel-writer/tools/>
 
-[官网](https://siweina.github.io/dsh-novel-writer/) · [安装](#安装) · [写作流程](#写作流程一条能走完的闭环) · [60 秒上手](#60-秒上手) · [看看输出](#看看输出长什么样) · [18 个工具](#提供的工具18-个) · [MCP 服务器](#mcp-服务器非-dsh-用户也能用)
+[官网](https://siweina.github.io/dsh-novel-writer/) · [技术文档](https://siweina.github.io/dsh-novel-writer/tools/) · [安装](#安装) · [写作流程](#写作流程一条能走完的闭环) · [60 秒上手](#60-秒上手) · [看看输出](#看看输出长什么样) · [18 个工具](#提供的工具18-个) · [MCP 服务器](#mcp-服务器非-dsh-用户也能用)
 
 ---
 
@@ -297,4 +297,4 @@ npx -y -p dsh-novel-writer dsh-novel-writer-mcp --root /你的小说库路径
 
 ---
 
-🔗 [官网](https://siweina.github.io/dsh-novel-writer/) · [在线工具手册](https://siweina.github.io/dsh-novel-writer/tools/) · [GitHub](https://github.com/siweina/dsh-novel-writer) · [npm](https://www.npmjs.com/package/dsh-novel-writer) · [MCP 服务器手册](./mcp/README.md)
+🔗 [官网](https://siweina.github.io/dsh-novel-writer/) · [技术文档](https://siweina.github.io/dsh-novel-writer/tools/) · [GitHub](https://github.com/siweina/dsh-novel-writer) · [npm](https://www.npmjs.com/package/dsh-novel-writer) · [MCP 服务器手册](./mcp/README.md)
