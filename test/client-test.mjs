@@ -146,6 +146,7 @@ console.log("factory 类型:", typeof loaded.factory);
 // 并遍历返回的 vnode 树（组件体里的运行期异常会直接抛出，由调用方 fail）。
 // ---------------------------------------------------------------------------
 let reactRenderDepth = 0; // 渲染期外的 setState 直接忽略（不引入重渲染语义，避免假异步）
+const hookViolations = []; // v5.5.0：hook 数量不稳定的记录（收尾统一判失败）
 function makeElement(type, props, ...children) {
   const vnode = { type, props: props === null || props === undefined ? {} : props, children: [] };
   // React 的 createElement 是可变参数（...children），这里必须照抄，否则多子节点会被丢掉
@@ -176,6 +177,13 @@ const reactStub = {
     const slot = currentHooks.index;
     currentHooks.index += 1;
     currentHooks.effects.push({ slot, fn, deps: Array.isArray(deps) ? deps.map(String).join("\u0000") : null });
+  },
+  useId() {
+    if (currentHooks === null) throw new Error("useId 在组件渲染之外被调用");
+    const slot = currentHooks.index;
+    currentHooks.index += 1;
+    if (currentHooks.list[slot] === undefined) currentHooks.list[slot] = ":nw" + slot + ":";
+    return currentHooks.list[slot];
   }
 };
 /** 执行一个 React 元素：函数组件会被真的调用（带 hooks 上下文），随后递归遍历它的 vnode 树。 */
@@ -206,6 +214,18 @@ function renderElement(element, stats) {
     } finally {
       currentHooks = prev;
     }
+    // v5.5.0：像 React 一样校验 hook 数量稳定性。
+    // 组件被"当普通函数直接调用"（而不是 createElement 成子组件）时，它的 hook 会被混进调用者的 hook 链，
+    // 条件分支/视图切换一变就出现 "Rendered more hooks than during the previous render"，
+    // 真机表现是整棵面板白屏（v5.5.0 的官方原语适配层就踩过这个坑）。这里让它当场失败，而不是溜到真机。
+    const consumed = instance.index;
+    if (instance.lastHookCount !== undefined && instance.lastHookCount !== consumed) {
+      const msg = "Rendered more hooks than during the previous render：组件 "
+        + (element.type.name || "anonymous") + " 上次 " + instance.lastHookCount + " 个 hook / 本次 " + consumed + " 个";
+      hookViolations.push(msg); // 收尾必须失败：异常可能被上层 catch 吞掉，靠这里兜底
+      throw new Error(msg);
+    }
+    instance.lastHookCount = consumed;
     renderElement(rendered, stats);
     // effect 首次渲染必执行，之后仅在依赖变化时执行（与 React 一致：PanelView 的订阅不会每次渲染都加一个）
     for (const effect of instance.effects) {
@@ -267,9 +287,46 @@ function createRoot(container) {
   };
 }
 
+/**
+ * v5.5.0：官方 primitives 的桩 —— 用来覆盖「官方原语可用」这条路径。
+ * 默认关闭（只跑回退路径，保持原有断言稳定）；`NW_TEST_PRIMITIVES=1` 时开启。
+ *
+ * 桩里**刻意让 SegmentedControl / DisclosureRow 使用 hook**（官方实现就是这么写的）：
+ * 这样一旦我们在别处把这些适配层组件当普通函数直接调用、而不是 createElement 成子组件，
+ * hook 计数就会随面板视图/条件分支变化 → React 报 "Rendered more hooks than during the previous render"
+ * → 真机上表现为点开面板白屏。这条路径此前没有任何覆盖，正是该白屏 bug 能溜到真机的原因。
+ */
+const stubPrimitives = {
+  Switch: (props) => reactStub.createElement("button", {
+    role: "switch", "aria-checked": String(props.checked === true), disabled: props.disabled === true,
+    "aria-label": props.label, onClick: () => props.onChange(!props.checked)
+  }, reactStub.createElement("span", null)),
+  SegmentedControl: (props) => {
+    const uid = reactStub.useId(); // ← hook：迫使调用方必须用 createElement 而不是直接调用
+    return reactStub.createElement("div", { role: "tablist", "aria-label": props.label, "data-stub-uid": uid },
+      props.options.map((o) => reactStub.createElement("button", {
+        key: o.value, role: "tab", "aria-selected": String(o.value === props.value),
+        disabled: props.disabled === true || o.disabled === true,
+        onClick: () => { if (o.value !== props.value) props.onChange(o.value); }
+      }, o.label)));
+  },
+  Button: (props) => reactStub.createElement("button", {
+    type: "button", disabled: props.disabled, onClick: props.onClick, className: props.className
+  }, props.children),
+  Tag: (props) => reactStub.createElement("span", { "data-stub-tone": props.tone, className: props.className }, props.children),
+  Tooltip: (props) => props.children,
+  Modal: (props) => (props.open ? reactStub.createElement("div", { role: "dialog" }, props.title, props.children) : null),
+  RiskConfirmation: (props) => (props.open ? reactStub.createElement("div", { role: "dialog" }, props.description) : null),
+  DisclosureRow: (props) => {
+    const [open] = reactStub.useState(props.defaultOpen === true); // ← hook
+    return reactStub.createElement("div", null, props.title, open ? props.children : null);
+  }
+};
+const USE_STUB_PRIMITIVES = process.env.NW_TEST_PRIMITIVES === "1";
 const fakeRequire = (name) => {
   if (name === "react") return reactStub;
   if (name === "react-dom/client") return { createRoot };
+  if (USE_STUB_PRIMITIVES && name === "@deepseek-ai/dsh-client-ui-primitives") return stubPrimitives;
   throw new Error("意外的 require: " + name);
 };
 
@@ -398,7 +455,13 @@ console.log("设置卡片渲染: 组件数 " + cardRender.components + " | vnode
 // 先落到"档位=关闭 + 不在加载中"——这正是用户遇到问题的现场（默认档位 off，场景行整行点不动）
 controller.set({ view: "main", loading: false, systemPromptMode: "off", promptScene: "general" }, { silent: true });
 const featsRender = renderLog[renderLog.length - 1];
-const segBtns = (featsRender.stats.buttons || []).filter((b) => String(b.props.className || "").includes("nwSegBtn"));
+// v5.5.0：分段控件可能是「回退实现」（带 nwSegBtn 类）或「官方 SegmentedControl」（tablist，role="tab"），
+// 两条路径都要能断言——否则官方路径下这段覆盖会静默失效。
+const segButtonsOf = (stats) => (stats.buttons || []).filter((b) => {
+  const cls = String(b.props.className || "");
+  return cls.includes("nwSegBtn") || b.props.role === "tab";
+});
+const segBtns = segButtonsOf(featsRender.stats);
 if (segBtns.length !== 8) fail("主面板分段按钮数量异常（档位 3 + 场景 5 应为 8，实际 " + segBtns.length + "）");
 const SCENE_LABELS = ["通用", "写新章", "改稿", "审计", "建资料"];
 const MODE_LABELS = ["关闭", "精简", "完整"];
@@ -428,14 +491,15 @@ const probeRender = runRender(reactStub.createElement(panelRender.element.type, 
   toggle: (patch) => probe.push(patch),
   onOpenPanel: () => {}
 }));
-const probeSegs = (probeRender.buttons || []).filter((b) => String(b.props.className || "").includes("nwSegBtn"));
+const probeSegs = segButtonsOf(probeRender);
 const writingBtn = probeSegs.find((b) => vnodeText(b).trim() === "写新章");
 if (!writingBtn) fail("探针渲染后找不到「写新章」按钮（找到：" + probeSegs.map((b) => vnodeText(b).trim()).join("/") + "）");
 writingBtn.props.onClick();
 if (probe.length !== 1 || probe[0].promptScene !== "writing") {
   fail("点击场景按钮未提交 promptScene=writing（实际 " + JSON.stringify(probe) + "）");
 }
-const currentBtn = probeSegs.find((b) => b.props.className.includes("nwSegBtnOn") && SCENE_LABELS.includes(vnodeText(b).trim()));
+// 选中态：回退实现用 nwSegBtnOn 类；官方控件用 aria-selected
+const currentBtn = probeSegs.find((b) => (String(b.props.className || "").includes("nwSegBtnOn") || b.props["aria-selected"] === "true") && SCENE_LABELS.includes(vnodeText(b).trim()));
 if (currentBtn && vnodeText(currentBtn).trim() !== "通用") fail("当前场景高亮错位：" + vnodeText(currentBtn).trim());
 console.log("场景按钮可点（v5.1.1）: 8 个分段按钮全部可点 | 点击「写新章」→ toggle({promptScene:\"writing\"}) ✓ | 档位非 full 时提示「暂不注入」✓");
 
@@ -564,5 +628,10 @@ if (viaGet.selected !== null) fail("ctx.get 路径的关闭按钮未调用 layou
 console.log("席位晚声明与兜底（v5.2.0 二次修正）: 无 ctx.inject 依赖（不拖垮启动）✓ | 未声明时不注册 ✓"
   + " | 旧路径兜底 ✓ | 声明后接管两个席位并撤旧 UI ✓ | ctx.get 取 layout ✓");
 
-cleanupHooks(); // 执行 effect 清理（取消控制器订阅），避免残留句柄影响进程退出
-console.log("CLIENT OK");
+// v5.5.0 收尾：hook 数量必须跨渲染稳定（否则真机 = 面板白屏）
+if (hookViolations.length > 0) {
+  fail("hook 数量不稳定（组件被当普通函数直接调用？必须用 createElement）：" + hookViolations.slice(0, 3).join(" ｜ "));
+}
+console.log("hook 稳定性: " + (process.env.NW_TEST_PRIMITIVES === "1" ? "官方原语路径" : "回退路径") + " 跨视图/弹窗切换零违规 ✓");
+
+cleanupHooks(); // 执行 effect 清理（取消控制器订阅），避免残留句柄影响进程退出console.log("CLIENT OK");
