@@ -16,6 +16,7 @@
 4. **chip 标题**：`sidebar.right.pane.tab.title` 席位——已打开的 tab 在切语言时也跟着变。
 5. **老宿主自动回退**：检测不到 `ctx.sidebarRightTabs` / `ctx.sidebarRight`（DSH < 0.2.0）时继续走 v5.1.1 的 DOM 注入路径，既有用户与老宿主不受影响。
 6. 设置页那张卡片不变——它一直用的就是官方 `settings.plugin.item` 席位。
+7. **时序修正（首轮真机验证后补）**：官方席位是**后到的服务**——官方包（如 `ui-sidebar-documentpreview`）把 `"sidebarRightTabs"` 写进自己的 `inject` 数组来等它就绪，而我们的 `inject` 只有 `slots` / `locale`，`apply` 得比它早。首版在 apply 时直接探测，必然扑空并静默退回旧路径（桌面端 0.2.0 上的表现就是「入口仍在老位置」）。现改为两步：**① 先挂旧路径兜底**；**② 用回调形式的 `ctx.inject(["sidebarRight", "sidebarRightTabs"], …)` 等依赖就绪**，就绪后接管官方席位并撤掉旧 UI。老宿主上该回调永不触发，行为与 v5.1.1 一致。
 
 **兼容性**：工具数量、参数与返回结构一律不变（仍 18 个）；宿主侧 `lib/index.js` 未改动；状态文件字段未变。浏览器半边新增样式类 `nwPanelSeated` / `nwFootEntry*`，旧类名保留给回退路径。
 

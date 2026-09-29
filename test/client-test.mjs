@@ -509,5 +509,56 @@ if (official.opened.length !== 1 || official.opened[0] !== "novel-writer") {
 console.log("官方侧边栏席位（v5.2.0）: tab 类型 id/kind/guide ✓ | 正文席位 key=id ✓ | chip 标题席位 ✓"
   + " | 页脚入口宽窄两态 ✓ | 点击 → openTab(" + official.opened[0] + ") ✓ | seated 面板无自绘关闭键 ✓");
 
+// ---------------------------------------------------------------------------
+// v5.2.0 修正回归：官方服务「后到」时必须能接管（真机踩到的坑）
+// 现象：桌面端 0.2.0 装上新版本后入口仍在老位置——官方包把 "sidebarRightTabs" 写进
+// 自己的 inject 等它就绪，而我们的 inject 只有 slots/locale，apply 得更早，
+// 直接探测时服务还不存在 → 静默退回 DOM 注入。
+// 修法：先挂旧路径兜底，再用回调形式的 ctx.inject 等 sidebarRight/sidebarRightTabs，
+// 就绪后接管官方席位并撤掉旧 UI。本段就是钉住这个时序。
+// ---------------------------------------------------------------------------
+const isLegacyEntry = (n) => n instanceof HTMLElementStub && n.dataset && n.dataset.dshNovelWriterEntry !== undefined;
+const late = { deps: null, cb: null, tabType: null, seats: [], opened: [] };
+const lateCtx = {
+  effect: (fn) => fn(),
+  slots: {
+    inject: (name, fn) => { fn(); },
+    register: (opts, component) => { late.seats.push({ opts, component }); return () => {}; }
+  },
+  // 只给回调形式：模拟"服务本体稍后才就绪"的宿主
+  inject: (deps, cb) => { late.deps = deps; late.cb = cb; return () => {}; }
+};
+const beforeLegacy = collect(body, isLegacyEntry).length;
+loaded.factory(fakeRequire).apply(lateCtx);
+if (typeof late.cb !== "function") fail("服务缺席时未用 ctx.inject 回调等待（官方席位永远不会接管）");
+if (JSON.stringify(late.deps) !== JSON.stringify(["sidebarRight", "sidebarRightTabs"])) {
+  fail("等待的服务名不对：" + JSON.stringify(late.deps));
+}
+// 注意：slots.register 也会被设置页卡片用到，所以这里只断言"官方席位"没被注册
+if (late.seats.some((s) => s.opts.name === "sidebar.right.pane.tab" || s.opts.name === "sidebar.footer.action")) {
+  fail("服务尚未就绪却已注册官方席位（时序守卫失效）");
+}
+const afterLegacy = collect(body, isLegacyEntry).length;
+if (afterLegacy !== beforeLegacy + 1) {
+  fail("兜底旧入口未挂载（" + beforeLegacy + " → " + afterLegacy + "，期望 +1）");
+}
+// 服务后到：回调触发 → 注册官方席位 + 撤掉旧 UI
+const arrivedCtx = {
+  effect: (fn) => fn(),
+  slots: lateCtx.slots,
+  sidebarRight: { openTab: (kind) => { late.opened.push(kind); } },
+  sidebarRightTabs: { register: (definition) => { late.tabType = definition; return () => {}; } }
+};
+late.cb(arrivedCtx);
+if (!late.tabType || late.tabType.id !== "dsh-novel-writer") fail("服务就绪后未注册 tab 类型");
+if (!late.seats.some((s) => s.opts.name === "sidebar.right.pane.tab")) fail("服务就绪后未注册正文席位");
+if (!late.seats.some((s) => s.opts.name === "sidebar.footer.action")) fail("服务就绪后未注册左栏入口");
+const afterTakeover = collect(body, isLegacyEntry).length;
+if (afterTakeover !== beforeLegacy) {
+  fail("接管后旧入口未撤掉（" + afterTakeover + " 个，期望回到 " + beforeLegacy + "）");
+}
+console.log("官方服务后到接管（v5.2.0 修正）: 先挂兜底旧入口 ✓ | ctx.inject 等 [" + late.deps.join(",") + "] ✓"
+  + " | 就绪后注册席位并撤掉旧 UI ✓");
+
 cleanupHooks(); // 执行 effect 清理（取消控制器订阅），避免残留句柄影响进程退出
 console.log("CLIENT OK");
