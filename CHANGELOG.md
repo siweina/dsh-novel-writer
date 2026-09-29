@@ -29,7 +29,7 @@
 
 **另一处真机误报修正（同版）**：面板里点「打开文件夹」明明已经打开目录，却提示「explorer 启动失败，未能定位目录」。原因是 `openInExplorer()` 用 `resolve(!err)` 判成败，而 **Windows 的 `explorer.exe` 即使成功打开目录也常返回退出码 1**（它的退出码本来就不表达成败）。现在只认"进程根本没起来"——那种错误的 `code` 是**字符串** errno（`ENOENT` / `EACCES` …），带**数字**退出码（0/1/2…）一律视为已交给系统外壳；判据抽成纯函数 `explorerSpawnFailed(err)` 并加了 e2e 断言。macOS 的 `open` / Linux 的 `xdg-open` 退出码可信，逻辑不变；失败文案也改为如实描述：「未能调用系统文件管理器（explorer / open / xdg-open 都没能启动）；可手动打开：<路径>」。
 
-**同一版第三处：非净化模式弹窗的遮罩改用语宿主 token**。用户反馈「点开非净化模式的确认框之后背景突然变了」。原因是弹窗遮罩写死 `rgba(0,0,0,.5)`、没有背景模糊、也没有进出场过渡——在官方主栏面板里看着像"背景被整个换掉"。现改为官方与第三方插件的通用写法：遮罩用 `--dsw-alias-bg-mask-1` + `--dsw-mask-blur`，浮层用 `--dsw-alias-bg-layer-2` + `--dsw-shadow-lv3` + 20px 圆角，并加 160/180ms 淡入（`prefers-reduced-motion: reduce` 下不启用）；弹窗内按钮单独调了尺寸与层次（危险按钮走 `--dsw-alias-state-error-primary`）。
+**同一版第三处：非净化模式确认框不再用全屏遮罩**。用户反馈「点开确认框之后背景突然变了」。根因是我们自己的遮罩：旧版写死 `rgba(0,0,0,.5)`，中途改成宿主 `--dsw-alias-bg-mask-1` + `--dsw-mask-blur`——**两者都是整屏遮罩**，只会把侧栏、会话、面板一起糊成一片均匀的灰（加上背景模糊后更像"背景被整个换掉"）。但这两个确认框（先确认开启 / 再输入承诺文字）本来就是 `PanelView` 正文的一部分：出现时已经替换掉正常正文，**根本不需要遮罩**。现在 `.nwModal` 改成面板内的居中卡片（`max-width:460px`，取消 `position:fixed` 与全部遮罩/模糊），只有卡片自身轻微上浮入场（`prefers-reduced-motion` 下不启用，`@keyframes nwModalBoxIn`）；卡片用 `--dsw-alias-bg-layer-2` / `--dsw-alias-border-l2` / `--dsw-shadow-lv3`，按钮 34px 高、危险态走 `--dsw-alias-state-error-primary`。**背景从此完全不变。**
 
 **兼容性**：工具数量、参数与返回结构一律不变（仍 18 个）；宿主侧 `lib/index.js` 未改动；状态文件字段未变。老宿主（未声明这两个席位）继续走旧路径。
 
