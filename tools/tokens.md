@@ -1,0 +1,384 @@
+# --dsw-* token 白名单（从实际装机的官方/第三方客户端包取证）
+
+共 362 个 token 名出现在已安装包的代码/CSS 里（每个都注明来源包数量最多的前三）。
+
+## alias（语义别名，最常用）（111）
+
+- `--dsw-alias-`  ← dsh-client-ui-skin-center, dsh-client-ui-task-board
+- `--dsw-alias-bg-base`  ← dsh-client-ui-git-graph, dsh-client-ui-skill-explorer, dsh-client-ui-skin-center
+- `--dsw-alias-bg-brand`  ← dsh-client-ui-plugin-manager, dsh-web-all
+- `--dsw-alias-bg-document-preview`  ← dsh-client-ui-skin-center, dsh-client-ui-sidebar-documentpreview
+- `--dsw-alias-bg-layer-1`  ← dsh-client-ui-market, dsh-client-ui-plugin-manager, dsh-client-ui-preset-center
+- `--dsw-alias-bg-layer-2`  ← dsh-client-ui-git-graph, dsh-client-ui-market, dsh-client-ui-model-capabilities
+- `--dsw-alias-bg-layer-3`  ← dsh-client-ui-market, dsh-client-ui-model-capabilities, dsh-client-ui-skin-center
+- `--dsw-alias-bg-layer-4`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-alias-bg-mask-1`  ← dsh-client-ui-skin-center, dsh-client-ui-task-board, dsh-remote-web-ui
+- `--dsw-alias-bg-mask-2`  ← dsh-client-ui-git-graph, dsh-client-ui-market, dsh-client-ui-skin-center
+- `--dsw-alias-bg-mask-3`  ← dsh-client-ui-skin-center
+- `--dsw-alias-bg-mask-drop`  ← dsh-client-ui-skin-center
+- `--dsw-alias-bg-mask-photo`  ← dsh-client-ui-skin-center
+- `--dsw-alias-bg-module-platform`  ← dsh-client-ui-market, dsh-client-ui-preset-center, dsh-client-ui-skin-center
+- `--dsw-alias-bg-multi-select`  ← dsh-client-ui-skin-center
+- `--dsw-alias-bg-overlay`  ← dsh-client-ui-git-graph, dsh-client-ui-skin-center, dsh-session-archive
+- `--dsw-alias-bg-skeleton`  ← dsh-client-ui-skin-center
+- `--dsw-alias-border-inverted`  ← dsh-client-ui-git-graph, dsh-client-ui-skin-center, dsh-web-all
+- `--dsw-alias-border-inverted2`  ← dsh-client-ui-skin-center
+- `--dsw-alias-border-l1`  ← dsh-client-ui-git-graph, dsh-client-ui-model-capabilities, dsh-client-ui-plugin-manager
+- `--dsw-alias-border-l2`  ← dsh-client-ui-git-graph, dsh-client-ui-market, dsh-client-ui-model-capabilities
+- `--dsw-alias-border-l2-darkmode-thin`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-alias-border-l3`  ← dsh-client-ui-plugin-manager, dsh-client-ui-skin-center, dsh-client-ui-task-board
+- `--dsw-alias-border-l4`  ← dsh-client-ui-skin-center, dsh-client-ui-task-board, dsh-web-all
+- `--dsw-alias-brand-primary`  ← dsh-client-ui-git-graph, dsh-client-ui-market, dsh-client-ui-model-capabilities
+- `--dsw-alias-brand-primary-invert`  ← dsh-client-ui-skin-center
+- `--dsw-alias-brand-primary-new-colorprimary-new-color`  ← dsh-client-ui-market, dsh-client-ui-skin-center, dsh-client-ui-task-board
+- `--dsw-alias-brand-primary-softer`  ← dsh-client-ui-model-capabilities, dsh-web-all
+- `--dsw-alias-brand-text`  ← dsh-client-ui-skin-center
+- `--dsw-alias-button-contrast-fill`  ← dsh-client-ui-git-graph, dsh-client-ui-skin-center, dsh-web-all
+- `--dsw-alias-button-elevated-fill`  ← dsh-client-ui-skin-center, dsh-remote-web-ui, dsh-web-all
+- `--dsw-alias-button-floating-fill`  ← dsh-client-ui-skin-center
+- `--dsw-alias-button-floating-hover`  ← dsh-client-ui-skin-center, dsh-remote-web-ui, dsh-web-all
+- `--dsw-alias-button-ghost-active-border`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-alias-button-ghost-active-fill`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-alias-button-ghost-active-hover`  ← dsh-client-ui-skin-center
+- `--dsw-alias-button-info-fill`  ← dsh-client-ui-skin-center, dsh-client-ui-task-board, dsh-ssh
+- `--dsw-alias-button-info-hover`  ← dsh-client-ui-skin-center, dsh-client-ui-task-board, dsh-ssh
+- `--dsw-alias-button-primary-dimmed`  ← dsh-client-ui-skin-center
+- `--dsw-alias-button-primary-fill`  ← dsh-client-ui-market, dsh-client-ui-model-capabilities, dsh-client-ui-plugin-manager
+- `--dsw-alias-button-primary-hover`  ← dsh-client-ui-git-graph, dsh-client-ui-market, dsh-client-ui-model-capabilities
+- `--dsw-alias-button-tool-bar-fill`  ← dsh-client-ui-git-graph, dsh-client-ui-skin-center, dsh-web-all
+- `--dsw-alias-button-tool-bar-fill-invisible`  ← dsh-client-ui-skin-center
+- `--dsw-alias-button-tool-bar-hover`  ← dsh-client-ui-git-graph, dsh-client-ui-skin-center, dsh-web-all
+- `--dsw-alias-code-diff-added`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-alias-code-diff-deleted`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-alias-file-diff-added-bg`  ← dsh-client-ui-skin-center
+- `--dsw-alias-file-diff-added-gutter`  ← dsh-client-ui-skin-center
+- `--dsw-alias-file-diff-added-marker`  ← dsh-client-ui-skin-center
+- `--dsw-alias-file-diff-deleted-bg`  ← dsh-client-ui-skin-center
+- `--dsw-alias-file-diff-deleted-gutter`  ← dsh-client-ui-skin-center
+- `--dsw-alias-file-diff-deleted-marker`  ← dsh-client-ui-skin-center
+- `--dsw-alias-interactive-bg-active`  ← dsh-client-ui-git-graph, dsh-client-ui-skin-center, dsh-remote-web-ui
+- `--dsw-alias-interactive-bg-hover`  ← dsh-client-ui-git-graph, dsh-client-ui-market, dsh-client-ui-plugin-manager
+- `--dsw-alias-interactive-bg-hover-accent`  ← dsh-client-ui-skin-center
+- `--dsw-alias-interactive-bg-hover-danger`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-alias-interactive-bg-hover-solid`  ← dsh-client-ui-git-graph, dsh-client-ui-skin-center, dsh-web-all
+- `--dsw-alias-label-caption`  ← dsh-client-ui-git-graph, dsh-client-ui-skin-center, dsh-remote-web-ui
+- `--dsw-alias-label-danger`  ← dsh-client-ui-plugin-manager, dsh-web-all
+- `--dsw-alias-label-dimmed`  ← dsh-client-ui-market, dsh-client-ui-model-capabilities, dsh-client-ui-preset-center
+- `--dsw-alias-label-document-preview`  ← dsh-client-ui-skin-center
+- `--dsw-alias-label-error`  ← dsh-client-ui-market, dsh-client-ui-preset-center, dsh-client-ui-skin-center
+- `--dsw-alias-label-primary`  ← dsh-client-ui-git-graph, dsh-client-ui-market, dsh-client-ui-model-capabilities
+- `--dsw-alias-label-primary-bluish`  ← dsh-client-ui-skin-center, dsh-session-archive, dsh-web-all
+- `--dsw-alias-label-primary-dimmed`  ← dsh-client-ui-skin-center
+- `--dsw-alias-label-primary-foreground`  ← dsh-client-ui-market, dsh-client-ui-model-capabilities, dsh-client-ui-plugin-manager
+- `--dsw-alias-label-primary-inverted`  ← dsh-client-ui-skin-center, dsh-session-archive, dsh-web-all
+- `--dsw-alias-label-secondary`  ← dsh-client-ui-git-graph, dsh-client-ui-market, dsh-client-ui-model-capabilities
+- `--dsw-alias-label-shimmer`  ← dsh-client-ui-primitives
+- `--dsw-alias-label-tertiary`  ← dsh-client-ui-git-graph, dsh-client-ui-market, dsh-client-ui-plugin-manager
+- `--dsw-alias-link`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-alias-markdown-citation`  ← dsh-client-ui-skin-center
+- `--dsw-alias-markdown-code-block`  ← dsh-client-ui-skin-center, dsh-client-ui-task-board, dsh-web-all
+- `--dsw-alias-markdown-code-block-banner`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-alias-markdown-code-segment-selected`  ← dsh-client-ui-skin-center
+- `--dsw-alias-markdown-code-segment-unselected`  ← dsh-client-ui-skin-center
+- `--dsw-alias-markdown-inline-code`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-alias-markdown-placeholder`  ← dsh-client-ui-skin-center
+- `--dsw-alias-markdown-tag`  ← dsh-client-ui-skin-center
+- `--dsw-alias-menu-group-header-fill`  ← dsh-client-ui-primitives
+- `--dsw-alias-menu-icon`  ← dsh-client-ui-primitives
+- `--dsw-alias-scrollbar-bg-l1`  ← dsh-client-ui-skin-center
+- `--dsw-alias-scrollbar-bg-l2`  ← dsh-client-ui-git-graph, dsh-client-ui-skin-center, dsh-web-all
+- `--dsw-alias-scrollbar-hover-l1`  ← dsh-client-ui-skin-center
+- `--dsw-alias-scrollbar-hover-l2`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives, dsh-client-ui-sidebar
+- `--dsw-alias-separator-primary`  ← dsh-client-ui-task-board, dsh-ssh, dsh-web-all
+- `--dsw-alias-state-business-primary`  ← dsh-client-ui-plugin-manager, dsh-client-ui-skill-explorer, dsh-client-ui-skin-center
+- `--dsw-alias-state-business-tertiary`  ← dsh-client-ui-skin-center
+- `--dsw-alias-state-danger`  ← dsh-client-ui-skin-center
+- `--dsw-alias-state-danger-primary`  ← dsh-client-ui-skin-center
+- `--dsw-alias-state-danger-tertiary`  ← dsh-client-ui-skin-center
+- `--dsw-alias-state-error-primary`  ← dsh-client-ui-git-graph, dsh-client-ui-market, dsh-client-ui-skill-explorer
+- `--dsw-alias-state-error-secondary`  ← dsh-client-ui-skin-center, dsh-remote-web-ui, dsh-web-all
+- `--dsw-alias-state-idle-primary`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-alias-state-success-primary`  ← dsh-client-ui-git-graph, dsh-client-ui-market, dsh-client-ui-plugin-manager
+- `--dsw-alias-state-success-secondary`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-alias-state-success-tertiary`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-alias-state-warn-label`  ← dsh-client-ui-model-capabilities, dsh-client-ui-skin-center, dsh-web-all
+- `--dsw-alias-state-warn-primary`  ← dsh-client-ui-git-graph, dsh-client-ui-market, dsh-client-ui-skill-explorer
+- `--dsw-alias-state-warn-secondary`  ← dsh-client-ui-skin-center, dsh-client-ui-task-board, dsh-web-all
+- `--dsw-alias-state-warn-tertiary`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives, dsh-client-ui-sidebar-documentpreview
+- `--dsw-alias-state-warning-primary`  ← dsh-client-ui-skin-center
+- `--dsw-alias-state-warning-tertiary`  ← dsh-client-ui-skin-center
+- `--dsw-alias-status-danger`  ← dsh-client-ui-model-capabilities, dsh-web-all
+- `--dsw-alias-switch-thumb`  ← dsh-client-ui-primitives
+- `--dsw-alias-text-danger`  ← dsh-update, dsh-web-all
+- `--dsw-alias-toast-bg`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-alias-toast-label`  ← dsh-client-ui-primitives
+- `--dsw-alias-tooltip-bg`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-alias-tooltip-fg`  ← dsh-client-ui-skin-center
+- `--dsw-alias-tooltip-key-bg`  ← dsh-client-ui-primitives
+
+## radius（圆角尺度）（6）
+
+- `--dsw-radius-lg`  ← dsh-client-ui-primitives, dsh-client-ui-sidebar-documentpreview
+- `--dsw-radius-md`  ← dsh-client-ui-primitives, dsh-client-ui-sidebar, dsh-client-ui-sidebar-documentpreview
+- `--dsw-radius-panel`  ← dsh-client-ui-primitives
+- `--dsw-radius-sm`  ← dsh-client-ui-plugin-manager, dsh-web-all, dsh-client-ui-primitives
+- `--dsw-radius-xl`  ← dsh-client-ui-sidebar-right
+- `--dsw-radius-xs`  ← dsh-client-ui-primitives
+
+## elevation / shadow（层级材质）（9）
+
+- `--dsw-elevation-panel`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-elevation-prominent`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives, dsh-client-ui-sidebar-documentpreview
+- `--dsw-elevation-soft`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-elevation-stroke`  ← dsh-client-ui-skin-center
+- `--dsw-elevation-stroke-color`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-shadow-lv1`  ← dsh-client-ui-skin-center, dsh-client-ui-task-board, dsh-session-archive
+- `--dsw-shadow-lv1-blur`  ← dsh-client-ui-skin-center
+- `--dsw-shadow-lv2`  ← dsh-client-ui-skin-center, dsh-client-ui-task-board, dsh-web-all
+- `--dsw-shadow-lv3`  ← dsh-client-ui-git-graph, dsh-client-ui-skin-center, dsh-client-ui-task-board
+
+## focus / corner（焦点与曲线）（3）
+
+- `--dsw-corner-shape`  ← dsh-client-ui-skin-center
+- `--dsw-focus-ring-color`  ← dsh-client-ui-plugin-manager, dsh-web-all, dsh-client-ui-primitives
+- `--dsw-focus-ring-width`  ← dsh-client-ui-plugin-manager, dsh-web-all, dsh-client-ui-primitives
+
+## mask / menu / specific（浮层材质）（15）
+
+- `--dsw-mask-blur`  ← dsh-client-ui-skin-center, dsh-remote-web-ui, dsh-session-archive
+- `--dsw-menu-backdrop-filter`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-menu-surface-fill`  ← dsh-client-ui-primitives
+- `--dsw-specific-`  ← dsh-client-ui-skin-center
+- `--dsw-specific-bubble`  ← dsh-client-ui-skin-center
+- `--dsw-specific-bubble-highlight`  ← dsh-client-ui-skin-center
+- `--dsw-specific-input-major`  ← dsh-client-ui-skill-explorer, dsh-client-ui-skin-center, dsh-client-ui-task-board
+- `--dsw-specific-login-input`  ← dsh-client-ui-skin-center
+- `--dsw-specific-menu`  ← dsh-client-ui-git-graph, dsh-client-ui-skin-center, dsh-web-all
+- `--dsw-specific-selector`  ← dsh-client-ui-skin-center
+- `--dsw-specific-sidebar-fill`  ← dsh-client-ui-skin-center, dsh-client-ui-layout, dsh-client-ui-sidebar
+- `--dsw-specific-sidebar-nav-item-active`  ← dsh-client-ui-skin-center
+- `--dsw-specific-sidebar-nav-item-active-accent`  ← dsh-client-ui-skin-center
+- `--dsw-specific-sidebar-nav-item-hover`  ← dsh-client-ui-skin-center
+- `--dsw-specific-tip`  ← dsh-client-ui-skin-center
+
+## 其它（218）
+
+- `--dsw-font`  ← dsh-client-ui-sidebar-documentpreview
+- `--dsw-font-base-16`  ← dsh-client-ui-skin-center
+- `--dsw-font-base-16-font-family`  ← dsh-client-ui-skin-center
+- `--dsw-font-base-16-font-size`  ← dsh-client-ui-skin-center
+- `--dsw-font-base-16-font-style`  ← dsh-client-ui-skin-center
+- `--dsw-font-base-16-font-weight`  ← dsh-client-ui-skin-center
+- `--dsw-font-base-16-line-height`  ← dsh-client-ui-skin-center
+- `--dsw-font-base-strong-16`  ← dsh-client-ui-skin-center
+- `--dsw-font-base-strong-16-font-family`  ← dsh-client-ui-skin-center
+- `--dsw-font-base-strong-16-font-size`  ← dsh-client-ui-skin-center
+- `--dsw-font-base-strong-16-font-style`  ← dsh-client-ui-skin-center
+- `--dsw-font-base-strong-16-font-weight`  ← dsh-client-ui-skin-center
+- `--dsw-font-base-strong-16-line-height`  ← dsh-client-ui-skin-center
+- `--dsw-font-family`  ← dsh-client-ui-skill-explorer, dsh-client-ui-skin-center, dsh-client-ui-task-board
+- `--dsw-font-l-20`  ← dsh-client-ui-skin-center
+- `--dsw-font-l-20-font-family`  ← dsh-client-ui-skin-center
+- `--dsw-font-l-20-font-size`  ← dsh-client-ui-skin-center
+- `--dsw-font-l-20-font-style`  ← dsh-client-ui-skin-center
+- `--dsw-font-l-20-font-weight`  ← dsh-client-ui-skin-center
+- `--dsw-font-l-20-line-height`  ← dsh-client-ui-skin-center
+- `--dsw-font-m-18`  ← dsh-client-ui-skin-center
+- `--dsw-font-m-18-font-family`  ← dsh-client-ui-skin-center
+- `--dsw-font-m-18-font-size`  ← dsh-client-ui-skin-center
+- `--dsw-font-m-18-font-style`  ← dsh-client-ui-skin-center
+- `--dsw-font-m-18-font-weight`  ← dsh-client-ui-skin-center
+- `--dsw-font-m-18-line-height`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-base`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-font-markdown-base-font-family`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-base-font-size`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-base-font-style`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-base-font-weight`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-base-italic`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-base-italic-font-family`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-base-italic-font-size`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-base-italic-font-style`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-base-italic-font-weight`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-base-italic-line-height`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-base-line-height`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-base-strong`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-font-markdown-base-strong-font-family`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-base-strong-font-size`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-base-strong-font-style`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-base-strong-font-weight`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-base-strong-italic`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-base-strong-italic-font-family`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-base-strong-italic-font-size`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-base-strong-italic-font-style`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-base-strong-italic-font-weight`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-base-strong-italic-line-height`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-base-strong-line-height`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-code`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-font-markdown-code-block`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives, dsh-client-ui-sidebar-documentpreview
+- `--dsw-font-markdown-code-block-font-family`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-code-block-font-size`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-code-block-font-style`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-code-block-font-weight`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-code-block-line-height`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-code-block-small`  ← dsh-client-ui-skin-center, dsh-client-ui-task-board, dsh-web-all
+- `--dsw-font-markdown-code-block-small-font-family`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-code-block-small-font-size`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-code-block-small-font-style`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-code-block-small-font-weight`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-code-block-small-line-height`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-code-font-family`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-font-markdown-code-font-size`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-code-font-style`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-code-font-weight`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-code-line-height`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-h1`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-font-markdown-h1-font-family`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-h1-font-size`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-h1-font-style`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-h1-font-weight`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-h1-line-height`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-h2`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-font-markdown-h2-font-family`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-h2-font-size`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-h2-font-style`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-h2-font-weight`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-h2-line-height`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-h3`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-font-markdown-h3-font-family`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-h3-font-size`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-h3-font-style`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-h3-font-weight`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-h3-line-height`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-h4`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-font-markdown-h4-font-family`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-h4-font-size`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-h4-font-style`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-h4-font-weight`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-h4-line-height`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-small`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-small-font-family`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-small-font-size`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-small-font-style`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-small-font-weight`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-small-italic`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-small-italic-font-family`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-small-italic-font-size`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-small-italic-font-style`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-small-italic-font-weight`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-small-italic-line-height`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-small-line-height`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-small-strong`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-small-strong-font-family`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-small-strong-font-size`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-small-strong-font-style`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-small-strong-font-weight`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-small-strong-italic`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-small-strong-italic-font-family`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-small-strong-italic-font-size`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-small-strong-italic-font-style`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-small-strong-italic-font-weight`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-small-strong-italic-line-height`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-small-strong-line-height`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-table`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-font-markdown-table-font-family`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-table-font-size`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-table-font-style`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-table-font-weight`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-table-head`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-font-markdown-table-head-font-family`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-table-head-font-size`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-table-head-font-style`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-table-head-font-weight`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-table-head-line-height`  ← dsh-client-ui-skin-center
+- `--dsw-font-markdown-table-line-height`  ← dsh-client-ui-skin-center
+- `--dsw-font-mono`  ← dsh-liangshen, dsh-remote-web-ui, dsh-web-all
+- `--dsw-font-s-14`  ← dsh-client-ui-skin-center
+- `--dsw-font-s-14-font-family`  ← dsh-client-ui-skin-center
+- `--dsw-font-s-14-font-size`  ← dsh-client-ui-skin-center
+- `--dsw-font-s-14-font-style`  ← dsh-client-ui-skin-center
+- `--dsw-font-s-14-font-weight`  ← dsh-client-ui-skin-center
+- `--dsw-font-s-14-line-height`  ← dsh-client-ui-skin-center
+- `--dsw-font-s-strong-14`  ← dsh-client-ui-skin-center
+- `--dsw-font-s-strong-14-font-family`  ← dsh-client-ui-skin-center
+- `--dsw-font-s-strong-14-font-size`  ← dsh-client-ui-skin-center
+- `--dsw-font-s-strong-14-font-style`  ← dsh-client-ui-skin-center
+- `--dsw-font-s-strong-14-font-weight`  ← dsh-client-ui-skin-center
+- `--dsw-font-s-strong-14-line-height`  ← dsh-client-ui-skin-center
+- `--dsw-font-xl-24`  ← dsh-client-ui-skin-center
+- `--dsw-font-xl-24-font-family`  ← dsh-client-ui-skin-center
+- `--dsw-font-xl-24-font-size`  ← dsh-client-ui-skin-center
+- `--dsw-font-xl-24-font-style`  ← dsh-client-ui-skin-center
+- `--dsw-font-xl-24-font-weight`  ← dsh-client-ui-skin-center
+- `--dsw-font-xl-24-line-height`  ← dsh-client-ui-skin-center
+- `--dsw-font-xs-13`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-font-xs-13-font-family`  ← dsh-client-ui-skin-center
+- `--dsw-font-xs-13-font-size`  ← dsh-client-ui-skin-center
+- `--dsw-font-xs-13-font-style`  ← dsh-client-ui-skin-center
+- `--dsw-font-xs-13-font-weight`  ← dsh-client-ui-skin-center
+- `--dsw-font-xs-13-line-height`  ← dsh-client-ui-skin-center
+- `--dsw-font-xs-strong-13`  ← dsh-client-ui-skin-center
+- `--dsw-font-xs-strong-13-font-family`  ← dsh-client-ui-skin-center
+- `--dsw-font-xs-strong-13-font-size`  ← dsh-client-ui-skin-center
+- `--dsw-font-xs-strong-13-font-style`  ← dsh-client-ui-skin-center
+- `--dsw-font-xs-strong-13-font-weight`  ← dsh-client-ui-skin-center
+- `--dsw-font-xs-strong-13-line-height`  ← dsh-client-ui-skin-center
+- `--dsw-font-xxs-12`  ← dsh-client-ui-skin-center
+- `--dsw-font-xxs-12-font-family`  ← dsh-client-ui-skin-center
+- `--dsw-font-xxs-12-font-size`  ← dsh-client-ui-skin-center
+- `--dsw-font-xxs-12-font-style`  ← dsh-client-ui-skin-center
+- `--dsw-font-xxs-12-font-weight`  ← dsh-client-ui-skin-center
+- `--dsw-font-xxs-12-line-height`  ← dsh-client-ui-skin-center
+- `--dsw-font-xxs-strong-12`  ← dsh-client-ui-skin-center
+- `--dsw-font-xxs-strong-12-font-family`  ← dsh-client-ui-skin-center
+- `--dsw-font-xxs-strong-12-font-size`  ← dsh-client-ui-skin-center
+- `--dsw-font-xxs-strong-12-font-style`  ← dsh-client-ui-skin-center
+- `--dsw-font-xxs-strong-12-font-weight`  ← dsh-client-ui-skin-center
+- `--dsw-font-xxs-strong-12-line-height`  ← dsh-client-ui-skin-center
+- `--dsw-font-xxxs-11`  ← dsh-client-ui-skin-center
+- `--dsw-font-xxxs-11-font-family`  ← dsh-client-ui-skin-center
+- `--dsw-font-xxxs-11-font-size`  ← dsh-client-ui-skin-center
+- `--dsw-font-xxxs-11-font-style`  ← dsh-client-ui-skin-center
+- `--dsw-font-xxxs-11-font-weight`  ← dsh-client-ui-skin-center
+- `--dsw-font-xxxs-11-line-height`  ← dsh-client-ui-skin-center
+- `--dsw-font-xxxs-strong-11`  ← dsh-client-ui-skin-center
+- `--dsw-font-xxxs-strong-11-font-family`  ← dsh-client-ui-skin-center
+- `--dsw-font-xxxs-strong-11-font-size`  ← dsh-client-ui-skin-center
+- `--dsw-font-xxxs-strong-11-font-style`  ← dsh-client-ui-skin-center
+- `--dsw-font-xxxs-strong-11-font-weight`  ← dsh-client-ui-skin-center
+- `--dsw-font-xxxs-strong-11-line-height`  ← dsh-client-ui-skin-center
+- `--dsw-hovercard-bg`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-linear-gradient-think`  ← dsh-client-ui-skin-center
+- `--dsw-linear-think-select`  ← dsh-client-ui-skin-center
+- `--dsw-skin-scrim`  ← dsh-client-ui-skin-center
+- `--dsw-static-`  ← dsh-client-ui-skin-center
+- `--dsw-static-amber-400`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-static-amber-500`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-static-blue-100`  ← dsh-client-ui-skin-center
+- `--dsw-static-blue-300`  ← dsh-client-ui-skin-center
+- `--dsw-static-blue-400`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-static-blue-450`  ← dsh-client-ui-skin-center
+- `--dsw-static-blue-500`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-static-blue-600`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-static-blue-800`  ← dsh-client-ui-skin-center
+- `--dsw-static-deepseek-400`  ← dsh-client-ui-primitives
+- `--dsw-static-deepseek-450`  ← dsh-client-ui-primitives
+- `--dsw-static-deepseek-500`  ← dsh-client-ui-primitives
+- `--dsw-static-green-400`  ← dsh-client-ui-skin-center
+- `--dsw-static-green-500`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-static-neutral-00`  ← dsh-client-ui-primitives
+- `--dsw-static-neutral-200`  ← dsh-client-ui-sidebar-right
+- `--dsw-static-neutral-400`  ← dsh-client-ui-primitives
+- `--dsw-static-neutral-700`  ← dsh-client-ui-sidebar-right
+- `--dsw-static-neutral-bluish-00`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-static-neutral-bluish-1000`  ← dsh-client-ui-skin-center
+- `--dsw-static-neutral-bluish-200`  ← dsh-client-ui-skin-center
+- `--dsw-static-neutral-bluish-300`  ← dsh-client-ui-skin-center, dsh-client-ui-primitives
+- `--dsw-static-neutral-bluish-400`  ← dsh-client-ui-skin-center
+- `--dsw-static-neutral-bluish-500`  ← dsh-client-ui-skin-center
+- `--dsw-static-neutral-bluish-600`  ← dsh-client-ui-skin-center
+- `--dsw-static-neutral-bluish-700`  ← dsh-client-ui-skin-center
+- `--dsw-static-neutral-bluish-750`  ← dsh-client-ui-skin-center
+- `--dsw-static-neutral-bluish-800`  ← dsh-client-ui-skin-center
+- `--dsw-static-neutral-bluish-950`  ← dsh-client-ui-skin-center
+- `--dsw-static-red-600`  ← dsh-client-ui-primitives
+
