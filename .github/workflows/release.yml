@@ -65,13 +65,16 @@ jobs:
         run: npm publish --registry https://registry.npmjs.org/
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # v5.5.0：Release 正文改为从 CHANGELOG.md 自动提取。
+      # 原先这里是写死的「（更新日志待手动填写）」占位串，导致每个新 tag 的 Release 页面
+      # 都只有那句占位——v5.2.0 就是这么漏掉的（事后才手工补）。
+      # 取不到该版本小节时输出一句可读兜底文案，不阻断发布；本地可用 tools/release-notes.mjs 预演。
+      - name: Extract release notes
+        if: startsWith(github.ref, 'refs/tags/')
+        run: node tools/release-notes.mjs "$GITHUB_REF_NAME" > release-notes.md
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: dsh-novel-writer-v${{ steps.ver.outputs.VERSION }}.zip
-          # 更新日志手动填写：Release 创建后由作者/助手用 gh release edit 补充 notes
-          body: |
-            # dsh-novel-writer v${{ steps.ver.outputs.VERSION }}
-
-            （更新日志待手动填写——发布后运行 gh release edit 补充说明）
+          body_path: release-notes.md
