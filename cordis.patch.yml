@@ -1,4 +1,4 @@
-# dsh-novel-writer v5.0.0 bundle patch: 18 tools (incl. novel_semantic_search) + local embedding engine.
+# dsh-novel-writer v5.2.0 bundle patch: 18 tools (incl. novel_semantic_search) + local embedding engine.
 # dsh-novel-writer bundle patch: mounts the novel-writing assistant plugin
 # into the profile's loader tree. The entry's name is the plugin package
 # itself, resolved from the profile's node_modules.
@@ -6,8 +6,13 @@
 # v0.3.0: the same row now carries BOTH halves — the node half (exports ".")
 # runs in the host process (novel_* tools + /api/dsh-novel-writer/state
 # routes for the UI switch), and the dsh.client declaration in package.json
-# makes the browser half (exports "./client") load in the web GUI, mounting
-# the 「写作助手功能」 sidebar entry with the enable switch.
+# makes the browser half (exports "./client") load in the web GUI.
+#
+# v5.2.0: the browser half no longer injects DOM into the host's sidebar
+# column. It registers official seats instead — a right-sidebar tab type
+# (ctx.sidebarRightTabs.register + sidebar.right.pane.tab) plus a footer
+# entry (sidebar.footer.action). Hosts without those services (pre-0.2.0)
+# fall back to the old DOM-injection path automatically.
 - insert:
     - id: novel-writer
       name: 'dsh-novel-writer'

@@ -1,5 +1,26 @@
 # 更新日志（Changelog）
 
+## [5.2.0] - 2026-09-29
+
+**侧边栏改走官方席位：不再往宿主 DOM 里塞东西。**
+
+用户反馈：装到 DSH 0.2.0 桌面端后，插件的侧边栏面板「跟官方侧边栏格格不入」。
+
+**原因**：v5.1.1 及以前，浏览器半边是 **DOM 注入**——`document.querySelector('[class*="sidebarCol"]')` 找到宿主的侧栏列，自己 `createElement` + `createRoot` 塞一个入口按钮，把面板容器挂进 `[class*="centerCol"]`，再用自写 CSS + `[data-sidebar-collapsed]`、`--dsw-specific-*` 变量模拟宿主样式。宿主一改版就失效（v4.3.0 已因 CSS-module class 名变更改过一次选择器），深色主题、圆角、描边、间距也跟官方对不上——观感「格格不入」是必然结果。
+
+**修法**（改用 DSH 0.2.0 提供的官方两段式席位）：
+
+1. **tab 类型声明**：`ctx.sidebarRightTabs.register({ id: "dsh-novel-writer", kind: "novel-writer", keepMounted: true, title, guide })`。`title` / `guide[].title` / `guide[].description` 都是 thunk（读时求值，切语言无需重注册）；`keepMounted` 让切 tab、切会话、收起再展开时保留滚动位置与展开态。
+2. **正文**：`ctx.slots.register({ name: "sidebar.right.pane.tab", key: "dsh-novel-writer" }, SidebarPanePanel)`。面板从此是宿主右栏里的一个正规 tab——tab chip、停靠、分栏、浮动、**每会话布局持久化**、深浅主题全部由宿主负责；面板自身不再画关闭按钮（关闭由 tab chip 提供）。
+3. **入口**：`sidebar.footer.action`（左栏页脚、设置旁）一个图标按钮，宽栏 = 图标 + 文字、56px 轨道 = 纯图标，点击 `ctx.sidebarRight.openTab("novel-writer")`；另注册 `guide` 入口，侧栏「+ → 引导页」里也能找到它。
+4. **chip 标题**：`sidebar.right.pane.tab.title` 席位——已打开的 tab 在切语言时也跟着变。
+5. **老宿主自动回退**：检测不到 `ctx.sidebarRightTabs` / `ctx.sidebarRight`（DSH < 0.2.0）时继续走 v5.1.1 的 DOM 注入路径，既有用户与老宿主不受影响。
+6. 设置页那张卡片不变——它一直用的就是官方 `settings.plugin.item` 席位。
+
+**兼容性**：工具数量、参数与返回结构一律不变（仍 18 个）；宿主侧 `lib/index.js` 未改动；状态文件字段未变。浏览器半边新增样式类 `nwPanelSeated` / `nwFootEntry*`，旧类名保留给回退路径。
+
+**回归测试**：`test/client-test.mjs` 新增 v5.2.0 覆盖段——用带 `sidebarRightTabs` / `sidebarRight` 的假 ctx 重新加载一份模块实例，断言：tab 类型 id/kind/guide、正文席位 `key` 必须等于类型 id（写错就是空白面板）、chip 标题席位、页脚入口宽窄两态、点击真的调用 `openTab("novel-writer")`、seated 面板不带自绘关闭键。原有用例继续覆盖「老宿主回退路径」。
+
 ## [5.1.1] - 2026-09-18
 
 **UI 修复：提示词「场景」按钮点不动。**

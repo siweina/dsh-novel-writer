@@ -434,5 +434,80 @@ const currentBtn = probeSegs.find((b) => b.props.className.includes("nwSegBtnOn"
 if (currentBtn && vnodeText(currentBtn).trim() !== "通用") fail("当前场景高亮错位：" + vnodeText(currentBtn).trim());
 console.log("场景按钮可点（v5.1.1）: 8 个分段按钮全部可点 | 点击「写新章」→ toggle({promptScene:\"writing\"}) ✓ | 档位非 full 时提示「暂不注入」✓");
 
+// ---------------------------------------------------------------------------
+// v5.2.0：官方侧边栏席位（DSH 0.2.0+ 的 ctx.sidebarRightTabs / ctx.sidebarRight）
+// 上面那些断言走的是"老宿主"路径——假 ctx 没有这两个服务，插件回退到 v5.1.1 的 DOM 注入。
+// 这一段换成带官方服务的 ctx 重新加载一份模块实例，断言确实走了官方席位：
+//   ① 注册 tab 类型（id / kind / guide / title thunk）
+//   ② 正文席位 key = 类型 id（宿主按 id 派发正文，key 写错就是空白面板）
+//   ③ tab chip 标题席位
+//   ④ 左栏页脚入口席位，宽/窄两态，点击 → sidebarRight.openTab(kind)
+//   ⑤ 接管后不再 DOM 注入：正文组件必须带 seated 标记且不自绘关闭键
+// ---------------------------------------------------------------------------
+const official = { tabType: null, seats: [], opened: [], injected: [] };
+const officialCtx = {
+  effect: (fn) => fn(),
+  slots: {
+    inject: (name, fn) => { official.injected.push(name); return fn(); },
+    register: (opts, component) => { official.seats.push({ opts, component }); return () => {}; }
+  },
+  sidebarRight: { openTab: (kind) => { official.opened.push(kind); } },
+  sidebarRightTabs: { register: (definition) => { official.tabType = definition; return () => {}; } }
+};
+const officialWarnings = [];
+console.warn = (...args) => { officialWarnings.push(args.map((a) => String(a)).join(" ")); };
+try {
+  loaded.factory(fakeRequire).apply(officialCtx);
+} catch (err) {
+  console.warn = originalWarn;
+  fail("官方席位路径 apply 抛错: " + err);
+}
+console.warn = originalWarn;
+if (officialWarnings.length > 0) fail("官方席位路径出现插件告警（席位注册失败被吞掉）: " + officialWarnings.join(" | "));
+if (!official.tabType) fail("未注册官方 tab 类型（ctx.sidebarRightTabs.register 从未被调用）");
+if (official.tabType.id !== "dsh-novel-writer") fail("tab 类型 id 应为包名，实际 " + official.tabType.id);
+if (official.tabType.kind !== "novel-writer") fail("tab kind 应为 novel-writer，实际 " + official.tabType.kind);
+if (typeof official.tabType.title !== "function") fail("tab 类型缺 title thunk（切语言不会跟随）");
+if (!Array.isArray(official.tabType.guide) || official.tabType.guide.length !== 1) {
+  fail("tab 类型应带 1 个引导入口（侧栏「+ → 引导页」的可发现性），实际 " + JSON.stringify(official.tabType.guide));
+}
+if (typeof official.tabType.guide[0].title !== "function") fail("引导入口 title 应为 thunk");
+const bodySeat = official.seats.find((s) => s.opts.name === "sidebar.right.pane.tab");
+if (!bodySeat) fail("未注册右栏正文席位（sidebar.right.pane.tab）");
+if (bodySeat.opts.key !== official.tabType.id) {
+  fail("正文席位 key 必须等于 tab 类型 id（宿主按 id 派发正文），实际 " + bodySeat.opts.key);
+}
+if (!official.seats.some((s) => s.opts.name === "sidebar.right.pane.tab.title")) {
+  fail("未注册 tab chip 标题席位（sidebar.right.pane.tab.title）");
+}
+const footSeat = official.seats.find((s) => s.opts.name === "sidebar.footer.action");
+if (!footSeat) fail("未注册左栏页脚入口（sidebar.footer.action）");
+
+// 正文组件：带 inject 工厂提供的 props 渲染，必须是 seated 面板且不自绘关闭键
+const bodyProps = typeof bodySeat.opts.inject === "function" ? bodySeat.opts.inject() : {};
+if (!bodyProps.controller || typeof bodyProps.controller.getSnapshot !== "function") fail("正文席位的 inject 未提供 controller");
+const seatedRender = runRender(reactStub.createElement(bodySeat.component, bodyProps));
+if (!seatedRender.classes.has("nwPanel")) fail("右栏正文未渲染出 .nwPanel（类名：" + [...seatedRender.classes].join(" ") + "）");
+if (!seatedRender.classes.has("nwPanelSeated")) fail("右栏正文未带 nwPanelSeated 标记：" + [...seatedRender.classes].join(" "));
+if (seatedRender.classes.has("nwClose")) fail("seated 面板不应自绘关闭按钮（关闭由宿主 tab chip 提供）");
+
+// 左栏入口：宽栏=图标+文字，窄栏=纯图标；点击必须调用 openTab(kind)
+const footProps = typeof footSeat.opts.inject === "function" ? footSeat.opts.inject() : {};
+if (typeof footProps.onOpen !== "function") fail("页脚入口的 inject 未提供 onOpen");
+const wideRender = runRender(reactStub.createElement(footSeat.component, { ...footProps, wide: true }));
+const railRender = runRender(reactStub.createElement(footSeat.component, { ...footProps, wide: false }));
+if (!wideRender.classes.has("nwFootEntry")) fail("宽栏入口类名异常：" + [...wideRender.classes].join(" "));
+if (wideRender.classes.has("nwFootEntryRail")) fail("宽栏入口不应带窄栏类名");
+if (!railRender.classes.has("nwFootEntryRail")) fail("窄栏（56px 轨道）入口未带 nwFootEntryRail：" + [...railRender.classes].join(" "));
+const footBtn = (wideRender.buttons || []).find((b) => String(b.props.className || "").includes("nwFootEntry"));
+if (!footBtn) fail("宽栏入口没渲染出 button 节点");
+if (typeof footBtn.props.onClick !== "function") fail("左栏入口缺 onClick");
+footBtn.props.onClick();
+if (official.opened.length !== 1 || official.opened[0] !== "novel-writer") {
+  fail("点击入口未调用 sidebarRight.openTab(\"novel-writer\")，实际 " + JSON.stringify(official.opened));
+}
+console.log("官方侧边栏席位（v5.2.0）: tab 类型 id/kind/guide ✓ | 正文席位 key=id ✓ | chip 标题席位 ✓"
+  + " | 页脚入口宽窄两态 ✓ | 点击 → openTab(" + official.opened[0] + ") ✓ | seated 面板无自绘关闭键 ✓");
+
 cleanupHooks(); // 执行 effect 清理（取消控制器订阅），避免残留句柄影响进程退出
 console.log("CLIENT OK");
