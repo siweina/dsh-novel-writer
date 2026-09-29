@@ -282,11 +282,16 @@ if (typeof exported.apply !== "function") fail("apply 类型应为 function，�
 console.log("apply 类型:", typeof exported.apply);
 
 let slotRegistered = null;
+// v5.2.0：假宿主也要如实建模宿主的"槽位声明表"——未声明的槽位 register 会抛错、
+// inject 的时机也由声明决定（真机事故就是从这里来的）。老宿主（v5.1.1 那套）只声明设置卡槽位。
+const SIDEBAR_SEATS = ["sidebar.footer.action", "sidebar.right.pane.tab", "sidebar.right.pane.tab.title"];
+const DECLARED_LEGACY = new Set(["settings.plugin.item"]);
 const ctx = {
   effect: (fn) => fn(),
   slots: {
     inject: (name, fn) => { fn(); },
-    register: (opts, component) => { slotRegistered = { opts, component }; }
+    register: (opts, component) => { slotRegistered = { opts, component }; },
+    specDynamic: (name) => (DECLARED_LEGACY.has(name) ? {} : void 0)
   }
 };
 // v4.0.0：挂载异常不再被 console.warn 吞掉——apply 期间任何 [dsh-novel-writer] 告警都视为失败
@@ -445,11 +450,13 @@ console.log("场景按钮可点（v5.1.1）: 8 个分段按钮全部可点 | 点
 //   ⑤ 接管后不再 DOM 注入：正文组件必须带 seated 标记且不自绘关闭键
 // ---------------------------------------------------------------------------
 const official = { tabType: null, seats: [], opened: [], injected: [] };
+const OFFICIAL_DECLARED = new Set(["settings.plugin.item", ...SIDEBAR_SEATS]);
 const officialCtx = {
   effect: (fn) => fn(),
   slots: {
     inject: (name, fn) => { official.injected.push(name); return fn(); },
-    register: (opts, component) => { official.seats.push({ opts, component }); return () => {}; }
+    register: (opts, component) => { official.seats.push({ opts, component }); return () => {}; },
+    specDynamic: (name) => (OFFICIAL_DECLARED.has(name) ? {} : void 0)
   },
   sidebarRight: { openTab: (kind) => { official.opened.push(kind); } },
   sidebarRightTabs: { register: (definition) => { official.tabType = definition; return () => {}; } }
@@ -510,55 +517,70 @@ console.log("官方侧边栏席位（v5.2.0）: tab 类型 id/kind/guide ✓ | �
   + " | 页脚入口宽窄两态 ✓ | 点击 → openTab(" + official.opened[0] + ") ✓ | seated 面板无自绘关闭键 ✓");
 
 // ---------------------------------------------------------------------------
-// v5.2.0 修正回归：官方服务「后到」时必须能接管（真机踩到的坑）
-// 现象：桌面端 0.2.0 装上新版本后入口仍在老位置——官方包把 "sidebarRightTabs" 写进
-// 自己的 inject 等它就绪，而我们的 inject 只有 slots/locale，apply 得更早，
-// 直接探测时服务还不存在 → 静默退回 DOM 注入。
-// 修法：先挂旧路径兜底，再用回调形式的 ctx.inject 等 sidebarRight/sidebarRightTabs，
-// 就绪后接管官方席位并撤掉旧 UI。本段就是钉住这个时序。
+// v5.2.0 二次修正回归：两个真机事故一起钉住
+//  ① 事故：用回调形式的 ctx.inject 等 sidebarRight/sidebarRightTabs 会让宿主把本 entry
+//     判为 did not activate，桌面端直接启动失败（crash log：web boot: 1 entry did not activate）。
+//     → 本段用一个**没有 inject**（也没有官方服务）的 ctx，必须能正常 apply 且走旧路径兜底。
+//  ② 服务后到时要有接管路径，且探测要支持第三方插件惯用的 ctx.get(name) 取法。
 // ---------------------------------------------------------------------------
 const isLegacyEntry = (n) => n instanceof HTMLElementStub && n.dataset && n.dataset.dshNovelWriterEntry !== undefined;
-const late = { deps: null, cb: null, tabType: null, seats: [], opened: [] };
+const late = { tabType: null, seats: [], opened: [] };
+const lateDeclared = new Set(["settings.plugin.item"]);
 const lateCtx = {
   effect: (fn) => fn(),
   slots: {
     inject: (name, fn) => { fn(); },
-    register: (opts, component) => { late.seats.push({ opts, component }); return () => {}; }
-  },
-  // 只给回调形式：模拟"服务本体稍后才就绪"的宿主
-  inject: (deps, cb) => { late.deps = deps; late.cb = cb; return () => {}; }
+    register: (opts, component) => { late.seats.push({ opts, component }); return () => {}; },
+    specDynamic: (name) => (lateDeclared.has(name) ? {} : void 0)
+  }
+  // 关键：故意 **不提供** ctx.inject、也不提供官方服务
 };
 const beforeLegacy = collect(body, isLegacyEntry).length;
-loaded.factory(fakeRequire).apply(lateCtx);
-if (typeof late.cb !== "function") fail("服务缺席时未用 ctx.inject 回调等待（官方席位永远不会接管）");
-if (JSON.stringify(late.deps) !== JSON.stringify(["sidebarRight", "sidebarRightTabs"])) {
-  fail("等待的服务名不对：" + JSON.stringify(late.deps));
-}
-// 注意：slots.register 也会被设置页卡片用到，所以这里只断言"官方席位"没被注册
+const exportedLate = loaded.factory(fakeRequire);
+exportedLate.apply(lateCtx);
+// 注意：slots.register 也会被设置页卡片用到，所以只断言"官方席位"没被注册
 if (late.seats.some((s) => s.opts.name === "sidebar.right.pane.tab" || s.opts.name === "sidebar.footer.action")) {
-  fail("服务尚未就绪却已注册官方席位（时序守卫失效）");
+  fail("服务缺席却注册了官方席位（探测/守卫失效）");
 }
 const afterLegacy = collect(body, isLegacyEntry).length;
 if (afterLegacy !== beforeLegacy + 1) {
-  fail("兜底旧入口未挂载（" + beforeLegacy + " → " + afterLegacy + "，期望 +1）");
+  fail("服务缺席时旧入口未挂载（兜底失效：" + beforeLegacy + " → " + afterLegacy + "，期望 +1）");
 }
-// 服务后到：回调触发 → 注册官方席位 + 撤掉旧 UI
-const arrivedCtx = {
-  effect: (fn) => fn(),
-  slots: lateCtx.slots,
-  sidebarRight: { openTab: (kind) => { late.opened.push(kind); } },
-  sidebarRightTabs: { register: (definition) => { late.tabType = definition; return () => {}; } }
-};
-late.cb(arrivedCtx);
+if (typeof exportedLate.__internals.syncOfficialSidebar !== "function") {
+  fail("未暴露 syncOfficialSidebar（服务后到的接管路径无法验证）");
+}
+// 服务后到：挂到同一个 ctx 上，再驱动一次同步（真实实现另有 250ms 有界轮询兜这一手）
+lateCtx.sidebarRightTabs = { register: (definition) => { late.tabType = definition; return () => {}; } };
+lateCtx.sidebarRight = { openTab: (kind) => { late.opened.push(kind); } };
+SIDEBAR_SEATS.forEach((name) => lateDeclared.add(name)); // 右栏包到位，席位随之声明
+exportedLate.__internals.syncOfficialSidebar();
 if (!late.tabType || late.tabType.id !== "dsh-novel-writer") fail("服务就绪后未注册 tab 类型");
-if (!late.seats.some((s) => s.opts.name === "sidebar.right.pane.tab")) fail("服务就绪后未注册正文席位");
-if (!late.seats.some((s) => s.opts.name === "sidebar.footer.action")) fail("服务就绪后未注册左栏入口");
+if (!late.seats.some((s) => s.opts.name === "sidebar.footer.action")) fail("服务就绪后未接管左栏入口席位");
+if (!late.seats.some((s) => s.opts.name === "sidebar.right.pane.tab")) fail("服务就绪后未注册右栏正文席位");
 const afterTakeover = collect(body, isLegacyEntry).length;
 if (afterTakeover !== beforeLegacy) {
   fail("接管后旧入口未撤掉（" + afterTakeover + " 个，期望回到 " + beforeLegacy + "）");
 }
-console.log("官方服务后到接管（v5.2.0 修正）: 先挂兜底旧入口 ✓ | ctx.inject 等 [" + late.deps.join(",") + "] ✓"
-  + " | 就绪后注册席位并撤掉旧 UI ✓");
+// 第三方插件惯用写法：服务从 ctx.get(name) 取（见 @linxin666/dsh-client-ui-market）
+const viaGet = { tabType: null, seats: [] };
+const getCtx = {
+  effect: (fn) => fn(),
+  get: (name) => {
+    if (name === "sidebarRightTabs") return { register: (definition) => { viaGet.tabType = definition; return () => {}; } };
+    if (name === "sidebarRight") return { openTab: () => {} };
+    return void 0;
+  },
+  slots: {
+    inject: (name, fn) => fn(),
+    register: (opts, component) => { viaGet.seats.push({ opts, component }); return () => {}; },
+    specDynamic: (name) => (SIDEBAR_SEATS.includes(name) || name === "settings.plugin.item" ? {} : void 0)
+  }
+};
+loaded.factory(fakeRequire).apply(getCtx);
+if (!viaGet.tabType) fail("ctx.get 读取 sidebarRightTabs 失败（服务探测路径断了）");
+if (!viaGet.seats.some((s) => s.opts.name === "sidebar.footer.action")) fail("ctx.get 路径未接管左栏入口");
+console.log("官方服务后到接管（v5.2.0 二次修正）: 无 ctx.inject 依赖（不再拖垮启动）✓ | 缺席时旧路径兜底 ✓"
+  + " | 服务到达后接管入口 + 右栏 tab 并撤掉旧 UI ✓ | ctx.get 探测 ✓");
 
 cleanupHooks(); // 执行 effect 清理（取消控制器订阅），避免残留句柄影响进程退出
 console.log("CLIENT OK");

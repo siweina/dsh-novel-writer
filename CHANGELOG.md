@@ -16,7 +16,10 @@
 4. **chip 标题**：`sidebar.right.pane.tab.title` 席位——已打开的 tab 在切语言时也跟着变。
 5. **老宿主自动回退**：检测不到 `ctx.sidebarRightTabs` / `ctx.sidebarRight`（DSH < 0.2.0）时继续走 v5.1.1 的 DOM 注入路径，既有用户与老宿主不受影响。
 6. 设置页那张卡片不变——它一直用的就是官方 `settings.plugin.item` 席位。
-7. **时序修正（首轮真机验证后补）**：官方席位是**后到的服务**——官方包（如 `ui-sidebar-documentpreview`）把 `"sidebarRightTabs"` 写进自己的 `inject` 数组来等它就绪，而我们的 `inject` 只有 `slots` / `locale`，`apply` 得比它早。首版在 apply 时直接探测，必然扑空并静默退回旧路径（桌面端 0.2.0 上的表现就是「入口仍在老位置」）。现改为两步：**① 先挂旧路径兜底**；**② 用回调形式的 `ctx.inject(["sidebarRight", "sidebarRightTabs"], …)` 等依赖就绪**，就绪后接管官方席位并撤掉旧 UI。老宿主上该回调永不触发，行为与 v5.1.1 一致。
+7. **两轮真机事故后的最终做法**（这一条是本版最贵的教训）：
+   - **事故一 · 不生效**：首版在 `apply` 里直接读 `ctx.sidebarRightTabs` 探测——服务可能比我们晚就绪，而未在 `inject` 声明的服务也未必读得到，于是**静默退回旧路径**，桌面端上表现为「入口还在老位置、什么都没变」。
+   - **事故二 · 启不来**（我引入的严重回归）：改用回调形式的 `ctx.inject(["sidebarRight", "sidebarRightTabs"], …)` 去等依赖——客户端宿主把「等待未满足依赖的 entry」判为 `did not activate`，**整个 web boot 失败、桌面端起不来**（crash log：`web boot: 1 entry did not activate / dsh-novel-writer: failed`）。**该写法已彻底删除**：插件永远不能拖垮宿主启动。
+   - **最终做法**：① 取服务一律 `ctx.get(name)` + 判空（第三方插件惯用写法，见 `@linxin666/dsh-client-ui-market`），同时兼容属性访问；② 接管分**两级渐进增强**——先只把入口注册进 `sidebar.footer.action`（只依赖 `slots`，且必须先用 `ctx.slots.specDynamic(name)` 确认宿主**声明**了该席位，未声明就保留旧入口），再尝试把面板升级为右栏 tab（需要 `sidebarRightTabs`；**正文席位挂不上就不算接管**，免得旧面板被撤掉却没有替代品）；③ 服务晚到用**有界轮询**兜（40 × 250ms，定时器 `unref`，不参与任何激活判定），最坏情况就是保持 v5.1.1 的旧路径。
 
 **兼容性**：工具数量、参数与返回结构一律不变（仍 18 个）；宿主侧 `lib/index.js` 未改动；状态文件字段未变。浏览器半边新增样式类 `nwPanelSeated` / `nwFootEntry*`，旧类名保留给回退路径。
 
