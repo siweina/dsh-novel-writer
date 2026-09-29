@@ -27,6 +27,8 @@
    - 取服务一律 `ctx.get(name)` + 判空（第三方插件惯用写法，见 `@linxin666/dsh-client-ui-market`）。
    - 本版所有注册路径都在 `try/catch` 内，**最坏情况只是保留 v5.1.1 的旧路径，不可能再拖垮宿主启动**。
 
+**另一处真机误报修正（同版）**：面板里点「打开文件夹」明明已经打开目录，却提示「explorer 启动失败，未能定位目录」。原因是 `openInExplorer()` 用 `resolve(!err)` 判成败，而 **Windows 的 `explorer.exe` 即使成功打开目录也常返回退出码 1**（它的退出码本来就不表达成败）。现在只认"进程根本没起来"——那种错误的 `code` 是**字符串** errno（`ENOENT` / `EACCES` …），带**数字**退出码（0/1/2…）一律视为已交给系统外壳；判据抽成纯函数 `explorerSpawnFailed(err)` 并加了 e2e 断言。macOS 的 `open` / Linux 的 `xdg-open` 退出码可信，逻辑不变；失败文案也改为如实描述：「未能调用系统文件管理器（explorer / open / xdg-open 都没能启动）；可手动打开：<路径>」。
+
 **兼容性**：工具数量、参数与返回结构一律不变（仍 18 个）；宿主侧 `lib/index.js` 未改动；状态文件字段未变。老宿主（未声明这两个席位）继续走旧路径。
 
 **回归测试**：`test/client-test.mjs` 的假宿主补上「槽位声明表」（`specDynamic`）并覆盖四条路径——席位在场（两个席位同 id、图标组件 `{size,active}`、主栏页面渲染、关闭走 `layout.selectPanel(null)`、旧 DOM 入口被撤）、席位缺席且**无 `ctx.inject`**（必须正常 apply 并走旧路径）、席位晚声明（`tryOfficialPanel` 接管并撤旧 UI）、`ctx.get` 取 `layout`。

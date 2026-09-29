@@ -4,7 +4,7 @@ import { mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, readdirSync
 import { join } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { apply } from "../lib/index.js";
-import { ALL_TOOLS } from "../lib/core.js"; // v5.0.0：工具清单的单一事实源
+import { ALL_TOOLS, explorerSpawnFailed } from "../lib/core.js"; // v5.0.0：工具清单的单一事实源；v5.2.0：explorer 误报修正的判据
 
 // v3.9.5 修正（H3）：先隔离 env、再解析 STATE_FILE——旧版在模块加载时先绑定了用户真实 ~/.dsh 路径，
 // 退出处理器可能写回/删除真实用户配置；testRoot 也移出仓库目录（不再在 test/ 下留残渣）
@@ -1243,6 +1243,19 @@ await (async function v500PostAuditFixes() {
   if (!/缺少 state/.test(noState)) throw new Error("缺 state 的报错文案未区分「没传」: " + noState);
   console.log("v5.0.0 修补回归: title 进文件名 + 非法字符剥离 ✓ | 文件名优先、无标题回退 H1 ✓ | 清单渲染带 itemId ✓ | verify 显示人工标记 ✓ | state 报错区分「没传/非法值」✓");
 })();
+
+// ⑧ v5.2.0 修正：explorer.exe 的退出码不可信——成功打开目录时也常返回 1。
+// 判据只能看"进程有没有起来"（字符串 errno）；数字退出码一律视为已交给系统外壳。
+{
+  if (typeof explorerSpawnFailed !== "function") throw new Error("explorerSpawnFailed 未导出");
+  if (explorerSpawnFailed(null) !== false) throw new Error("无错误被判成启动失败");
+  if (explorerSpawnFailed({ code: 0 }) !== false) throw new Error("退出码 0 被判成启动失败");
+  if (explorerSpawnFailed({ code: 1 }) !== false) throw new Error("退出码 1 被判成启动失败（真机误报的根因）");
+  if (explorerSpawnFailed({ code: 2, killed: false }) !== false) throw new Error("其它非零退出码被判成启动失败");
+  if (explorerSpawnFailed({ code: "ENOENT" }) !== true) throw new Error("ENOENT 未被判成启动失败");
+  if (explorerSpawnFailed({ code: "EACCES" }) !== true) throw new Error("EACCES 未被判成启动失败");
+  console.log("v5.2.0 explorer 误报修正: 退出码 0/1/2 视为成功 ✓ | ENOENT/EACCES 视为启动失败 ✓");
+}
 
 // 清理缓存文件（保留状态文件）
 rmSync(testRoot, { recursive: true, force: true });
