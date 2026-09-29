@@ -16,9 +16,7 @@ Sentence, emotion and semantic analysis all run **on your machine**: a 24MB Chin
 **zero API cost, your manuscript never leaves the device**. Built for DeepSeek Harness (DSH); the same engine is also
 exposed as a **stdio MCP server** for Claude Desktop / Cursor.
 
-🔗 **Website**: <https://siweina.github.io/dsh-novel-writer/> · **Technical docs (parameters and examples for all 18 tools)**: <https://siweina.github.io/dsh-novel-writer/tools/>
-
-[Website](https://siweina.github.io/dsh-novel-writer/) · [Technical docs](https://siweina.github.io/dsh-novel-writer/tools/) · [Install](#install) · [The writing loop](#the-writing-loop-end-to-end) · [60-second start](#60-second-start) · [See the output](#see-the-output) · [The 18 tools](#provided-tools-18) · [MCP server](#mcp-server-usable-outside-dsh)
+[Website](https://siweina.github.io/dsh-novel-writer/) · [Technical docs (parameters & examples for all 18 tools)](https://siweina.github.io/dsh-novel-writer/tools/) · [Install](#install) · [The writing loop](#the-writing-loop-end-to-end) · [60-second start](#60-second-start) · [See the output](#see-the-output) · [The 18 tools](#provided-tools-18) · [MCP server](#mcp-server-usable-outside-dsh)
 
 ---
 
@@ -33,12 +31,6 @@ exposed as a **stdio MCP server** for Claude Desktop / Cursor.
 | ⑤ **Audit** | "show me the book's structure" | `novel_plot { action: "graph" }` | Plot-thread spans / consecutive character absences / largest thread gap / timeline order / outline-vs-body drift |
 
 > **Everything local, read-only by default**: the brief and the structure view **write no files at all**; the fix desk writes only its own list file, **never touches your prose and never writes prose for you**; semantic search and emotion analysis cost zero tokens.
-
-> **Token-saving mode (new in v5.1.0)**: the sidebar's **Lean workflow** switch (or `novel_sentence_config` with `leanWorkflow=true`) keeps exactly one rule — **call tools on demand**: no automatic self-checks, no re-checking fix lists, no registry updates; report tools return the brief form unless you explicitly pass `brief` (style report: 181 chars vs 1725 for the full one).
->
-> **v5.1.0 cost & feel fixes**: v5.0.0 had turned "always run a self-check after writing + the closing trio" and "mark every item + verify repeatedly" into mandatory checklists — one chapter went from 3 tool calls to 6, and revising took 30+. Together with "build sentences to the skeletons" and "fix any out-of-band dimension", that made prose stiff. This release makes all of it **on demand**: a chapter now takes **2 calls and up**, the fix-list cap dropped **40 → 12** with only the worst paragraph per dimension, and it now says plainly that **out-of-band ≠ defect** (keep lyrical / psychological / elliptical passages when they read fine — `mark` them `skip`).
->
-> **v5.2.0 official sidebar integration**: the browser half no longer injects DOM into the host. It uses the DSH 0.2.0 seats — `ctx.sidebarRightTabs.register` declares the tab type, `sidebar.right.pane.tab` provides the body (tab chip, docking, splitting, per-session layout and theming all belong to the host), `sidebar.footer.action` adds the left-sidebar entry, and `sidebar.right.pane.tab.title` keeps an open tab's label following language changes. Hosts without these services fall back to the old path automatically; tools, parameters and the state file are unchanged (still 18 tools).
 
 ## What problem does it solve
 
@@ -59,19 +51,22 @@ exposed as a **stdio MCP server** for Claude Desktop / Cursor.
 **Option 1: npm (recommended)**
 
 ```sh
-dsh plugin --profile web add dsh-novel-writer
+dsh plugin add dsh-novel-writer
 ```
+
+(Add `--profile <name>` to target a specific profile, e.g. `--profile desktop`.)
 
 **Option 2: From GitHub**
 
 ```sh
-dsh plugin --profile web add github:siweina/dsh-novel-writer#main
+dsh plugin add github:siweina/dsh-novel-writer#main
 ```
 
 **Option 3: MCP (no DSH required)** — see [MCP server](#mcp-server-usable-outside-dsh)
 
-Requires **Node >= 22.3**. After installing, **restart the web app**; a 「写作助手功能」 ("Writing Assistant") panel
-appears in the sidebar.
+Requires **Node >= 22.3**. After installing, **restart DSH** (desktop / web); a 「写作助手功能」 ("Writing Assistant")
+entry appears in the left sidebar's main nav (official DSH 0.2.0+ seat; older hosts fall back to the previous
+mounting path automatically).
 
 ## 60-second start
 
@@ -155,7 +150,7 @@ fixAnchors：3 条原著锚段（对话 / 心理 / 描写各一条，供逐句�
 | Cost | **0 (local inference)** | Billed per token | Self-hosted |
 | Purpose-built for Chinese fiction | **Yes** | Generic | No |
 | Style baseline (μ±σ) | **Yes** | Rare | No |
-| DSH integration | **18 tools + sidebar toggles** | None | None |
+| DSH integration | **18 tools + official seats & website-style UI** | None | None |
 | Usable without DSH | **Yes (MCP)** | Yes | You wrap it yourself |
 
 > **A note for non-Chinese users**: this plugin is designed for analysing and writing Chinese fiction — the sentence-pattern,
@@ -175,10 +170,10 @@ fixAnchors：3 条原著锚段（对话 / 心理 / 描写各一条，供逐句�
 6. **Emotion purification & quantification**: strong/weak emotion-word grading, pollution detection, caveat warning + AI re-verification; Valence sliding window → variance V / delta Δ / conflict index C + implicit imagery carriers.
 7. **Worldview & pragmatics detection**: auto cultural-baseline detection with confidence; speechStyle title/honorifics/rituals/tone norms; genre & theme + webnovel signals.
 8. **Writing toolkit**: plot tracking / five settings tables (characters·locations·items·timeline·worldview) / chapter summaries / continuity audit / batch import / style check / continuation writing.
-9. **Per-tool UI toggles**: 「写作助手功能」 ("Writing Assistant") sidebar panel (master + grouped tool toggles + feature toggles + prompt mode/scene/**lean workflow**), plain-language labels, data-dir usage & semantic-engine status display.**Since v5.2.0 the panel uses the official DSH 0.2.0 seats** — it is a regular tab in the right sidebar (dock, split, float; layout persists per session), opened from an icon next to Settings in the left sidebar (icon + label when wide, icon only in the 56px rail) and listed on the “+ → guide” page; hosts older than 0.2.0 fall back to the previous mounting path automatically.
-10. **Style Baseline**: Six writing metrics (syntactic complexity / modifier density / abstraction / action density / hedging / gap index) + per-chapter μ±σ baseline band; `novel_style_report` outputs the band, `novel_style_check` compares new chapters (in-band ✓ / out-of-band ⚠); per-metric ±% tolerance configurable in the sidebar (**recommended = 1.5× σ of the book's chapter variance**, rounded, clamped to ±10%~100%; leave blank to use recommended) — free theme, writing style kept inside the band.
+9. **Per-tool UI toggles**: a 「写作助手功能」 ("Writing Assistant") entry in the left sidebar plus a main-column panel (**official DSH 0.2.0 seats** since v5.2.0; hosts older than 0.2.0 fall back automatically) — master switch + grouped tool toggles + feature toggles + prompt mode/scene/**lean workflow**, plain-language labels, data-dir usage & semantic-engine status. **The v5.5.0 UI is rebuilt on the official design system with a website-style overhaul**: all colors go through `--dsw-alias-*` semantic tokens (three themes in sync with the host), controls use the official UI primitives, DeepSeek-blue accents, a glow hero header with section kickers, and equal-width pages across every level.
+10. **Style Baseline**: Six writing metrics (syntactic complexity / modifier density / abstraction / action density / hedging / gap index) + per-chapter μ±σ baseline band; `novel_style_report` outputs the band, `novel_style_check` compares new chapters (in-band ✓ / out-of-band ⚠); per-metric ±% tolerance configurable in the panel's **Six-metric baseline** view (**recommended = 1.5× σ of the book's chapter variance**, rounded, clamped to ±10%~100%; leave blank to use recommended) — free theme, writing style kept inside the band.
 11. **Writing sentinels**: `novel_continuity_check` extended — ①**bridge check** (`chapter`: time jumps / semantic distance / character continuity / hook handoff, with quoted evidence) ②**OOC check** (`ooc`: per-character emotion baseline deviation) ③**outline drift** (`outline`: direction vs body keyword overlap); **brief mode** for report tools.
-12. **Original mode & creation files**: fill in creation settings in the sidebar (worldview/characters/forbidden/main conflict/genre/extras, blank = model decides, per-book profile library); novel_outline maintains creation files (bible/characters/outline/hooks/status), enforcing the bible → outline → hook chain with dynamic batches (10→20→30 chapters) to prevent plot jumps and OOC.
+12. **Original mode & creation files**: fill in creation settings in the panel's **Original mode** view (worldview/characters/forbidden/main conflict/genre/extras, blank = model decides, per-book profile library); novel_outline maintains creation files (bible/characters/outline/hooks/status), enforcing the bible → outline → hook chain with dynamic batches (10→20→30 chapters) to prevent plot jumps and OOC.
 13. **Experience & stats**: main panel **library stats** (per-book chapters/total chars/7-day active chars, 🔥 green), **🎬 demo** (built-in sample, no files, runs the 6-dim baseline), **📊 report history** (analysis/style-reports browsing); actionable error hints; slimmer tool descriptions.
 
 ---
