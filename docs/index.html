@@ -345,7 +345,7 @@
           <div class="card__more-in">
             <dl>
               <dt>开关</dt><dd>总开关、18 个工具的分组开关与 5 项功能开关，均可独立控制。</dd>
-              <dt>入口</dt><dd><b>v5.2.0 起走 DSH 官方席位</b>：面板是右栏里的一个正规 tab（可停靠 / 分栏 / 浮动，布局随会话持久化，深浅主题跟随宿主），左栏设置旁有入口图标，侧栏「+ → 引导页」里也能找到它；老版本宿主自动回退旧的侧栏挂载方式。</dd>
+              <dt>入口</dt><dd><b>v5.2.0 起走 DSH 官方席位</b>：入口是左栏主导航区的一行（就在「插件」「任务看板」旁边），面板则是主栏的全局面板——行盒子、选中态、折叠提示、深浅主题全由宿主负责；老版本宿主自动回退旧的侧栏挂载方式。</dd>
               <dt>状态</dt><dd>显示数据目录占用与语义引擎运行状态，便于判断是否需要重建索引。</dd>
               <dt>附加</dt><dd>书库统计（各作品章数、总字数、近 7 天活跃字数）、体验演示（内置示例，不写入磁盘）与报告历史。</dd>
             </dl>
@@ -456,7 +456,7 @@ fixAnchors：<span class="c-num">3</span> 条原著锚段
           <tr><th scope="row">费用</th><td class="is-us"><b>0（本地推理）</b></td><td>按 token 计费</td><td>需自建</td></tr>
           <tr><th scope="row">中文小说专用</th><td class="is-us"><b>是</b></td><td>通用</td><td>否</td></tr>
           <tr><th scope="row">风格基线（μ±σ）</th><td class="is-us"><b>提供</b></td><td>少见</td><td>无</td></tr>
-          <tr><th scope="row">与 DSH 集成</th><td class="is-us"><b>18 个工具 + 官方侧边栏席位</b></td><td>无</td><td>无</td></tr>
+          <tr><th scope="row">与 DSH 集成</th><td class="is-us"><b>18 个工具 + 官方主栏面板</b></td><td>无</td><td>无</td></tr>
           <tr><th scope="row">非 DSH 用户可用</th><td class="is-us"><b>可以（MCP）</b></td><td>可以</td><td>需自行封装</td></tr>
         </tbody>
       </table>
@@ -479,7 +479,7 @@ fixAnchors：<span class="c-num">3</span> 条原著锚段
   <div class="wrap">
     <p class="eyebrow reveal">安装部署</p>
     <h2 class="h2 reveal">两种安装方式，或一行 npx 命令</h2>
-    <p class="lede reveal">运行环境要求 <b>Node ≥ 22.3</b>。安装完成后重启应用：<b>DSH 0.2.0+</b>（含桌面端）会在<b>右栏</b>打开「写作助手功能」tab、左栏设置旁给出入口图标，侧栏「+ → 引导页」里也能找到；更早的宿主则挂成左栏面板。</p>
+    <p class="lede reveal">运行环境要求 <b>Node ≥ 22.3</b>。安装完成后重启应用：<b>DSH 0.2.0+</b>（含桌面端）会在左栏主导航区多出一行「写作助手功能」（与「插件」「任务看板」同排），点开是主栏的全局面板；更早的宿主则挂成会话区面板。</p>
 
     <div class="tabs reveal" role="tablist" aria-label="安装方式">
       <button class="tab is-active" role="tab" aria-selected="true" data-tab="t1">安装至 DSH（推荐）</button>
@@ -489,7 +489,7 @@ fixAnchors：<span class="c-num">3</span> 条原著锚段
 
     <div class="panels reveal">
       <div class="panel is-active" id="t1" role="tabpanel">
-        <p class="panel__note">插件形态，提供 18 个 <code>novel_*</code> 工具与侧边栏面板（DSH 0.2.0+ 走官方席位：右栏 tab + 左栏入口）。</p>
+        <p class="panel__note">插件形态，提供 18 个 <code>novel_*</code> 工具与侧边栏面板（DSH 0.2.0+ 走官方席位：侧栏一行 + 主栏页面）。</p>
         <div class="code">
           <pre><code><span class="c-dim">$</span> dsh plugin --profile web add dsh-novel-writer</code></pre>
           <button class="copy" data-copy="dsh plugin --profile web add dsh-novel-writer" aria-label="复制">复制</button>

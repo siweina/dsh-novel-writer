@@ -284,7 +284,7 @@ console.log("apply 类型:", typeof exported.apply);
 let slotRegistered = null;
 // v5.2.0：假宿主也要如实建模宿主的"槽位声明表"——未声明的槽位 register 会抛错、
 // inject 的时机也由声明决定（真机事故就是从这里来的）。老宿主（v5.1.1 那套）只声明设置卡槽位。
-const SIDEBAR_SEATS = ["sidebar.footer.action", "sidebar.right.pane.tab", "sidebar.right.pane.tab.title"];
+const SIDEBAR_SEATS = ["sidebar.panellist", "main"];
 const DECLARED_LEGACY = new Set(["settings.plugin.item"]);
 const ctx = {
   effect: (fn) => fn(),
@@ -440,27 +440,25 @@ if (currentBtn && vnodeText(currentBtn).trim() !== "通用") fail("当前场景�
 console.log("场景按钮可点（v5.1.1）: 8 个分段按钮全部可点 | 点击「写新章」→ toggle({promptScene:\"writing\"}) ✓ | 档位非 full 时提示「暂不注入」✓");
 
 // ---------------------------------------------------------------------------
-// v5.2.0：官方侧边栏席位（DSH 0.2.0+ 的 ctx.sidebarRightTabs / ctx.sidebarRight）
-// 上面那些断言走的是"老宿主"路径——假 ctx 没有这两个服务，插件回退到 v5.1.1 的 DOM 注入。
-// 这一段换成带官方服务的 ctx 重新加载一份模块实例，断言确实走了官方席位：
-//   ① 注册 tab 类型（id / kind / guide / title thunk）
-//   ② 正文席位 key = 类型 id（宿主按 id 派发正文，key 写错就是空白面板）
-//   ③ tab chip 标题席位
-//   ④ 左栏页脚入口席位，宽/窄两态，点击 → sidebarRight.openTab(kind)
-//   ⑤ 接管后不再 DOM 注入：正文组件必须带 seated 标记且不自绘关闭键
+// v5.2.0：官方席位 = 侧栏一行（sidebar.panellist）+ 主栏页面（main，同一个 id）
+// 这就是「插件」「任务看板」在用的同一套席位（模板见 @linxin666/dsh-client-ui-task-board）：
+// 行盒子/选中态/文字/无障碍名称由宿主 layout 画，我们只提供图标与页面内容。
 // ---------------------------------------------------------------------------
-const official = { tabType: null, seats: [], opened: [], injected: [] };
-const OFFICIAL_DECLARED = new Set(["settings.plugin.item", ...SIDEBAR_SEATS]);
+const isLegacyEntry = (n) => n instanceof HTMLElementStub && n.dataset && n.dataset.dshNovelWriterEntry !== undefined;
+const official = { seats: [], injected: [] };
+const officialDeclared = new Set(["settings.plugin.item", ...SIDEBAR_SEATS]);
+let selectedPanel = "sentinel";
 const officialCtx = {
   effect: (fn) => fn(),
   slots: {
     inject: (name, fn) => { official.injected.push(name); return fn(); },
     register: (opts, component) => { official.seats.push({ opts, component }); return () => {}; },
-    specDynamic: (name) => (OFFICIAL_DECLARED.has(name) ? {} : void 0)
+    specDynamic: (name) => (officialDeclared.has(name) ? {} : void 0),
+    subscribe: () => () => {}
   },
-  sidebarRight: { openTab: (kind) => { official.opened.push(kind); } },
-  sidebarRightTabs: { register: (definition) => { official.tabType = definition; return () => {}; } }
+  layout: { selectPanel: (id) => { selectedPanel = id; } }
 };
+const legacyBeforeOfficial = collect(body, isLegacyEntry).length;
 const officialWarnings = [];
 console.warn = (...args) => { officialWarnings.push(args.map((a) => String(a)).join(" ")); };
 try {
@@ -471,116 +469,100 @@ try {
 }
 console.warn = originalWarn;
 if (officialWarnings.length > 0) fail("官方席位路径出现插件告警（席位注册失败被吞掉）: " + officialWarnings.join(" | "));
-if (!official.tabType) fail("未注册官方 tab 类型（ctx.sidebarRightTabs.register 从未被调用）");
-if (official.tabType.id !== "dsh-novel-writer") fail("tab 类型 id 应为包名，实际 " + official.tabType.id);
-if (official.tabType.kind !== "novel-writer") fail("tab kind 应为 novel-writer，实际 " + official.tabType.kind);
-if (typeof official.tabType.title !== "function") fail("tab 类型缺 title thunk（切语言不会跟随）");
-if (!Array.isArray(official.tabType.guide) || official.tabType.guide.length !== 1) {
-  fail("tab 类型应带 1 个引导入口（侧栏「+ → 引导页」的可发现性），实际 " + JSON.stringify(official.tabType.guide));
+const rowSeat = official.seats.find((s) => s.opts.name === "sidebar.panellist");
+const pageSeat = official.seats.find((s) => s.opts.name === "main");
+if (!rowSeat) fail("未注册侧栏行席位（sidebar.panellist）");
+if (!pageSeat) fail("未注册主栏页面席位（main）");
+if (rowSeat.opts.id !== "dsh-novel-writer") fail("侧栏行 id 应为包名，实际 " + rowSeat.opts.id);
+if (pageSeat.opts.key !== rowSeat.opts.id) {
+  fail("main 席位的 key 必须等于侧栏行的 id（宿主按 id 派发页面），实际 " + pageSeat.opts.key);
 }
-if (typeof official.tabType.guide[0].title !== "function") fail("引导入口 title 应为 thunk");
-const bodySeat = official.seats.find((s) => s.opts.name === "sidebar.right.pane.tab");
-if (!bodySeat) fail("未注册右栏正文席位（sidebar.right.pane.tab）");
-if (bodySeat.opts.key !== official.tabType.id) {
-  fail("正文席位 key 必须等于 tab 类型 id（宿主按 id 派发正文），实际 " + bodySeat.opts.key);
+if (typeof rowSeat.opts.label !== "function") fail("侧栏行缺 label thunk（切语言不会跟随）");
+if (typeof rowSeat.opts.label() !== "string" || rowSeat.opts.label().length === 0) fail("侧栏行 label 求值为空");
+if (typeof rowSeat.opts.order !== "number") fail("侧栏行缺 order");
+// 图标组件：宿主传 { size, active }
+const iconRender = runRender(reactStub.createElement(rowSeat.component, { size: 18, active: true }));
+if (iconRender.nodes < 1) fail("侧栏行图标组件没有渲染出节点");
+// 页面组件：inject 提供 controller/toggle/onClose，必须能渲染出主栏面板
+const pageProps = typeof pageSeat.opts.inject === "function" ? pageSeat.opts.inject() : {};
+if (!pageProps.controller || typeof pageProps.controller.getSnapshot !== "function") fail("主栏页面的 inject 未提供 controller");
+const pageRender = runRender(reactStub.createElement(pageSeat.component, pageProps));
+if (!pageRender.classes.has("nwPanel")) fail("主栏页面未渲染出 .nwPanel（类名：" + [...pageRender.classes].join(" ") + "）");
+if (!pageRender.classes.has("nwPanelMain")) fail("主栏页面未带 nwPanelMain 标记：" + [...pageRender.classes].join(" "));
+// 关闭按钮 = 回会话：走宿主 layout.selectPanel(null)
+const closeBtn = (pageRender.buttons || []).find((b) => String(b.props.className || "").includes("nwClose"));
+if (!closeBtn) fail("主栏页面没有关闭按钮（应通过 layout.selectPanel(null) 返回会话）");
+closeBtn.props.onClick();
+if (selectedPanel !== null) fail("点击关闭未调用 layout.selectPanel(null)，实际 " + JSON.stringify(selectedPanel));
+// 接管后旧 DOM 入口必须撤掉
+if (collect(body, isLegacyEntry).length !== legacyBeforeOfficial) {
+  fail("官方席位接管后旧 DOM 入口未撤掉（" + collect(body, isLegacyEntry).length + " 个，期望 " + legacyBeforeOfficial + "）");
 }
-if (!official.seats.some((s) => s.opts.name === "sidebar.right.pane.tab.title")) {
-  fail("未注册 tab chip 标题席位（sidebar.right.pane.tab.title）");
-}
-const footSeat = official.seats.find((s) => s.opts.name === "sidebar.footer.action");
-if (!footSeat) fail("未注册左栏页脚入口（sidebar.footer.action）");
-
-// 正文组件：带 inject 工厂提供的 props 渲染，必须是 seated 面板且不自绘关闭键
-const bodyProps = typeof bodySeat.opts.inject === "function" ? bodySeat.opts.inject() : {};
-if (!bodyProps.controller || typeof bodyProps.controller.getSnapshot !== "function") fail("正文席位的 inject 未提供 controller");
-const seatedRender = runRender(reactStub.createElement(bodySeat.component, bodyProps));
-if (!seatedRender.classes.has("nwPanel")) fail("右栏正文未渲染出 .nwPanel（类名：" + [...seatedRender.classes].join(" ") + "）");
-if (!seatedRender.classes.has("nwPanelSeated")) fail("右栏正文未带 nwPanelSeated 标记：" + [...seatedRender.classes].join(" "));
-if (seatedRender.classes.has("nwClose")) fail("seated 面板不应自绘关闭按钮（关闭由宿主 tab chip 提供）");
-
-// 左栏入口：宽栏=图标+文字，窄栏=纯图标；点击必须调用 openTab(kind)
-const footProps = typeof footSeat.opts.inject === "function" ? footSeat.opts.inject() : {};
-if (typeof footProps.onOpen !== "function") fail("页脚入口的 inject 未提供 onOpen");
-const wideRender = runRender(reactStub.createElement(footSeat.component, { ...footProps, wide: true }));
-const railRender = runRender(reactStub.createElement(footSeat.component, { ...footProps, wide: false }));
-if (!wideRender.classes.has("nwFootEntry")) fail("宽栏入口类名异常：" + [...wideRender.classes].join(" "));
-if (wideRender.classes.has("nwFootEntryRail")) fail("宽栏入口不应带窄栏类名");
-if (!railRender.classes.has("nwFootEntryRail")) fail("窄栏（56px 轨道）入口未带 nwFootEntryRail：" + [...railRender.classes].join(" "));
-const footBtn = (wideRender.buttons || []).find((b) => String(b.props.className || "").includes("nwFootEntry"));
-if (!footBtn) fail("宽栏入口没渲染出 button 节点");
-if (typeof footBtn.props.onClick !== "function") fail("左栏入口缺 onClick");
-footBtn.props.onClick();
-if (official.opened.length !== 1 || official.opened[0] !== "novel-writer") {
-  fail("点击入口未调用 sidebarRight.openTab(\"novel-writer\")，实际 " + JSON.stringify(official.opened));
-}
-console.log("官方侧边栏席位（v5.2.0）: tab 类型 id/kind/guide ✓ | 正文席位 key=id ✓ | chip 标题席位 ✓"
-  + " | 页脚入口宽窄两态 ✓ | 点击 → openTab(" + official.opened[0] + ") ✓ | seated 面板无自绘关闭键 ✓");
+console.log("官方席位（v5.2.0 重做）: 侧栏行 sidebar.panellist(id/order/label) ✓ | 主栏页面 main(key=id) ✓"
+  + " | 图标组件 {size,active} ✓ | 页面渲染 + 关闭走 layout.selectPanel(null) ✓ | 旧 DOM 入口已撤 ✓");
 
 // ---------------------------------------------------------------------------
 // v5.2.0 二次修正回归：两个真机事故一起钉住
-//  ① 事故：用回调形式的 ctx.inject 等 sidebarRight/sidebarRightTabs 会让宿主把本 entry
-//     判为 did not activate，桌面端直接启动失败（crash log：web boot: 1 entry did not activate）。
-//     → 本段用一个**没有 inject**（也没有官方服务）的 ctx，必须能正常 apply 且走旧路径兜底。
-//  ② 服务后到时要有接管路径，且探测要支持第三方插件惯用的 ctx.get(name) 取法。
+//  ① 用 ctx.inject 等 cordis 服务会让宿主把 entry 判为 did not activate（桌面端起不来）
+//     → 本段用一个**没有 inject**、也没有官方席位的 ctx，必须正常 apply 且走旧路径兜底。
+//  ② 席位晚声明时要有接管路径（slots.inject 只在声明后回调，另挂 subscribe 兜底）。
 // ---------------------------------------------------------------------------
-const isLegacyEntry = (n) => n instanceof HTMLElementStub && n.dataset && n.dataset.dshNovelWriterEntry !== undefined;
-const late = { tabType: null, seats: [], opened: [] };
+const late = { seats: [] };
 const lateDeclared = new Set(["settings.plugin.item"]);
 const lateCtx = {
   effect: (fn) => fn(),
   slots: {
-    inject: (name, fn) => { fn(); },
+    // 如实建模宿主：席位未声明时**不回调**（真机上 slots.inject 就是等声明）
+    inject: (name, fn) => { if (lateDeclared.has(name)) fn(); return () => {}; },
     register: (opts, component) => { late.seats.push({ opts, component }); return () => {}; },
-    specDynamic: (name) => (lateDeclared.has(name) ? {} : void 0)
+    specDynamic: (name) => (lateDeclared.has(name) ? {} : void 0),
+    subscribe: () => () => {}
   }
-  // 关键：故意 **不提供** ctx.inject、也不提供官方服务
+  // 关键：故意不提供 ctx.inject（上一版就是靠它等依赖，导致 web boot 失败）
 };
-const beforeLegacy = collect(body, isLegacyEntry).length;
+const beforeLate = collect(body, isLegacyEntry).length;
 const exportedLate = loaded.factory(fakeRequire);
 exportedLate.apply(lateCtx);
-// 注意：slots.register 也会被设置页卡片用到，所以只断言"官方席位"没被注册
-if (late.seats.some((s) => s.opts.name === "sidebar.right.pane.tab" || s.opts.name === "sidebar.footer.action")) {
-  fail("服务缺席却注册了官方席位（探测/守卫失效）");
+if (late.seats.some((s) => s.opts.name === "sidebar.panellist" || s.opts.name === "main")) {
+  fail("席位未声明却注册了官方席位（守卫失效）");
 }
-const afterLegacy = collect(body, isLegacyEntry).length;
-if (afterLegacy !== beforeLegacy + 1) {
-  fail("服务缺席时旧入口未挂载（兜底失效：" + beforeLegacy + " → " + afterLegacy + "，期望 +1）");
+const afterLate = collect(body, isLegacyEntry).length;
+if (afterLate !== beforeLate + 1) {
+  fail("席位缺席时旧入口未挂载（兜底失效：" + beforeLate + " → " + afterLate + "，期望 +1）");
 }
-if (typeof exportedLate.__internals.syncOfficialSidebar !== "function") {
-  fail("未暴露 syncOfficialSidebar（服务后到的接管路径无法验证）");
+if (typeof exportedLate.__internals.tryOfficialPanel !== "function") {
+  fail("未暴露 tryOfficialPanel（席位晚声明的接管路径无法验证）");
 }
-// 服务后到：挂到同一个 ctx 上，再驱动一次同步（真实实现另有 250ms 有界轮询兜这一手）
-lateCtx.sidebarRightTabs = { register: (definition) => { late.tabType = definition; return () => {}; } };
-lateCtx.sidebarRight = { openTab: (kind) => { late.opened.push(kind); } };
-SIDEBAR_SEATS.forEach((name) => lateDeclared.add(name)); // 右栏包到位，席位随之声明
-exportedLate.__internals.syncOfficialSidebar();
-if (!late.tabType || late.tabType.id !== "dsh-novel-writer") fail("服务就绪后未注册 tab 类型");
-if (!late.seats.some((s) => s.opts.name === "sidebar.footer.action")) fail("服务就绪后未接管左栏入口席位");
-if (!late.seats.some((s) => s.opts.name === "sidebar.right.pane.tab")) fail("服务就绪后未注册右栏正文席位");
-const afterTakeover = collect(body, isLegacyEntry).length;
-if (afterTakeover !== beforeLegacy) {
-  fail("接管后旧入口未撤掉（" + afterTakeover + " 个，期望回到 " + beforeLegacy + "）");
-}
-// 第三方插件惯用写法：服务从 ctx.get(name) 取（见 @linxin666/dsh-client-ui-market）
-const viaGet = { tabType: null, seats: [] };
+// 席位后声明 + layout 服务后到
+SIDEBAR_SEATS.forEach((name) => lateDeclared.add(name));
+lateCtx.layout = { selectPanel: () => {} };
+exportedLate.__internals.tryOfficialPanel();
+if (!late.seats.some((s) => s.opts.name === "sidebar.panellist")) fail("席位声明后未接管侧栏行");
+if (!late.seats.some((s) => s.opts.name === "main")) fail("席位声明后未接管主栏页面");
+if (collect(body, isLegacyEntry).length !== beforeLate) fail("接管后旧入口未撤掉");
+// ctx.get 取服务（第三方插件惯用写法，见 @linxin666/dsh-client-ui-market）：layout 也要能拿到
+const viaGet = { seats: [], selected: "sentinel" };
 const getCtx = {
   effect: (fn) => fn(),
-  get: (name) => {
-    if (name === "sidebarRightTabs") return { register: (definition) => { viaGet.tabType = definition; return () => {}; } };
-    if (name === "sidebarRight") return { openTab: () => {} };
-    return void 0;
-  },
+  get: (name) => (name === "layout" ? { selectPanel: (id) => { viaGet.selected = id; } } : void 0),
   slots: {
-    inject: (name, fn) => fn(),
+    inject: (name, fn) => { fn(); return () => {}; },
     register: (opts, component) => { viaGet.seats.push({ opts, component }); return () => {}; },
-    specDynamic: (name) => (SIDEBAR_SEATS.includes(name) || name === "settings.plugin.item" ? {} : void 0)
+    specDynamic: (name) => (SIDEBAR_SEATS.includes(name) || name === "settings.plugin.item" ? {} : void 0),
+    subscribe: () => () => {}
   }
 };
 loaded.factory(fakeRequire).apply(getCtx);
-if (!viaGet.tabType) fail("ctx.get 读取 sidebarRightTabs 失败（服务探测路径断了）");
-if (!viaGet.seats.some((s) => s.opts.name === "sidebar.footer.action")) fail("ctx.get 路径未接管左栏入口");
-console.log("官方服务后到接管（v5.2.0 二次修正）: 无 ctx.inject 依赖（不再拖垮启动）✓ | 缺席时旧路径兜底 ✓"
-  + " | 服务到达后接管入口 + 右栏 tab 并撤掉旧 UI ✓ | ctx.get 探测 ✓");
+const getPage = viaGet.seats.find((s) => s.opts.name === "main");
+if (!getPage) fail("ctx.get 路径未注册主栏页面");
+const getProps = typeof getPage.opts.inject === "function" ? getPage.opts.inject() : {};
+const getRender = runRender(reactStub.createElement(getPage.component, getProps));
+const getClose = (getRender.buttons || []).find((b) => String(b.props.className || "").includes("nwClose"));
+if (!getClose) fail("ctx.get 路径下主栏页面缺关闭按钮（layout 服务没取到？）");
+getClose.props.onClick();
+if (viaGet.selected !== null) fail("ctx.get 路径的关闭按钮未调用 layout.selectPanel(null)");
+console.log("席位晚声明与兜底（v5.2.0 二次修正）: 无 ctx.inject 依赖（不拖垮启动）✓ | 未声明时不注册 ✓"
+  + " | 旧路径兜底 ✓ | 声明后接管两个席位并撤旧 UI ✓ | ctx.get 取 layout ✓");
 
 cleanupHooks(); // 执行 effect 清理（取消控制器订阅），避免残留句柄影响进程退出
 console.log("CLIENT OK");

@@ -2,28 +2,34 @@
 
 ## [5.2.0] - 2026-09-29
 
-**侧边栏改走官方席位：不再往宿主 DOM 里塞东西。**
+**侧边栏改走官方席位：入口进「插件 / 任务看板」那一排，面板成为主栏页面。**
 
 用户反馈：装到 DSH 0.2.0 桌面端后，插件的侧边栏面板「跟官方侧边栏格格不入」。
 
-**原因**：v5.1.1 及以前，浏览器半边是 **DOM 注入**——`document.querySelector('[class*="sidebarCol"]')` 找到宿主的侧栏列，自己 `createElement` + `createRoot` 塞一个入口按钮，把面板容器挂进 `[class*="centerCol"]`，再用自写 CSS + `[data-sidebar-collapsed]`、`--dsw-specific-*` 变量模拟宿主样式。宿主一改版就失效（v4.3.0 已因 CSS-module class 名变更改过一次选择器），深色主题、圆角、描边、间距也跟官方对不上——观感「格格不入」是必然结果。
+**原因**：v5.1.1 及以前是 **DOM 注入**——`document.querySelector('[class*="sidebarCol"]')` 找宿主侧栏列，自己 `createElement` + `createRoot` 塞一个入口按钮，把面板容器挂进 `[class*="centerCol"]`，再用自写 CSS + `--dsw-*` 变量模拟宿主样式。宿主一改版就失效（v4.3.0 已因 CSS-module class 名变更改过一次选择器），深色主题、圆角、描边、间距也跟官方对不上。
 
-**修法**（改用 DSH 0.2.0 提供的官方两段式席位）：
+**修法**（改用 DSH 0.2.0 的官方席位，与「插件」「任务看板」同一套）：
 
-1. **tab 类型声明**：`ctx.sidebarRightTabs.register({ id: "dsh-novel-writer", kind: "novel-writer", keepMounted: true, title, guide })`。`title` / `guide[].title` / `guide[].description` 都是 thunk（读时求值，切语言无需重注册）；`keepMounted` 让切 tab、切会话、收起再展开时保留滚动位置与展开态。
-2. **正文**：`ctx.slots.register({ name: "sidebar.right.pane.tab", key: "dsh-novel-writer" }, SidebarPanePanel)`。面板从此是宿主右栏里的一个正规 tab——tab chip、停靠、分栏、浮动、**每会话布局持久化**、深浅主题全部由宿主负责；面板自身不再画关闭按钮（关闭由 tab chip 提供）。
-3. **入口**：`sidebar.footer.action`（左栏页脚、设置旁）一个图标按钮，宽栏 = 图标 + 文字、56px 轨道 = 纯图标，点击 `ctx.sidebarRight.openTab("novel-writer")`；另注册 `guide` 入口，侧栏「+ → 引导页」里也能找到它。
-4. **chip 标题**：`sidebar.right.pane.tab.title` 席位——已打开的 tab 在切语言时也跟着变。
-5. **老宿主自动回退**：检测不到 `ctx.sidebarRightTabs` / `ctx.sidebarRight`（DSH < 0.2.0）时继续走 v5.1.1 的 DOM 注入路径，既有用户与老宿主不受影响。
-6. 设置页那张卡片不变——它一直用的就是官方 `settings.plugin.item` 席位。
-7. **两轮真机事故后的最终做法**（这一条是本版最贵的教训）：
-   - **事故一 · 不生效**：首版在 `apply` 里直接读 `ctx.sidebarRightTabs` 探测——服务可能比我们晚就绪，而未在 `inject` 声明的服务也未必读得到，于是**静默退回旧路径**，桌面端上表现为「入口还在老位置、什么都没变」。
-   - **事故二 · 启不来**（我引入的严重回归）：改用回调形式的 `ctx.inject(["sidebarRight", "sidebarRightTabs"], …)` 去等依赖——客户端宿主把「等待未满足依赖的 entry」判为 `did not activate`，**整个 web boot 失败、桌面端起不来**（crash log：`web boot: 1 entry did not activate / dsh-novel-writer: failed`）。**该写法已彻底删除**：插件永远不能拖垮宿主启动。
-   - **最终做法**：① 取服务一律 `ctx.get(name)` + 判空（第三方插件惯用写法，见 `@linxin666/dsh-client-ui-market`），同时兼容属性访问；② 接管分**两级渐进增强**——先只把入口注册进 `sidebar.footer.action`（只依赖 `slots`，且必须先用 `ctx.slots.specDynamic(name)` 确认宿主**声明**了该席位，未声明就保留旧入口），再尝试把面板升级为右栏 tab（需要 `sidebarRightTabs`；**正文席位挂不上就不算接管**，免得旧面板被撤掉却没有替代品）；③ 服务晚到用**有界轮询**兜（40 × 250ms，定时器 `unref`，不参与任何激活判定），最坏情况就是保持 v5.1.1 的旧路径。
+| 席位 | 作用 |
+|---|---|
+| `sidebar.panellist`（root 作用域 list） | 侧栏主导航区的一行：`{ id: "dsh-novel-writer", order: 25, label: () => t("panel.title") }` + 图标组件（owner props `{ size, active }`） |
+| `main`（root 作用域 keyed） | **同一个 id** 寻址的主栏页面；行盒子、选中态、折叠提示、无障碍名称全部由宿主 `layout` 服务负责 |
 
-**兼容性**：工具数量、参数与返回结构一律不变（仍 18 个）；宿主侧 `lib/index.js` 未改动；状态文件字段未变。浏览器半边新增样式类 `nwPanelSeated` / `nwFootEntry*`，旧类名保留给回退路径。
+- 面板成为**主栏全局面板**（与「插件」「任务看板」同级），新增 `.nwPanelMain`（760px 居中、自滚动）；原有 `PanelView` 的全部视图（总开关 / 工具分组 / 功能开关 / 提示词档位与场景 / 精简工作流 / 风格基线 / 原创模式 / 报告历史）原样复用。
+- 关闭按钮改为调用 `ctx.layout.selectPanel(null)` 返回会话（服务用 `ctx.get("layout")` 取）；取不到就隐藏按钮。
+- 两个席位都用 **`ctx.slots.inject`** 注册：它只在席位被声明后回调，未声明的宿主上什么都不发生（旧路径照常保留）。
 
-**回归测试**：`test/client-test.mjs` 新增 v5.2.0 覆盖段——用带 `sidebarRightTabs` / `sidebarRight` 的假 ctx 重新加载一份模块实例，断言：tab 类型 id/kind/guide、正文席位 `key` 必须等于类型 id（写错就是空白面板）、chip 标题席位、页脚入口宽窄两态、点击真的调用 `openTab("novel-writer")`、seated 面板不带自绘关闭键。原有用例继续覆盖「老宿主回退路径」。
+**两轮真机事故（本版最贵的教训）**：
+
+1. **不生效**：先是挂到右栏 tab（`ctx.sidebarRightTabs` + `sidebar.right.pane.tab`）——服务可能比我们晚就绪，未在 `inject` 声明的服务也未必读得到，于是静默退回旧路径，用户看到的是「什么都没变」。
+2. **启不来**（严重回归，已彻底删除）：随后改用回调形式的 `ctx.inject(["sidebarRight","sidebarRightTabs"], …)` 等 cordis 服务——客户端宿主把「等待未满足依赖的 entry」判为 `did not activate`，**整个 web boot 失败、桌面端无法启动**（crash log：`web boot: 1 entry did not activate / dsh-novel-writer: failed`）。
+   - 关键区分：**`ctx.slots.inject`（槽位等待，安全）≠ `ctx.inject`（cordis 服务等待，危险）**。官方 `ui-sidebar-documentpreview` 敢在自己的 `inject` 数组里声明那些服务，是因为它与右栏包同属一个 bundle。
+   - 取服务一律 `ctx.get(name)` + 判空（第三方插件惯用写法，见 `@linxin666/dsh-client-ui-market`）。
+   - 本版所有注册路径都在 `try/catch` 内，**最坏情况只是保留 v5.1.1 的旧路径，不可能再拖垮宿主启动**。
+
+**兼容性**：工具数量、参数与返回结构一律不变（仍 18 个）；宿主侧 `lib/index.js` 未改动；状态文件字段未变。老宿主（未声明这两个席位）继续走旧路径。
+
+**回归测试**：`test/client-test.mjs` 的假宿主补上「槽位声明表」（`specDynamic`）并覆盖四条路径——席位在场（两个席位同 id、图标组件 `{size,active}`、主栏页面渲染、关闭走 `layout.selectPanel(null)`、旧 DOM 入口被撤）、席位缺席且**无 `ctx.inject`**（必须正常 apply 并走旧路径）、席位晚声明（`tryOfficialPanel` 接管并撤旧 UI）、`ctx.get` 取 `layout`。
 
 ## [5.1.1] - 2026-09-18
 

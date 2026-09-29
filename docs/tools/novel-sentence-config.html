@@ -273,9 +273,13 @@ leanWorkflow  = true | false（默认 false，只有真正的布尔值被采用�
       <p><strong>写入渠道有两个</strong>：本工具的 <code>action: "set"</code>（<code>systemPromptMode</code> / <code>promptScene</code> / <code>leanWorkflow</code> 参数）与 Web GUI 侧边栏首页开关走的 <code>POST /api/dsh-novel-writer/state</code>（GET 响应里同样回显这三个字段）。两条路径最终都调用同一个 <code>writeSentenceState</code>，写入与校验口径一致。侧边栏「写作助手功能」面板里的<strong>精简工作流</strong>（英文标签 <code>Lean workflow</code>）一行位于「提示词档位」「提示词场景」<strong>下方</strong>，与它们并列，<strong>任何时候都能切换</strong>——不受 <code>full</code> 档限制，<code>brief</code> / <code>off</code> 档下同样可用。</p>
 
       <h2>面板挂在哪里（v5.2.0）</h2>
-      <p>状态文件是唯一的真相来源，<strong>面板只是它的一个视图</strong>——所以面板挂在哪不影响写入口径。v5.2.0 起浏览器半边不再往宿主 DOM 里塞东西，改用 DSH 0.2.0 的<strong>官方席位</strong>：
-      <code>ctx.sidebarRightTabs.register</code> 声明一个 tab 类型（<code>id</code> = 包名、<code>kind</code> = <code>novel-writer</code>、<code>keepMounted</code> 保留已访问正文），正文由 <code>sidebar.right.pane.tab</code> 按 <code>key = 类型 id</code> 渲染，chip 文字走 <code>sidebar.right.pane.tab.title</code>，左栏入口走 <code>sidebar.footer.action</code>（宽栏 = 图标 + 文字、56px 轨道 = 纯图标）。<strong>tab chip、停靠、分栏、浮动、每会话布局持久化、深浅主题全部归宿主</strong>，插件不再自绘关闭按钮。</p>
-      <p>检测不到 <code>ctx.sidebarRightTabs</code> / <code>ctx.sidebarRight</code> 的宿主（DSH &lt; 0.2.0）<strong>自动回退</strong>到 v5.1.1 的 DOM 注入路径（左栏入口 + 会话区面板），开关语义与状态文件完全一致。两条路径共用同一个控制器与同一个 <code>POST /api/dsh-novel-writer/state</code>。</p>
+      <p>状态文件是唯一的真相来源，<strong>面板只是它的一个视图</strong>——面板挂在哪不影响写入口径。v5.2.0 起浏览器半边不再往宿主 DOM 里塞东西，改用 DSH 0.2.0 的<strong>官方席位</strong>，也就是「插件」「任务看板」所在的同一套：</p>
+      <ul>
+        <li><code>sidebar.panellist</code>（root 作用域 list）：左栏主导航区的<strong>一行</strong>，注册 <code>{ id, order, label }</code> 与一个图标组件（owner props <code>{ size, active }</code>）。行盒子、文字、选中态、折叠提示由宿主负责。</li>
+        <li><code>main</code>（root 作用域 keyed）：<strong>同一个 id</strong> 寻址的主栏页面——选中态由宿主的 <code>layout</code> 服务管理，插件只画内容；面板里的关闭按钮调用 <code>ctx.layout.selectPanel(null)</code> 返回会话。</li>
+      </ul>
+      <p>两个席位都用 <code>ctx.slots.inject</code> 注册：它<strong>只在席位被声明后回调</strong>，未声明的宿主上什么都不会发生，旧版挂载方式照常保留。<strong>注意区分</strong>：<code>ctx.slots.inject</code>（槽位等待，安全）与 <code>ctx.inject</code>（cordis 服务等待）不是一回事——后者会让宿主把本 entry 判为 <code>did not activate</code>，v5.2.0 的早期版本就是这样把桌面端启动搞挂的，现已彻底删除。取宿主服务一律 <code>ctx.get(name)</code> + 判空。</p>
+      <p>检测不到这两个席位的宿主（DSH &lt; 0.2.0）<strong>自动回退</strong>到 v5.1.1 的 DOM 注入路径（左栏入口 + 会话区面板），开关语义与状态文件完全一致：两条路径共用同一个控制器与同一个 <code>POST /api/dsh-novel-writer/state</code>。</p>
 
       <h2>约束与边界</h2>
       <ul>
