@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_sentence_config — 开关配置｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_sentence_config 的实现细节：get/set 参数白名单、状态文件字段与默认值、生效值优先级、工具开关与功能开关的语义、风格基线容差的钳制规则，以及 rawWriting 的写入位置。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_sentence_config","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-config.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_sentence_config — 开关配置｜dsh-novel-writer 技术文档","description":"novel_sentence_config 的实现细节：get/set 参数白名单、状态文件字段与默认值、生效值优先级、工具开关与功能开关的语义、风格基线容差的钳制规则，以及 rawWriting 的写入位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-config.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"5.2.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_sentence_config, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_sentence_config — 开关配置｜dsh-novel-writer 技术文档","description":"novel_sentence_config 的实现细节：get/set 参数白名单、状态文件字段与默认值、生效值优先级、工具开关与功能开关的语义、风格基线容差的钳制规则，以及 rawWriting 的写入位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-config.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"5.5.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_sentence_config, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -280,6 +280,9 @@ leanWorkflow  = true | false（默认 false，只有真正的布尔值被采用�
       </ul>
       <p>两个席位都用 <code>ctx.slots.inject</code> 注册：它<strong>只在席位被声明后回调</strong>，未声明的宿主上什么都不会发生，旧版挂载方式照常保留。<strong>注意区分</strong>：<code>ctx.slots.inject</code>（槽位等待，安全）与 <code>ctx.inject</code>（cordis 服务等待）不是一回事——后者会让宿主把本 entry 判为 <code>did not activate</code>，v5.2.0 的早期版本就是这样把桌面端启动搞挂的，现已彻底删除。取宿主服务一律 <code>ctx.get(name)</code> + 判空。</p>
       <p>检测不到这两个席位的宿主（DSH &lt; 0.2.0）<strong>自动回退</strong>到 v5.1.1 的 DOM 注入路径（左栏入口 + 会话区面板），开关语义与状态文件完全一致：两条路径共用同一个控制器与同一个 <code>POST /api/dsh-novel-writer/state</code>。</p>
+      <h2>界面为什么"看起来像 DSH"（v5.5.0）</h2>
+      <p>入口与面板的位置由宿主提供，<strong>外观则必须自己对齐官方设计系统</strong>。v5.5.0 起本插件按《Web UI 样式参考》与《DSH 统一圆角规范》重做了全部样式：颜色只用 <code>--dsw-alias-*</code> 语义 token（改造前有 90 处十六进制色值与 24 处 <code>rgba()</code>，以及 50 处写在 React 内联 <code>style</code> 里的色值——那部分在深色主题下会露白）；中性边框统一 0.5px 发丝线；圆角只用官方 R4/R8/R12/R16/R20/R28 尺度；正圆与胶囊配对 <code>corner-shape: round</code>；字号与行高成对声明。控件不再自绘：开关、分段控件、按钮、徽标分别改用官方 <code>@deepseek-ai/dsh-client-ui-primitives</code> 的 <code>Switch</code> / <code>SegmentedControl</code> / <code>Button</code> / <code>Tag</code>（取不到该包时逐控件回退到同一套 token 样式的本地实现，不会影响宿主启动）。</p>
+      <p>一处<strong>有意偏离</strong>官方规范：「非净化模式」的确认框保持面板内卡片形态，不使用全屏遮罩——这是 5.2.0 期间按用户反馈确定的交互，非遗漏。</p>
 
       <h2>约束与边界</h2>
       <ul>

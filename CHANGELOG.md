@@ -1,5 +1,70 @@
 # 更新日志（Changelog）
 
+## [5.5.0] - 2026-09-30
+
+**界面按 DSH 官方设计体系统一重做（A 档 token 对齐 + B 档官方原语 + C 档材质与信息架构）。**
+用户反馈「插件面板不像 DSH、割裂感强」——本版把外观的所有权交还给官方设计系统。
+
+### 官方依据（本轮调研找到的权威来源）
+
+| 文档 | 作用 |
+|---|---|
+| 《Web UI 样式参考》`docs/web-styling.zh.md` | 权威样式规则：语义 token、0.5px 发丝线、elevation 材质、模态遮罩、菜单材质、链接样式 |
+| 《DSH 统一圆角规范》`docs/ui-radius.zh.md` | 圆角尺度 R4/R8/R12/R16/R20/R28 与组件尺寸映射、设置卡片材质、正圆/胶囊须配 `corner-shape: round` |
+| `@deepseek-ai/dsh-client-ui-theme` README | `--dsw-*` token 体系（语义别名、elevation、focus ring、switch thumb、滚动条、排版变量） |
+| `@deepseek-ai/dsh-client-ui-primitives` README | 官方组件目录 + 「写控件前先查这张表」的强制约定 |
+
+官方原话：「『看起来像官方』依靠公开 primitives、Token、间距和交互状态，而不是依赖私有类名。」
+
+### A 档：CSS 全面 token 化
+
+- **颜色字面量清零**：`#hex` **90 处** + `rgba()/rgb()` **24 处** + `var(--token, #字面量)` 兜底 **25 处** → **全部改为语义 token**（`--dsw-alias-label-* / bg-layer-* / state-*-primary / button-primary-fill / interactive-bg-hover-* / focus-ring-color`）。这是「不像 DSH」的头号原因：自带色值不跟主题走。
+- **不存在的 token 改名**：`--dsw-alias-border`、`--dsw-alias-surface-1/2/3`、`--dsw-alias-text-l2`（3 处，一直静默退到 `#888`）→ 换成实际存在的 `--dsw-alias-border-l2` / `bg-layer-*` / `label-secondary`；旧阴影 `--dsw-shadow-lv*` → `--dsw-elevation-soft/panel/prominent`。
+- **发丝线**：中性 `border:1px|2px solid` **20 处** → `0.5px`（官方：平面中性边框与分割线一律 0.5px；只有 dashed 与状态色保留 1px）。
+- **圆角走具名尺度**：25 处 `6/8/10/12/16px` 局部数值 → `--dsw-radius-xs/sm/md/lg/panel`，按官方用途映射（紧凑控件 R8、标准控件与单行 cell R12、多行 cell 与嵌套 R16、独立卡片 R20、对话框 R28）。
+- **正圆/胶囊配对** `corner-shape: round`（5 处）——主题默认给所有元素加 superellipse 平滑，不配对会把圆压变形。
+- **字号配行高** 32 处（官方：字号与行高必须成对声明）。
+- **elevation 表面去边框**：用了 `--dsw-elevation-*` 的表面（确认框卡片等）不再叠 `--dsw-alias-border-*`（elevation 自带 0.5px 发丝描边）。
+
+### A 档附：JS 内联样式收编（这是最大的一处割裂源）
+
+- **50 处含色/渐变/圆角的内联 `style`** 全部收编为语义类（新增 `nwBoxed / nwSubCard / nwChip / nwTextInput / nwTextArea / nwSelect / nwNote / nwMuted / nwSignOk / nwSignBad / nwGutter / nwDashedNote / nwDividerRow` 及 14 个专用类）。此前有 **11 处内联 `background:"#fff"` + `border:"1px solid #e2e8f0"`**，在深色主题下就是一块块白斑。
+- **命令式改样式也清掉了**：`onFocus`/`onBlur` 里写死 `#6366f1` 与 `rgba(99,102,241,.14)` 的焦点环 → 改由 CSS `:focus-visible` + `--dsw-focus-ring-color`；新建书名输入框的错误态由 `el.classList.add("nwInputErr")` + 类样式承担。
+- 渐变主按钮（`linear-gradient(135deg,#6366f1,#8b5cf6)`）→ 官方 `--dsw-alias-button-primary-fill`（官方主按钮是纯色 token，不用渐变）。
+
+### B 档：控件改用官方原语（同源）
+
+新增「官方原语适配层」：`require("@deepseek-ai/dsh-client-ui-primitives")` 置于 `try/catch`，取不到模块、缺某个组件、或官方组件渲染抛错时**逐控件回退**到既有自绘实现（同一套 token 样式），**任何情况下都不向上抛**。
+
+- 依据：装机的 **6 个第三方插件**（`dsh-client-ui-market`、`git-graph`、`preset-center`、`remote-web-ui`、`dsh-update`、`web-all`）都在直接 require 该包，且**都没有声明 `dsh.client.external`** —— 说明它属客户端基线模块，不需要动模块表契约。
+- 落地：局部 `Switch` 的实现改为委托 `NW_UI.Switch`（一处覆盖 6 个调用点；官方 Switch 36×20、关闭态滑块读 `--dsw-alias-switch-thumb`）；3 处原生小开关改为同一组件并补无障碍 `label`；2 处提示词档位/场景分段改为 `NW_UI.SegmentedControl`（官方 tablist 键盘语义：方向键走查、只有选中项在 tab 序列）；设置页插件卡的状态胶囊与按钮改为 `NW_UI.Tag`（`success`/`danger` 音调）与 `NW_UI.Button`（`outline`/`sm` = H28 R8）。
+- 集成时修掉适配层的一处缺陷：它引用了未定义的 `MODULE_ID`（ReferenceError 被 try 吞掉 → 官方路径永远不可达），已补定义。
+
+### C 档：材质与信息架构
+
+- 设置页插件卡改用官方设置卡片材质（R20 + 0.5px 描边 + 卡片底色）。
+- 面板内的行/卡片/输入框按官方档位重排（多行 cell R16、输入框 H32 R12、紧凑按钮 R8），间距与分组沿用原有信息架构，不改变功能布局。
+
+### 审计工具（本版新增，随仓库留档）
+
+`C-audit.mjs`：11 条规则的 CLI 审计器（颜色字面量 / 内联样式 / 发丝线 / 圆角尺度 / elevation 与边框互斥 / 字号行高配对 / 主题选择器与滚动条 / token 白名单 / 类名双向契约 / 启动安全），附**合规与违规两个样本**自测。最终对本插件跑出 **PASS · 0 违规**（改造前 232 处）。
+
+### 有意偏离官方规范的一处（保留用户既定选择）
+
+官方规范要求「模态弹窗保留黑色半透明遮罩」，但本插件「非净化模式」确认框**刻意保持面板内卡片形态、不使用全屏遮罩**——用户在 5.2.0 期间明确否决过全屏遮罩（见 5.2.0 第九节）。此项偏离是经过确认的产品决策，非遗漏。
+
+### 兼容性
+
+- **工具数量、参数与返回结构一律不变**（仍 18 个）；`lib/index.js` 等工具侧文件**零改动**；状态文件字段未变。
+- 面板的挂载方式仍是 5.2.0 的官方席位（`sidebar.panellist` 一行 + `main` 主栏页面），未变。
+- 老宿主（无官方 primitives 包）自动走适配层回退，外观由同一套 token 化 CSS 承担。
+
+### 测试与验证
+
+- 五套测试全绿：`client-test`（含官方席位与适配层回退路径）、`unit-test` 20/20、`pattern-test`、`e2e-test`、`mcp-test` 67/67。
+- 规则审计：`C-audit.mjs` → **PASS（0 违规）**；`C-fixture-bad.js` 能逐条命中（证明工具不是摆设）。
+- 真机视觉验收需人工确认（本版无法自动截图验证）。
+
 ## [5.2.0] - 2026-09-29
 
 **侧边栏改走官方席位：入口进「插件 / 任务看板」那一排，面板成为主栏页面。**
