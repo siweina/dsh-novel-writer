@@ -346,7 +346,7 @@
             <dl>
               <dt>开关</dt><dd>总开关、18 个工具的分组开关与 5 项功能开关，均可独立控制。</dd>
               <dt>入口</dt><dd><b>v5.2.0 起走 DSH 官方席位</b>：入口是左栏主导航区的一行（就在「插件」「任务看板」旁边），面板则是主栏的全局面板——行盒子、选中态、折叠提示、深浅主题全由宿主负责；老版本宿主自动回退旧的侧栏挂载方式。</dd>
-              <dt>外观</dt><dd><b>v5.5.0 起按官方设计体系统一</b>：全部颜色改为 <code>--dsw-alias-*</code> 语义 token（不再自带色值），边框走官方 0.5px 发丝线，圆角走官方 R4/R8/R12/R16/R20/R28 尺度，开关与分段控件改用官方 UI primitives，设置卡片走官方卡片材质——浅色、深色、跟随系统三种主题都与官方界面同源。</dd>
+              <dt>外观</dt><dd><b>v5.5.0 起按官方设计体系统一</b>：全部颜色改为 <code>--dsw-alias-*</code> 语义 token（不再自带色值），边框走官方 0.5px 发丝线，圆角走官方 R4/R8/R12/R16/R20/R28 尺度，开关与分段控件改用官方 UI primitives，设置卡片走官方卡片材质——浅色、深色、跟随系统三种主题都与官方界面同源。<br>随后又按<b>官网式重构</b>收敛了一轮：强调色统一为 DeepSeek 蓝（<code>state-business-primary</code>，源自 <code>deepseek-500</code>；<code>brand-primary</code> 实为近黑，不能当强调蓝用），主面板重排为「品牌光晕头部 + 分区 kicker + 图标卡 + 状态 pill」，内容卡由描边改为软阴影与悬停抬升，二级页标题与按钮家族统一，各级页面宽度恒定一致。</dd>
               <dt>状态</dt><dd>显示数据目录占用与语义引擎运行状态，便于判断是否需要重建索引。</dd>
               <dt>附加</dt><dd>书库统计（各作品章数、总字数、近 7 天活跃字数）、体验演示（内置示例，不写入磁盘）与报告历史。</dd>
             </dl>
@@ -457,7 +457,7 @@ fixAnchors：<span class="c-num">3</span> 条原著锚段
           <tr><th scope="row">费用</th><td class="is-us"><b>0（本地推理）</b></td><td>按 token 计费</td><td>需自建</td></tr>
           <tr><th scope="row">中文小说专用</th><td class="is-us"><b>是</b></td><td>通用</td><td>否</td></tr>
           <tr><th scope="row">风格基线（μ±σ）</th><td class="is-us"><b>提供</b></td><td>少见</td><td>无</td></tr>
-          <tr><th scope="row">与 DSH 集成</th><td class="is-us"><b>18 个工具 + 官方席位与官方设计体系</b></td><td>无</td><td>无</td></tr>
+          <tr><th scope="row">与 DSH 集成</th><td class="is-us"><b>18 个工具 + 官方席位与官网式界面</b></td><td>无</td><td>无</td></tr>
           <tr><th scope="row">非 DSH 用户可用</th><td class="is-us"><b>可以（MCP）</b></td><td>可以</td><td>需自行封装</td></tr>
         </tbody>
       </table>

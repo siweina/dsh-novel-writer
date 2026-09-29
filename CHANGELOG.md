@@ -64,13 +64,27 @@
 
 v5.5.0 对齐官方体系后，用户复审截图仍认为「圆角和颜色不好看」，要求**更现代 / 直接做成官网（siweina.github.io/dsh-novel-writer）那种 UI**。给出 A（现代化微调）/ B（官网式整体重构）两案与三版并排预览页，用户选定 **B**：
 
-- **主色换轨**：开启 / 选中 / 强调位全面从「成功绿」换成 DeepSeek 品牌蓝（`--dsw-alias-brand-primary`，官网 `#3964fe` 与 DSH 官方蓝同源）——徽标「已开启」、行高亮、工具行高亮、分组勾选、导航卡 hover；**绿色只保留"运行成功"瞬时语义**（启用横幅、成功提示、阈值 + 记号）。
+- **主色换轨**：开启 / 选中 / 强调位全面从「成功绿」换成蓝色强调，最终落点 `--dsw-alias-state-business-primary`（= `--dsw-static-deepseek-500`，与官网蓝同源）——徽标「已开启」、行高亮、工具行高亮、分组勾选、导航卡 hover、分区 kicker、图标底、主按钮；**绿色只保留"运行成功"瞬时语义**（启用横幅、成功提示、阈值 + 记号）。
+  - ⚠️ **取证过程（初版曾踩坑）**：本版初稿误把 `--dsw-alias-brand-primary` 当作"官网蓝"。真机上该 token 渲染为**近黑/灰**（灰药丸、灰图标底、黑按钮）。后从宿主 `app.asar` 取出 token 定义确认：`--dsw-alias-brand-primary: var(--dsw-static-neutral-bluish-1000)`——**DeepSeek 品牌色本身就是近黑**，真正的蓝是 `state-business-primary`。全部 29 处强调色据此改轨。这条经验同样适用于后续 DSH 插件：**"品牌色"不等于"强调蓝"**。
 - **卡片上阴影**：内容卡（`.nwRow` / `.nwNavEntry` / `.nwToolRow` / `.nwToolGroup`）由 1px 描边改为 `--dsw-elevation-soft` 软阴影 + hover 抬升（`translateY(-1px)` → `--dsw-elevation-panel`）——即官网三层负扩散阴影的 token 化表达；组内行保持平坦避免嵌套阴影。
-- **版式重排（信息架构）**：主视图拆成三分区——`.nwHero`（品牌径向光晕头部，包住启用横幅 + `.nwHeroDesc` 副行）→ kicker「开关 / 提示词 / 状态」（品牌 tint 药丸标题 + 细线，`panel.secSwitch/secPrompt/secStatus` 中英双表词条）→ 分区内容；行首插入 34px 品牌 tint 图标位（6 处，字形 ◉📊⚡📝🎛 + 导航卡 ⚙🛠📖🎯）；数据目录与引擎状态改为 2 枚状态 pill。
+- **版式重排（信息架构）**：主视图拆成三分区——`.nwHero`（品牌光晕头部，包住启用横幅 + `.nwHeroDesc` 副行）→ kicker「开关 / 提示词 / 状态」（品牌 tint 药丸标题 + 同排延伸细线，`panel.secSwitch/secPrompt/secStatus` 中英双表词条）→ 分区内容；行首插入 34px 品牌 tint 图标位（源码级 9 处、渲染面覆盖全部开关行：主视图 5 行 + 危险行 + `switchRow` 助手（功能页 5 + 模型页 3）+ 工具行 + 4 张导航卡），字形统一 emoji 家族；数据目录与引擎状态改为 2 枚状态 pill（`.nwPillRow` 可换行）。
 - **微交互**：面板级 `--nw-ease: cubic-bezier(.16,1,.3,1)`（组件局部变量，官网同曲线），卡片/按钮统一过渡，`prefers-reduced-motion: reduce` 总门关闭；分段控件回退路径加灰托盘 + 品牌蓝选中项。
 - **零行为改动**：结构片段由生成脚本按行号从源文件真实切片，行级多重集审计证明消失的行仅为"转 pill 的 4 行 + 2 行随移位改写的注释"，行为标记计数（onClick/onChange/disabled/`react.use*`）前后全等。
 - **新增结构守门** `test/ui-structure-test.mjs`（22 项源码级断言：结构存在性 / 命脉类 / 34 个新类 / hook==12 / 8 项不变量 / 结构禁区）——它也是这批新类换皮后的唯一守门（A-check 与 ui-audit 都不覆盖 §4.1 类）。
 - **协作方式**：三个子代理严格文件所有权并行（E=CSS / F=结构片段 / G=结构测试），总负责人独占 `lib/client.js` 集成（唯一命中断言 + 六不变量，任一失败不写盘）；CSS 因任务体量连续两次耗尽子代理上下文，最终由总负责人用「基线导出 + 18 条定点替换 + 计数断言」的 transform 方式完成。
+
+### 视觉重构后续迭代（真机反馈 5 轮 + 独立审查 2 轮，版本号不变）
+
+方案 B 落地后经**用户 5 轮真机反馈 + 独立验证子代理 2 轮交叉审查**收敛，全部修复并入 5.5.0：
+
+1. **主色改轨 + hero 裁字**：主色改 `state-business-primary`（取证见上节）；hero 顶部文字被 `overflow:hidden` 裁切 → 光晕由 `::before` 伪元素改为 **`background-image`**（圆角天然裁剪，结构上不可能裁到文字）；三分区原为 0 间距 → `.nwSection{margin-top:16px}`；二级页标题改 kicker 药丸并补 hint/行距/图标位；非净化行 `state-error-secondary` 实底 → **`error-primary` 5% 淡染**；主按钮换蓝 + hover 亮度。
+2. **`color-mix(…, transparent)` 陷阱**：Chromium 会把透明端按黑色参与混合 → 出现**灰药丸 / 灰图标底 / hero 大灰斑**。10 处全部改为混入**卡面 token**（`bg-layer-1`/`bg-layer-2`），深浅主题都可预期。间距再放大并统一（section gap 12、行 padding 加大、同级行距 10、模型页混排行三组规则）；`.nwBackBtn / .nwRefresh / .nwClose` 合并为**一套 ghost 按钮家族**（同高 30、同圆角、合一 hover）。
+3. **审查 P1~P11**：kicker 与细线包进 `.nwKickerRow` **同排**；状态 pill 行类化 + `flex-wrap`（窄栏不挤压）；选中态 6%→**10%**；`prefers-reduced-motion` 补按钮位移与 `filter:none`；主按钮 transition 补 `filter`、hover 阴影升档；🔞 危险行与工具行补图标位；`◉`→`🎚` 统一 emoji 家族；删除不可点击 pill 的 hover 暗示；新增 `panel.heroDesc` 专属副标题词条（中英双表）；hero 改**官方设置卡材质**（0.5px 描边 + 卡面底 + 去 elevation，解决深色主题下与卡片区分不足）。
+4. **审查 N1/N2**：`.nwBadgeOn` 与 `.nwRowOn` 混合比撞成同值致**行内徽标轮廓消失** → badge 10%→**18%**；`.nwToolGroupBody .nwToolRow{background:transparent}` 特异性压死**分组页选中态** → 追加放行规则（阴影/位移仍压制）。
+5. **宽度不统一（根因）**：三级页面明显比一级窄（同窗口实测 **740px vs 631px**）→ 面板在宿主主栏 flex 容器里是 **shrink-to-fit 收缩项**，宽度按本页最长内容收缩、上限 `max-width`（一级被长文案顶满、三级缩到内容宽）→ 给 `.nwPanel / .nwPanelMain` 补 **`width:100%`**，所有级别页面恒等宽；另加 `scrollbar-gutter:stable`（滚动条槽恒定占位，消除有无滚动条造成的 15px 差）。
+6. **细节**：Back 与分区药丸挤在同一行 → Back 改 `display:flex + width:fit-content` **独占一行**；原创模式列表页「编辑 / 删除」原为**裸 `<button>`**（系统灰按钮）→ 统一 `nwChip`（全库裸按钮扫描清零）。
+
+**迭代期验证（每轮全量复跑）**：五套测试 exit 0；`tools/ui-audit.mjs` **0 违规**（附合规/违规样本自测）；`test/ui-structure-test.mjs` **22/22**；A-check **R0..R10 零违规**；颜色字面量全谱 0；`color-mix` 含 `transparent` 0；`react.use` 恒 **12**；`ctx.inject(` = 0；`NW_UI.X(` 直接调用 = 0；行为标记 10 组 **delta 全 0**；i18n 140 词条 0 缺失。独立验证子代理两轮报告均**自行取证 SHA256**（主仓库 / 发布克隆 / 桌面安装目录三处一致）。
 
 ### 审计工具（本版新增，随仓库留档）
 
@@ -90,6 +104,8 @@ v5.5.0 对齐官方体系后，用户复审截图仍认为「圆角和颜色不�
 
 - 五套测试全绿：`client-test`（含官方席位与适配层回退路径）、`unit-test` 20/20、`pattern-test`、`e2e-test`、`mcp-test` 67/67。
 - 规则审计：`C-audit.mjs` → **PASS（0 违规）**；`C-fixture-bad.js` 能逐条命中（证明工具不是摆设）。
+- 结构守门：`test/ui-structure-test.mjs` → **22/22 PASS**（方案 B 新类与不变量的唯一守门）。
+- 独立审查：两轮交叉审查（含自取证哈希、行为标记 delta、启动安全三不变量），问题清单全部闭环。
 - 真机视觉验收需人工确认（本版无法自动截图验证）。
 
 ## [5.2.0] - 2026-09-29

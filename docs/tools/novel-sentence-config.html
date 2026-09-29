@@ -282,6 +282,7 @@ leanWorkflow  = true | false（默认 false，只有真正的布尔值被采用�
       <p>检测不到这两个席位的宿主（DSH &lt; 0.2.0）<strong>自动回退</strong>到 v5.1.1 的 DOM 注入路径（左栏入口 + 会话区面板），开关语义与状态文件完全一致：两条路径共用同一个控制器与同一个 <code>POST /api/dsh-novel-writer/state</code>。</p>
       <h2>界面为什么"看起来像 DSH"（v5.5.0）</h2>
       <p>入口与面板的位置由宿主提供，<strong>外观则必须自己对齐官方设计系统</strong>。v5.5.0 起本插件按《Web UI 样式参考》与《DSH 统一圆角规范》重做了全部样式：颜色只用 <code>--dsw-alias-*</code> 语义 token（改造前有 90 处十六进制色值与 24 处 <code>rgba()</code>，以及 50 处写在 React 内联 <code>style</code> 里的色值——那部分在深色主题下会露白）；中性边框统一 0.5px 发丝线；圆角只用官方 R4/R8/R12/R16/R20/R28 尺度；正圆与胶囊配对 <code>corner-shape: round</code>；字号与行高成对声明。控件不再自绘：开关、分段控件、按钮、徽标分别改用官方 <code>@deepseek-ai/dsh-client-ui-primitives</code> 的 <code>Switch</code> / <code>SegmentedControl</code> / <code>Button</code> / <code>Tag</code>（取不到该包时逐控件回退到同一套 token 样式的本地实现，不会影响宿主启动）。</p>
+      <p><strong>后续（方案 B · 官网式重构）</strong>：在官方体系之上又按「官网那套」收敛了一轮——强调色由成功绿改为 DeepSeek 蓝，主面板重排为「品牌光晕头部 → 分区 kicker（药丸标题 + 同排细线）→ 图标卡 + 状态 pill」，内容卡从 1px 描边改为软阴影与悬停抬升，二级页标题、行距、图标位与 Back / 刷新 / 关闭按钮全部统一，各级页面宽度恒定一致。两条踩坑经验一并记下：① <code>--dsw-alias-brand-primary</code> 是<strong>近黑</strong>（DeepSeek 品牌色本身就是黑），要「强调蓝」必须用 <code>--dsw-alias-state-business-primary</code>（<code>deepseek-500</code>）；② CSS <code>color-mix(…, transparent)</code> 在 Chromium 会把透明端按黑色参与混合，浅色 tint 必须混入卡面 token（<code>bg-layer-1</code>）才在深浅主题下都稳定。</p>
       <p>一处<strong>有意偏离</strong>官方规范：「非净化模式」的确认框保持面板内卡片形态，不使用全屏遮罩——这是 5.2.0 期间按用户反馈确定的交互，非遗漏。</p>
 
       <h2>约束与边界</h2>
