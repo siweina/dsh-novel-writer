@@ -56,8 +56,9 @@
         <b>v5.0.0 另有系统提示词的「档位 × 场景」两个正交维度。</b>档位（<code>systemPromptMode</code>：<code>off</code> / <code>brief</code> / <code>full</code>）决定<strong>注入多少</strong>，场景（<code>promptScene</code>：<code>general</code> / <code>writing</code> / <code>revising</code> / <code>auditing</code> / <code>setup</code>）决定<strong>注入什么</strong>；场景<strong>仅在 <code>full</code> 档下生效</strong>，且只改提示词内容、不改任何工具能力。老状态文件没有 <code>promptScene</code> 键时落到 <code>general</code>（即 4.x 的通用工作流，本版仅在其中补入 7 行新工具入口指引），既有工作流不变。两字段的读写入口与完整语义见 <a href="novel-sentence-config.html">novel_sentence_config</a>。
       </div>
       <div class="note">
-        <b>v5.5.0 界面重做（工具与状态文件零变化）。</b>本版把面板外观按 DSH 官方设计体系统一（<code>--dsw-alias-*</code> 语义 token / 0.5px 发丝线 / 官方圆角尺度 / 官方 UI primitives），随后又按「官网式重构」收敛：强调色统一为 DeepSeek 蓝（<code>state-business-primary</code>）、主面板改「品牌光晕头部 + 分区 kicker + 图标卡 + 状态 pill」、内容卡由描边改为软阴影与悬停抬升、二级页标题与按钮家族统一、各级页面宽度恒定一致。若你是从旧版升级，<b>工具数量、参数与返回结构均未变动</b>，无需改任何调用。详解见 <a href="novel-sentence-config.html">novel_sentence_config</a> 的「界面为什么『看起来像 DSH』（v5.5.0）」一节。
-      </div>
+        <b>v6.0.0 界面全面重构（工具与状态文件零变化）。</b>本版把面板外观按 DSH 官方设计体系统一（<code>--dsw-alias-*</code> 语义 token / 0.5px 发丝线 / 官方圆角尺度 / 官方 UI primitives），随后又按「官网式重构」收敛：强调色统一为 DeepSeek 蓝（<code>state-business-primary</code>）、主面板改「品牌光晕头部 + 分区 kicker + 图标卡 + 状态 pill」、内容卡由描边改为软阴影与悬停抬升、二级页标题与按钮家族统一、各级页面宽度恒定一致。若你是从旧版升级，<b>工具数量、参数与返回结构均未变动</b>，无需改任何调用。详解见 <a href="novel-sentence-config.html">novel_sentence_config</a> 的「界面为什么『看起来像 DSH』（v5.5.0）」一节。
+      <br>v6.0.0 再进一层：源码分块 + 构建链装配、8 个统一组件（单一行模式 PreferenceRow / 分组卡 GroupCard）、19+5 枚线图标、阈值 slider 辅助输入、页面级 push-pop 过渡动画；工具 / 参数 / 状态文件依旧零变化。
+        </div>
 
       <h2>工具总览</h2>
 

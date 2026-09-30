@@ -77,8 +77,8 @@ const LIFELINE_CLASSES = [
 const STRUCTURE_MIN = [
   ["A1.1", "nwHero", 1],
   ["A1.2", "nwSection", 2],
-  ["A1.3", "nwKicker", 2],
-  ["A1.4", "nwIconSlot", 3],
+  // A1.3 已升级为 v6 口径（见下方独立块：kicker 三件套统一经 SectionTitle 组件渲染）
+  // A1.4 已升级为 v6 口径（见下方独立块：图标槽 = nwIconSlot(遗留) + nwPrefIcon(新行模式)）
   ["A1.5", "nwPill", 2]
 ];
 
@@ -306,10 +306,25 @@ for (const [id, cls, min] of STRUCTURE_MIN) {
   report("A", 1, id, `.${cls} ≥${min}`, n >= min, `js 段实测 ${n}（期望 ≥${min}）${glyph}`);
 }
 {
+  // v6 口径：kicker 字面量收敛进 SectionTitle 组件（uikit 标记区），
+  // 结构存在性改判「组件被真实调用 ≥2」——比数散字面量更强的约束。
+  const stCalls = countLit(jsCode, "SectionTitle(el, el");
+  const ok = stCalls >= 2;
+  report("A", 1, "A1.3", "SectionTitle(分区标题) ≥2", ok, `js 段 SectionTitle 调用 ${stCalls}（期望 ≥2；v6 起 kicker 三件套统一经组件渲染，组件定义内 nwKicker=${countClassNode(jsCode, "nwKicker")}）`);
+}
+{
+  // v6 口径：行模式迁移后图标槽两形态并存——遗留 nwIconSlot（导航卡/工具行）+ 新 nwPrefIcon（PreferenceRow 内）。
+  const a = countClassNode(jsCode, "nwIconSlot");
+  const b = countClassNode(jsCode, "nwPrefIcon");
+  const ok = a + b >= 3;
+  report("A", 1, "A1.4", "图标槽 ≥3（nwIconSlot+nwPrefIcon）", ok, `js 段 nwIconSlot=${a} + nwPrefIcon=${b}（合计 ${a + b}，期望 ≥3）；同段 nwIconGlyph=${countClassNode(jsCode, "nwIconGlyph")}`);
+}
+{
   const nk = countClassNode(jsCode, "nwKicker");
   const nr = countClassNode(jsCode, "nwKickerRule");
-  const ok = nk >= 2 && nr === nk;
-  report("A", 1, "A1.6", "nwKickerRule 与 nwKicker 成对", ok, `js 段 kicker=${nk} / rule=${nr}（期望 kicker≥2 且 rule==kicker）`);
+  const stCalls = countLit(jsCode, "SectionTitle(el, el");
+  const ok = nk >= 1 && nr >= 1 && stCalls >= 2;
+  report("A", 1, "A1.6", "nwKickerRule 与 nwKicker 成对（v6：由 SectionTitle 组件保证）", ok, `js 段组件内 kicker=${nk} / rule=${nr}、SectionTitle 调用=${stCalls}（期望 kicker≥1 且 rule≥1 且 调用≥2）`);
 }
 
 // ---------- 断言 2：测试命脉类存活（B 组） ----------

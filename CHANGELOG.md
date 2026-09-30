@@ -1,5 +1,62 @@
 # 更新日志（Changelog）
 
+## [6.0.0] - 2026-09-30
+
+**界面全面重构：DSH 官方 token 用料 × MIUⅨ 风格信息架构（方案 A：源码分块 + 构建链）。**
+用户反馈 v5.5.0 后仍"圆角颜色不好看、UI 割裂"，并转来 [compose-miuix-ui/miuix](https://github.com/compose-miuix-ui/miuix)（Kotlin/Compose 库，代码不可移植、设计语言可借鉴）要求重构所有 UI。本版结论：**学它的型，不搬它的码；用 DSH 的料，做 MIUⅨ 式的架子。**
+
+### 架构：方案 A 落地（源码分块 + 构建链，产物仍单文件）
+
+- 新增 `tools/build-client.mjs`：把 `_ui-work/V6-*.{js,css,txt}` 装配进 `lib/client.js` 的四对标记区（icons / uikit / slider / css），断言失败**绝不写盘**；`--check` 模式校验"源与产物一致"（幂等，CI 可用）。
+- `lib/client.js` 保持宿主要求的单文件产物；标记区**外**为总负责人手管胶水区（`nwGlyph` / `nwIconEls` / 卡内拍平 CSS），构建不触碰。
+- 严约束协作：`CONTRACT-V6.md`（铁律 + 文件所有权 + §4 类名词汇表 + §7 拆分附录）；15 个子代理角色并行交付（含 5 次失败/耗尽后的缩小范围重开），越权文件零发生。
+
+### 组件库（8 个统一组件，`_ui-work/V6-uikit-*.js`，自测 36/36）
+
+- **`PreferenceRow`**——统一行模式（图标槽 + 标题/摘要 + 尾部控件 + 扩展位；`tone:"danger"` 危险淡染；开关委托 `NW_UI.Switch` 经 createElement 挂载）。
+- `GroupCard`（R20 分组卡 + 卡内 `RowDivider` 0.5px 分隔线）、`SectionTitle`（kicker 药丸 + 延伸细线，收编三处内联三件套）、`DialogCard`（收编两处非净化确认框）、`CountBadge`（收编导航徽标 4 处）、`EmptyState`/`FieldRow`（定义就绪，接线见「遗留」）、`RowDivider`。
+- **迁移**：主视图三分区（开关/提示词/状态）全量 → `SectionTitle + GroupCard + PreferenceRow`；`switchRow` 助手一处改动覆盖功能页 5 行 + 模型页 3 行；全部迁移步骤内置"行为标记前后全等"断言（onClick 32、toggle 18、openView 6、set 28 零漂移）。
+- 测试升级：`test/ui-structure-test.mjs` 三项断言改 v6 口径（A1.3=SectionTitle 调用 ≥2、A1.4=nwIconSlot+nwPrefIcon ≥3、A1.6=成对由组件保证）。
+
+### 图标：19+5 枚 emoji → 24 枚 24px stroke 线图标
+
+- 六批（主视图/情感/语义/工具组/导航）24 枚，统一 `viewBox=24 · fill=none · stroke=currentColor · 1.5px round`，SVG 内零颜色，构建期合并为 `NW_ICONS` 单表。
+- 挂载经 `nwGlyph(el, cls, key, fallback)`：表内命中注入 SVG（`dangerouslySetInnerHTML`，串为构建期静态非用户输入），未命中回退原字形——**emoji 兜底永不消失**。
+- 语义 key 设计：同一 emoji（📊）在不同语境允许双形（开关行 vs 工具组）。
+
+### 阈值 slider 辅助输入（用户拍板：slider 辅助、精确输入保留）
+
+- `TolRangeRow`：每维低/高各加 `input[type=range]`（0–99）+ 值显，与既有数字输入**同一 `setDraft` 双向同步**（受控组件天然同步，零新 state）；aria-label 经 t()、disabled 随 loading、reduced-motion 门内。
+
+### 设计映射（`_ui-work/V6-miuix-spec.md` + `V6-miuix-map.md`）
+
+- MIUⅨ 色彩角色/圆角/间距/排版 → `--dsw-*` 白名单逐项映射（39+ token 全命中）；**不借清单**：弹簧动画、全屏遮罩 Dialog（v5.2.0 用户否决史）、MIUⅨ 色值字面量。
+- 落地裁决：行 padding 14/16、分组卡间距 12px、动效既有档 .16s/.18s/.2s、onBackground→`menu-icon`、开关 thumb 默认不覆盖、surface=layer-2 卡面。
+
+### 独立终审（两段式，报告 `_ui-work/V6-verify-report.md`）
+
+- 首轮 11/11 必跑项全绿 + 15 个攻击角度，抓出 **P2-1**（`.nwPref{background:none}` 后者胜压制 `nwRowOn` 开启态底色）与 **P2-2**（GroupCard/summary 数组缺 React key）两个真问题。
+- 处置：复合放行规则 `.nwPref.nwRowOn(+:hover)` + 20 处补 key（`RowDivider` 加 props.key 透传）；A-check 同步升级（扫描范围含标记区→死规则 62→23→白名单后 **14 真死**；R12 补对 + 复合 rescue）。
+- 增量确认：求胜者模拟器实证 6 调用点常态/hover 底色全生效；key 全查零缺零重；等价性复测 10 组全等。**无 P0–P2 遗留，无阻断项。**
+
+### 真机首验修复 + 页面过渡动画（同日第二轮）
+
+- **保存/容差按钮 hover 变全白**：`.nwBtnPrimary:hover`（单类，源序靠前）与 `.nwBtn:hover`（同特异性、源序在后，bg=layer-2 浅灰白）级联抢底——常态被 `.nwBtn.nwBtnPrimary` 复合选择器保住、hover 漏网。→ 补 `.nwBtn.nwBtnPrimary/.nwBtnDone/.nwBtnDanger:hover` 复合放行（源序在后稳赢）。
+- **卡内首/末行上下白边**（开启行顶 2px、危险行底 4px、首末行 hover 同）：`.nwGCardBody{padding:2px 0 4px}` 露卡底色。→ `padding:0`，行全宽贴卡（改 M2 源文件经构建链传播，`--check` 保持幂等）。
+- **功能页/模型页行进卡**：裸堆叠行的 hover/开启态与行间 10px 缝同样违和 → 两页包进 `GroupCard` + 行间 `RowDivider`（模型页引擎行以 `.nwGCardBody .nwRow` 拍平入卡不叠阴影）；至此**全部开关行都在分组卡内**，HyperOS 形态统一。
+- **页面级过渡动画（新需求）**：`body` 包进 `key: view` 的 `.nwView` 容器——view 变化即重挂载重播动画：**前进右侧推入 / 后退左侧推入**（HyperOS/MIUⅨ push-pop 式，0.3s `--nw-ease`）；方向判定用**模块级记忆**（`nwPrevView` + 同 view 重渲染不重算的 if 守卫，StrictMode 双渲染安全），**零 state 字段、零 hook、零控制器改动**；动画仅在 `prefers-reduced-motion: no-preference` 门内播放；`.nwView` 基类定义补齐（R09/R10 类名契约）。
+- 门禁：行为标记前后全等（onChange 18 / onClick 32）、五套测试 exit 0、结构 22/22、ui-audit 0 违规、A-check 零违规、`--check` 幂等、uikit 36/36。
+
+### 遗留（后续增量，现版零影响）
+
+- 未迁移：creation-form 纵向字段（需 VerticalField 组件）、reports 列表、stats 卡、`EmptyState`/`FieldRow` 接线、model 引擎行（nwRow 遗留 1 处）。
+- 死类清理：14 个（12 个 v5 既有 + `nwToolLabelRaw`/`nwToolRowRaw` 2 个 v6 新产生）。
+- 真机项：24 枚图标实绘、slider 手感、深浅主题目视、开态行 hover 保持选中底的设计确认。
+
+### 兼容性
+
+- **工具、参数、返回结构、状态文件零变化（仍 18 个工具）**；`lib/index.js` 哈希与基线一致；官方席位与 `NW_UI` 适配层未动；`react.use` 恒 12、`ctx.inject(`=0、`NW_UI.X(` 直接调用=0。
+
 ## [5.5.0] - 2026-09-30
 
 **界面按 DSH 官方设计体系统一重做（A 档 token 对齐 + B 档官方原语 + C 档材质与信息架构）。**
