@@ -2,14 +2,14 @@
 
 ## [6.0.0] - 2026-09-30
 
-**界面全面重构：DSH 官方 token 用料 × MIUⅨ 风格信息架构（方案 A：源码分块 + 构建链）。**
-用户反馈 v5.5.0 后仍"圆角颜色不好看、UI 割裂"，并转来 [compose-miuix-ui/miuix](https://github.com/compose-miuix-ui/miuix)（Kotlin/Compose 库，代码不可移植、设计语言可借鉴）要求重构所有 UI。本版结论：**学它的型，不搬它的码；用 DSH 的料，做 MIUⅨ 式的架子。**
+**面板 UI 全面重构：统一信息架构、统一组件、统一图标，并引入源码分块与构建期装配。**
+本版解决 v5.5.0 界面遗留的三类问题：行容器与分组样式不统一（四套行容器各自为政）、图标风格混杂（多色 emoji 与文本符号混排）、CSS 历史沉积导致的级联覆盖与选择器特异性风险。重构参照小米 HyperOS（MIUⅨ）设置页的设计语言（分组卡片、统一行模式、分区小标题、克制动效），渲染实现仍基于 DSH 官方设计 token 与官方 UI 原语；MIUⅨ 为 Kotlin/Compose 组件库，其代码未被移植，仅借鉴其信息架构形态。
 
-### 架构：方案 A 落地（源码分块 + 构建链，产物仍单文件）
+### 架构：源码分块 + 构建期装配（产物仍为单文件）
 
-- 新增 `tools/build-client.mjs`：把 `_ui-work/V6-*.{js,css,txt}` 装配进 `lib/client.js` 的四对标记区（icons / uikit / slider / css），断言失败**绝不写盘**；`--check` 模式校验"源与产物一致"（幂等，CI 可用）。
-- `lib/client.js` 保持宿主要求的单文件产物；标记区**外**为总负责人手管胶水区（`nwGlyph` / `nwIconEls` / 卡内拍平 CSS），构建不触碰。
-- 严约束协作：`CONTRACT-V6.md`（铁律 + 文件所有权 + §4 类名词汇表 + §7 拆分附录）；15 个子代理角色并行交付（含 5 次失败/耗尽后的缩小范围重开），越权文件零发生。
+- 新增 `tools/build-client.mjs`：将 `_ui-work/V6-*.{js,css,txt}`（图标 / 组件 / 滑块 / 样式四个源）装配进 `lib/client.js` 的四对标记区（icons / uikit / slider / css），前置断言失败时**不写盘**；`--check` 模式校验源与产物一致（幂等，可纳入 CI）。
+- `lib/client.js` 保持宿主要求的单文件产物形态；标记区之外的胶水区（图标挂载函数、卡内拍平样式等）由构建链跳过、手写维护。
+- 本轮交付采用严格文件所有权协作：每一份源文件有唯一负责人，15 个交付角色并行产出；任何跨文件改动均须上报裁决，构建前全量审计。越权写盘零发生。
 
 ### 组件库（8 个统一组件，`_ui-work/V6-uikit-*.js`，自测 36/36）
 
@@ -18,34 +18,34 @@
 - **迁移**：主视图三分区（开关/提示词/状态）全量 → `SectionTitle + GroupCard + PreferenceRow`；`switchRow` 助手一处改动覆盖功能页 5 行 + 模型页 3 行；全部迁移步骤内置"行为标记前后全等"断言（onClick 32、toggle 18、openView 6、set 28 零漂移）。
 - 测试升级：`test/ui-structure-test.mjs` 三项断言改 v6 口径（A1.3=SectionTitle 调用 ≥2、A1.4=nwIconSlot+nwPrefIcon ≥3、A1.6=成对由组件保证）。
 
-### 图标：19+5 枚 emoji → 24 枚 24px stroke 线图标
+### 图标：多色 emoji 统一为 24 枚 24px stroke 线图标
 
 - 六批（主视图/情感/语义/工具组/导航）24 枚，统一 `viewBox=24 · fill=none · stroke=currentColor · 1.5px round`，SVG 内零颜色，构建期合并为 `NW_ICONS` 单表。
 - 挂载经 `nwGlyph(el, cls, key, fallback)`：表内命中注入 SVG（`dangerouslySetInnerHTML`，串为构建期静态非用户输入），未命中回退原字形——**emoji 兜底永不消失**。
 - 语义 key 设计：同一 emoji（📊）在不同语境允许双形（开关行 vs 工具组）。
 
-### 阈值 slider 辅助输入（用户拍板：slider 辅助、精确输入保留）
+### 阈值 slider 辅助输入（精确数字输入保留）
 
 - `TolRangeRow`：每维低/高各加 `input[type=range]`（0–99）+ 值显，与既有数字输入**同一 `setDraft` 双向同步**（受控组件天然同步，零新 state）；aria-label 经 t()、disabled 随 loading、reduced-motion 门内。
 
-### 设计映射（`_ui-work/V6-miuix-spec.md` + `V6-miuix-map.md`）
+### 设计映射（MIUⅨ 色彩角色、圆角、间距、排版 → DSH 设计 token）
 
-- MIUⅨ 色彩角色/圆角/间距/排版 → `--dsw-*` 白名单逐项映射（39+ token 全命中）；**不借清单**：弹簧动画、全屏遮罩 Dialog（v5.2.0 用户否决史）、MIUⅨ 色值字面量。
-- 落地裁决：行 padding 14/16、分组卡间距 12px、动效既有档 .16s/.18s/.2s、onBackground→`menu-icon`、开关 thumb 默认不覆盖、surface=layer-2 卡面。
+- MIUⅨ 色彩角色/圆角/间距/排版 → `--dsw-*` 白名单逐项映射（39+ token 全命中）；**明确不采纳**：弹簧物理动画、全屏遮罩 Dialog（v5.2.0 起确认框采用面板内卡片形态，不使用全屏遮罩）、MIUⅨ 色值字面量。
+- 落定值：行 padding 14/16、分组卡间距 12px、动效档 .16s/.18s/.2s、行内前置图标色取 `menu-icon`、开关滑块色默认不覆盖官方原语自带外观、卡面取 layer-2。
 
-### 独立终审（两段式，报告 `_ui-work/V6-verify-report.md`）
+### 独立验证（两轮：首轮全量审计 + 修复后增量确认）
 
-- 首轮 11/11 必跑项全绿 + 15 个攻击角度，抓出 **P2-1**（`.nwPref{background:none}` 后者胜压制 `nwRowOn` 开启态底色）与 **P2-2**（GroupCard/summary 数组缺 React key）两个真问题。
-- 处置：复合放行规则 `.nwPref.nwRowOn(+:hover)` + 20 处补 key（`RowDivider` 加 props.key 透传）；A-check 同步升级（扫描范围含标记区→死规则 62→23→白名单后 **14 真死**；R12 补对 + 复合 rescue）。
-- 增量确认：求胜者模拟器实证 6 调用点常态/hover 底色全生效；key 全查零缺零重；等价性复测 10 组全等。**无 P0–P2 遗留，无阻断项。**
+- 首轮 11/11 必跑项全绿 + 15 个攻击角度审查，抓出 **P2-1**（开启态底色被同特异性后写规则压制）与 **P2-2**（分组卡片 children 数组与摘要数组缺 React key）两个缺陷。
+- 处置：补复合放行规则 `.nwPref.nwRowOn(+:hover)` + 20 处补 key；审计工具同步升级（扫描范围覆盖标记区→死规则 62→23→白名单后 **14 真死**；R12 级联对表补齐 + 复合放行豁免）。
+- 增量确认：CSS 级联求胜者逐点实证 6 调用点常态/hover 底色全生效；key 全查零缺零重；等价性复测 10 组全等。**无 P0–P2 遗留，无阻断项。**
 
-### 真机首验修复 + 页面过渡动画（同日第二轮）
+### 真机验收修复 + 页面过渡动画
 
-- **保存/容差按钮 hover 变全白**：`.nwBtnPrimary:hover`（单类，源序靠前）与 `.nwBtn:hover`（同特异性、源序在后，bg=layer-2 浅灰白）级联抢底——常态被 `.nwBtn.nwBtnPrimary` 复合选择器保住、hover 漏网。→ 补 `.nwBtn.nwBtnPrimary/.nwBtnDone/.nwBtnDanger:hover` 复合放行（源序在后稳赢）。
-- **卡内首/末行上下白边**（开启行顶 2px、危险行底 4px、首末行 hover 同）：`.nwGCardBody{padding:2px 0 4px}` 露卡底色。→ `padding:0`，行全宽贴卡（改 M2 源文件经构建链传播，`--check` 保持幂等）。
-- **功能页/模型页行进卡**：裸堆叠行的 hover/开启态与行间 10px 缝同样违和 → 两页包进 `GroupCard` + 行间 `RowDivider`（模型页引擎行以 `.nwGCardBody .nwRow` 拍平入卡不叠阴影）；至此**全部开关行都在分组卡内**，HyperOS 形态统一。
-- **页面级过渡动画（新需求）**：`body` 包进 `key: view` 的 `.nwView` 容器——view 变化即重挂载重播动画：**前进右侧推入 / 后退左侧推入**（HyperOS/MIUⅨ push-pop 式，0.3s `--nw-ease`）；方向判定用**模块级记忆**（`nwPrevView` + 同 view 重渲染不重算的 if 守卫，StrictMode 双渲染安全），**零 state 字段、零 hook、零控制器改动**；动画仅在 `prefers-reduced-motion: no-preference` 门内播放；`.nwView` 基类定义补齐（R09/R10 类名契约）。
-- 门禁：行为标记前后全等（onChange 18 / onClick 32）、五套测试 exit 0、结构 22/22、ui-audit 0 违规、A-check 零违规、`--check` 幂等、uikit 36/36。
+- **保存/容差按钮 hover 底色丢失**：`.nwBtnPrimary:hover`（单类选择器）与 `.nwBtn:hover`（同特异性、源序在后，背景为浅灰白）发生级联覆盖——常态因复合选择器得以保留，hover 态未被覆盖。→ 补 `.nwBtn.nwBtnPrimary/.nwBtnDone/.nwBtnDanger:hover` 复合放行规则。
+- **卡内首/末行与卡片边缘出现白边**（开启行顶部约 2px、危险行底部约 4px，首末行 hover 态相同）：分组卡片内容区上下内边距露出卡片底色。→ 内容区内边距清零，行与卡片边缘完全贴合。
+- **功能开关页、本地模型页行间缝隙**：裸堆叠行的 hover/开启态与 10px 行间距在分组卡片之外显得割裂。→ 两页纳入 `GroupCard` + 行间 `RowDivider`（模型页引擎状态行拍平入卡，不叠加阴影）；至此**全部开关行均位于分组卡片内**。
+- **页面级过渡动画**：`body` 包进以 view 为 key 的 `.nwView` 容器——视图变化即重挂载并重播动画：**前进从右侧推入 / 后退从左侧推入**（HyperOS/MIUⅨ push-pop 式，0.3s 缓动曲线）；切换方向由**模块级记忆**判定（同视图重渲染不重算，StrictMode 双渲染安全），**零 state 字段、零 hook、零控制器改动**；动画仅在 `prefers-reduced-motion: no-preference` 条件下播放。
+- 门禁：行为标记前后全等（onChange 18 / onClick 32）、五套测试 exit 0、结构 22/22、ui-audit 0 违规、A-check 零违规、构建一致性校验通过、组件自测 36/36。
 
 ### 遗留（后续增量，现版零影响）
 
