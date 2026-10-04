@@ -4,7 +4,7 @@
 // 用法：node test/mcp-test.mjs（独立于其他四套测试，不依赖任何外部服务）
 
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
@@ -36,7 +36,13 @@ const ok = (name, cond, detail) => {
 // ---------------------------------------------------------------------------
 // 临时书库：一本 2 章的书 + 状态文件隔离（不碰用户 ~/.dsh）
 // ---------------------------------------------------------------------------
-const testRoot = join(tmpdir(), "dsh-novel-writer-mcp-" + process.pid + "-" + Date.now().toString(36));
+// Windows：tmpdir() 可能返回 8.3 短名（C:\Users\RUNNER~1\...），而服务器用 realpathSync.native
+// 规范化路径拿到的是展开后的长名（C:\Users\runneradmin\...）——测试若拿短名去 includes/=== 永远不成立。
+// GitHub 的 Windows runner 默认 TEMP 正是短名形式（本地 F 盘无短名所以不复现），因此临时目录
+// 一律先建再取真实路径，后续所有断言都用这个真实路径。
+const makeTempDir = (prefix) => realpathSync.native(mkdtempSync(join(tmpdir(), prefix)));
+
+const testRoot = makeTempDir("dsh-novel-writer-mcp-" + process.pid + "-" + Date.now().toString(36));
 const stateFile = join(testRoot, "state-test.json");
 const BOOK = "测试书";
 mkdirSync(join(testRoot, "novels", BOOK), { recursive: true });
@@ -45,8 +51,7 @@ writeFileSync(join(testRoot, "novels", BOOK, "第02章.md"), "日子照旧。她
 const emptyRoot = join(testRoot, "empty-root");
 mkdirSync(emptyRoot, { recursive: true });
 // v4.3.0：书库根之外的目录（用于验证 novel_import src 越界拦截，不需要真的可导入）
-const outsideRoot = join(tmpdir(), "dsh-novel-writer-mcp-outside-" + process.pid + "-" + Date.now().toString(36));
-mkdirSync(outsideRoot, { recursive: true });
+const outsideRoot = makeTempDir("dsh-novel-writer-mcp-outside-" + process.pid + "-" + Date.now().toString(36));
 process.on("exit", () => {
   try { rmSync(testRoot, { recursive: true, force: true }); } catch { /* 忽略 */ }
   try { rmSync(outsideRoot, { recursive: true, force: true }); } catch { /* 忽略 */ }

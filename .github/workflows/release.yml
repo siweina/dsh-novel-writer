@@ -17,9 +17,8 @@ concurrency:
 jobs:
   test:
     runs-on: ${{ matrix.os }}
-    env:
-      TEMP: ${{ runner.temp }}
-      TMP: ${{ runner.temp }}
+    # 注意：不要把 TEMP/TMP 写在 job 级 env 里——runner 上下文在 jobs.<job_id>.env 不可用，
+    # 会让工作流整体无法解析（运行 0 秒 0 job，名字退化成文件路径）。测试改为自行规范化临时目录。
     strategy:
       fail-fast: false
       matrix:
