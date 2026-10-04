@@ -19,9 +19,7 @@
 
 ---
 
-## v6.1.0 本地测试版
-
-本版修复章节定位、复测误配、文本统计、MCP 与界面生命周期问题。完整改动见 [CHANGELOG.md](./CHANGELOG.md)。开发者可运行 `npm ci`、`npm run build:check`、`npm test`；构建源已随仓库提供，不再依赖其他目录。发布准备见 [docs/releasing.md](https://github.com/siweina/dsh-novel-writer/blob/main/docs/releasing.md)。
+最新版本与下载请查看 [**Releases**](https://github.com/siweina/dsh-novel-writer/releases)。
 
 ## 写作流程（一条能走完的闭环）
 

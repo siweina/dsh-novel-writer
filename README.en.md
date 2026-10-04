@@ -20,9 +20,7 @@ exposed as a **stdio MCP server** for Claude Desktop / Cursor.
 
 ---
 
-## v6.1.0 local test build
-
-This release fixes chapter selection, verification matching, text analysis, MCP handling, and UI lifecycle issues. See [CHANGELOG.md](./CHANGELOG.md). Development: `npm ci`, `npm run build:check`, and `npm test`. All client build sources are included in this repository.
+For the latest version and downloads, see [**Releases**](https://github.com/siweina/dsh-novel-writer/releases).
 
 ## The writing loop (end to end)
 
