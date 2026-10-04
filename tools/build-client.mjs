@@ -2,7 +2,7 @@
 /**
  * tools/build-client.mjs — v6.0 方案A 构建链（总负责人所有）
  *
- * 职责：把 _ui-work 下各子代理交付的 V6 文本块，装配进 lib/client.js 的**标记区**，
+ * 职责：把仓库 tools/client-src 下的 V6 文本块，装配进 lib/client.js 的**标记区**，
  * 并对全文件跑不变量断言；任一断言失败 → 不写盘（exit 1）。
  *
  * 标记区约定（lib/client.js 内，成对出现，区块内容每次构建整体替换）：
@@ -23,10 +23,12 @@
  */
 import { readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
+import { fileURLToPath } from "node:url";
+import { join } from "node:path";
 
-const REPO = "F:\\doment\\dsh-novel-writer";
-const SRC = "F:\\doment\\_ui-work";
-const CLIENT = REPO + "\\lib\\client.js";
+const REPO = fileURLToPath(new URL("../", import.meta.url));
+const SRC = join(REPO, "tools", "client-src");
+const CLIENT = join(REPO, "lib", "client.js");
 const CHECK_ONLY = process.argv.includes("--check");
 
 /** 区块表：name → 依序读取的源文件（缺一不可） */
@@ -41,7 +43,7 @@ const problems = [];
 const log = (m) => console.log("  " + m);
 
 function readSrc(name) {
-  try { return readFileSync(SRC + "\\" + name, "utf8").replace(/\s+$/, ""); }
+  try { return readFileSync(join(SRC, name), "utf8").replace(/\r\n/g, "\n").replace(/\s+$/, ""); }
   catch { problems.push(`源文件缺失：${name}（${SRC}）`); return null; }
 }
 
@@ -110,7 +112,7 @@ function assertInvariants(text) {
   if (/\b(?:rgba?|hsla?)\(/.test(css)) problems.push("CSS 出现 rgb/hsl 字面量");
 }
 
-const srcText = readFileSync(CLIENT, "utf8");
+const srcText = readFileSync(CLIENT, "utf8").replace(/\r\n/g, "\n");
 const parts = assembleSources();
 let out = srcText;
 if (problems.length === 0) {

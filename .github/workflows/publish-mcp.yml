@@ -4,10 +4,7 @@ name: Publish to MCP Registry
 # 顺序要求：Registry 通过 npm 包 package.json 里的 mcpName 校验归属，
 # 因此这里先等 npm 上出现该版本，再发布元数据（避免与 release.yml 的 npm publish 抢跑）。
 on:
-  push:
-    tags:
-      - 'v*'
-  workflow_dispatch:
+  workflow_call:
 permissions:
   contents: read
   id-token: write
@@ -15,7 +12,13 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Check release metadata
+        run: node tools/check-release.mjs
       - name: Wait for npm package to be available
         run: |
           VERSION=$(node -p "require('./server.json').version")

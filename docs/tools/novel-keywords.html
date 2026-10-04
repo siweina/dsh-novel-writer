@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_keywords — 关键词统计｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_keywords 的实现细节：中文相邻二字/三字组的滑动窗口与停用字规则、英文词与疑似人名的识别模式、入选阈值与排序截断、报告落盘与保留份数，以及对调用方模型的约束。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_keywords","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-keywords.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_keywords — 关键词统计｜dsh-novel-writer 技术文档","description":"novel_keywords 的实现细节：中文相邻二字/三字组的滑动窗口与停用字规则、英文词与疑似人名的识别模式、入选阈值与排序截断、报告落盘与保留份数，以及对调用方模型的约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-keywords.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.0.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_keywords, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_keywords — 关键词统计｜dsh-novel-writer 技术文档","description":"novel_keywords 的实现细节：中文相邻二字/三字组的滑动窗口与停用字规则、英文词与疑似人名的识别模式、入选阈值与排序截断、报告落盘与保留份数，以及对调用方模型的约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-keywords.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.1.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_keywords, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -33,6 +33,7 @@
   <main class="docs__main">
     <article class="doc">
       <h1>novel_keywords</h1>
+      <div class="note"><b>v6.1.0：</b>章节参数先精确匹配完整文件名，再匹配省略扩展名的文件名；同名多扩展名时必须提供完整文件名，明确指定却不存在的扩展名不会改读另一格式。</div>
       <p class="doc__lead">
         高频关键词统计。对某部作品或单个章节做纯字面计数，产出四类条目：中文相邻二字组、中文相邻三字组、疑似人名/专名、英文词。<strong>输出不含单字</strong>——单字频次不参与统计，只保留重复出现的二字组、三字组与英文词，以及出现两次以上的疑似人名。全程零依赖、无分词模型、不调用在线大模型，结果同时落盘到书库数据目录留档。
       </p>

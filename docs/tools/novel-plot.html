@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_plot — 伏笔登记表｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_plot 的实现细节：伏笔条目的字段结构、open/done 状态机、id 生成规则、scan 的提及扫描算法与关键词提取口径、action: graph 结构视图的五项跨章计算（伏笔生命周期 / 人物出场矩阵与连续缺席 / 线索活跃度 / 时间线顺序 / 大纲对照）、落盘路径与并发事务语义。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_plot","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-plot.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_plot — 伏笔登记表｜dsh-novel-writer 技术文档","description":"novel_plot 的实现细节：伏笔条目的字段结构、open/done 状态机、id 生成规则、scan 的提及扫描算法与关键词提取口径、action: graph 结构视图的五项跨章计算（伏笔生命周期 / 人物出场矩阵与连续缺席 / 线索活跃度 / 时间线顺序 / 大纲对照）、落盘路径与并发事务语义。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-plot.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.0.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_plot, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_plot — 伏笔登记表｜dsh-novel-writer 技术文档","description":"novel_plot 的实现细节：伏笔条目的字段结构、open/done 状态机、id 生成规则、scan 的提及扫描算法与关键词提取口径、action: graph 结构视图的五项跨章计算（伏笔生命周期 / 人物出场矩阵与连续缺席 / 线索活跃度 / 时间线顺序 / 大纲对照）、落盘路径与并发事务语义。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-plot.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.1.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_plot, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -33,6 +33,7 @@
   <main class="docs__main">
     <article class="doc">
       <h1>novel_plot</h1>
+      <div class="note"><b>v6.1.0：</b><code>graph</code> 读取设定时区分文件不存在与文件损坏/不可读；后者在 <code>degraded</code> 提示读取失败，避免误报为未登记。</div>
       <p class="doc__lead">
         伏笔 / 剧情钩子登记表。以「一部作品一个 JSON 文件」维护伏笔条目，用 <code>status</code> 区分 <code>open</code>（待回收）与 <code>done</code>（已回收）；<code>scan</code> 动作把伏笔内容切成关键词后遍历章节正文，自动在条目上标注「在哪几章被提及」；<code>action: "graph"</code> 是<strong>结构视图</strong>，对全书做跨章计算——伏笔生命周期、人物出场矩阵与连续缺席、线索活跃度、时间线登记顺序、大纲与正文的对照。<strong>纯本地文本统计与包含判定</strong>，不做语义推理，也不调用在线模型。
       </p>

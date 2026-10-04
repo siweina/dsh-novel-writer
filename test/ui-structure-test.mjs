@@ -1,7 +1,7 @@
 /**
  * test/ui-structure-test.mjs —— B 档「官网式整体重构」源码级结构回归测试（契约 §7，G 的独占产物）
  *
- * 规格来源：F:\doment\_ui-work\CONTRACT-B.md §1 铁律 / §4 类名词汇表 / §7 G 专项（8 条断言）。
+ * 规格来源：既有 UI 结构约定 §1 铁律 / §4 类名词汇表 / §7 G 专项（8 条断言）。
  * 归属：只写这一个文件；其它 test/* 一概不碰（client-test.mjs 归总负责人）。
  *
  * 运行：node test/ui-structure-test.mjs（路径相对本文件解析，任意 cwd 均可）
@@ -34,7 +34,7 @@
  *     B4 react.use[A-Z] == 12；
  *     B5 ctx.inject( =0、sidebar.panellist=5、name:"main"=1、createNovelWriterUI 定义=1、
  *        var NW_UI = createNovelWriterUI =1、primitives require 在 try 之后、
- *        lib/index.js 与发布克隆 sha256 相同（9CFFE14A…）、ALL_TOOLS=18；
+ *        client.js 与仓库内构建源重放一致、ALL_TOOLS=18；
  *     B6 css 模板段禁区 3×0；style: 对象裸色值违规 0（1 条 ⚠ 全局关键字豁免，见下）。
  *
  * ── 两处口径说明（已报总负责人）──────────────────────────────────────────────
@@ -47,14 +47,15 @@
  *      写测试时实测存量豁免 1 条：lib/client.js 约 2267 行 background:"transparent"（demo 按钮）。
  */
 
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { fileURLToPath } from "node:url";
 
 // ============================== 写死的基线与清单 ==============================
 
 const HOOK_BASELINE = 12;                       // 见头注释：实测命令与指纹
 const EXPECTED_ALL_TOOLS = 18;                  // 工具侧零改动（契约 §1.7：18 个工具）
-const RELEASE_INDEX = String.raw`F:\测试用例\_release\repo\lib\index.js`; // 发布克隆（只读比对）
 const PRIMITIVES_REQ = 'require("@deepseek-ai/dsh-client-ui-primitives")';
 
 // 契约 §4.2：5.5.0 新增类必须全部保留定义（逐字来自契约第 58 行冻结清单，共 34 个）
@@ -90,7 +91,6 @@ const GLOBAL_KEYWORDS = new Set([
 
 const CLIENT_URL = new URL("../lib/client.js", import.meta.url);
 const CORE_URL = new URL("../lib/core.js", import.meta.url);
-const INDEX_URL = new URL("../lib/index.js", import.meta.url);
 
 /** 统计正则命中数 */
 function countRe(text, re) { return (text.match(re) || []).length; }
@@ -401,20 +401,9 @@ head("【B】断言 2~6 · 不变量与守卫（预期：现在就全绿）");
       ? `，前置 try @行 ${lineOf(full, tryIdx)} < require @行 ${lineOf(full, reqIdx)}`
       : reqCount !== 1 ? "（必须恰好 1 次）" : "（require 之前找不到 try {）"));
 
-  let hashOk = false, hashDetail;
-  try {
-    const a = createHash("sha256").update(readFileSync(INDEX_URL)).digest("hex");
-    if (!existsSync(RELEASE_INDEX)) {
-      hashDetail = `发布克隆缺失：${RELEASE_INDEX}（无法验证工具侧零改动）`;
-    } else {
-      const b = createHash("sha256").update(readFileSync(RELEASE_INDEX)).digest("hex");
-      hashOk = a === b;
-      hashDetail = `lib=${a.slice(0, 16)}… release=${b.slice(0, 16)}… ${hashOk ? "一致" : "不一致！"}`;
-    }
-  } catch (e) {
-    hashDetail = `读取失败：${(e && e.message) || e}`;
-  }
-  report("B", 5, "B5.7", "lib/index.js 与发布克隆 SHA256 一致", hashOk, hashDetail);
+  const replay = spawnSync(process.execPath, [fileURLToPath(new URL("../tools/build-client.mjs", import.meta.url)), "--check"], { encoding: "utf8" });
+  report("B", 5, "B5.7", "client.js 与仓库内构建源重放一致", replay.status === 0,
+    (replay.stdout || replay.stderr || replay.error?.message || "无输出").trim());
 
   let toolsCount = null, toolsSource = "";
   try {

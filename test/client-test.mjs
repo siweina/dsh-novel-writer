@@ -571,16 +571,20 @@ console.log("官方席位（v5.2.0 重做）: 侧栏行 sidebar.panellist(id/ord
 //     → 本段用一个**没有 inject**、也没有官方席位的 ctx，必须正常 apply 且走旧路径兜底。
 //  ② 席位晚声明时要有接管路径（slots.inject 只在声明后回调，另挂 subscribe 兜底）。
 // ---------------------------------------------------------------------------
-const late = { seats: [] };
+const late = { seats: [], callbacks: new Map() };
 const lateDeclared = new Set(["settings.plugin.item"]);
+let lateCleanup;
 const lateCtx = {
-  effect: (fn) => fn(),
+  effect: (fn) => { lateCleanup = fn(); },
   slots: {
     // 如实建模宿主：席位未声明时**不回调**（真机上 slots.inject 就是等声明）
     inject: (name, fn) => { if (lateDeclared.has(name)) fn(); return () => {}; },
     register: (opts, component) => { late.seats.push({ opts, component }); return () => {}; },
     specDynamic: (name) => (lateDeclared.has(name) ? {} : void 0),
-    subscribe: () => () => {}
+    subscribe: (name, callback) => {
+      late.callbacks.set(name, callback);
+      return () => { late.callbacks.delete(name); };
+    }
   }
   // 关键：故意不提供 ctx.inject（上一版就是靠它等依赖，导致 web boot 失败）
 };
@@ -597,13 +601,25 @@ if (afterLate !== beforeLate + 1) {
 if (typeof exportedLate.__internals.tryOfficialPanel !== "function") {
   fail("未暴露 tryOfficialPanel（席位晚声明的接管路径无法验证）");
 }
-// 席位后声明 + layout 服务后到
-SIDEBAR_SEATS.forEach((name) => lateDeclared.add(name));
+// Let sidebar arrive first and main last. The main event must trigger takeover.
+if (!late.callbacks.has("sidebar.panellist") || !late.callbacks.has("main")) {
+  fail("两个官方席位都必须订阅晚声明事件");
+}
+lateDeclared.add("sidebar.panellist");
+late.callbacks.get("sidebar.panellist")?.();
+if (late.seats.some((s) => s.opts.name === "main")) fail("仅侧栏席位声明时过早接管");
+lateDeclared.add("main");
 lateCtx.layout = { selectPanel: () => {} };
-exportedLate.__internals.tryOfficialPanel();
+late.callbacks.get("main")?.();
 if (!late.seats.some((s) => s.opts.name === "sidebar.panellist")) fail("席位声明后未接管侧栏行");
 if (!late.seats.some((s) => s.opts.name === "main")) fail("席位声明后未接管主栏页面");
 if (collect(body, isLegacyEntry).length !== beforeLate) fail("接管后旧入口未撤掉");
+const firstLateSeatCount = late.seats.length;
+lateCleanup();
+if (late.callbacks.size !== 0) fail("卸载后席位订阅未清理");
+exportedLate.apply(lateCtx);
+if (late.seats.length <= firstLateSeatCount) fail("同一模块实例卸载后再次 apply 未重新注册席位");
+lateCleanup();
 // ctx.get 取服务（第三方插件惯用写法，见 @linxin666/dsh-client-ui-market）：layout 也要能拿到
 const viaGet = { seats: [], selected: "sentinel" };
 const getCtx = {

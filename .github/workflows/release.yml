@@ -1,80 +1,94 @@
 name: Package & Release
-# v4.0.0：测试门禁——此前唯一测试入口挂在发布工作流上（只有 tag/手动触发才跑），
-# 普通分支推送与 PR 完全没有测试。现在 push（所有分支）与 pull_request 都会跑 test job，发布 job 用 needs: test 卡住。
+
 on:
   workflow_dispatch:
   push:
-    branches:
-      - '**'
-    tags:
-      - 'v*'
+    branches: ['**']
+    tags: ['v*']
   pull_request:
+
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: ['22', '24']
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: 22
-          registry-url: https://registry.npmjs.org/
-      - name: Install dependencies
-        run: npm ci --omit=dev || npm install --omit=dev
-      - name: Run tests
-        run: |
-          node test/unit-test.mjs
-          node test/e2e-test.mjs
-          node test/pattern-test.mjs
-          node test/client-test.mjs
+          node-version: ${{ matrix.node }}
+          package-manager-cache: false
+      - run: npm ci
+      - run: npm run check
+
   package:
     needs: test
-    # 打包/发布只在 tag 或手动触发时执行（分支推送只跑测试，不产出多余 artifact）
+    # 手动执行只生成测试产物；只有推送版本 tag 才发布。
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: '24'
           registry-url: https://registry.npmjs.org/
-      - name: Install zip
-        run: sudo apt-get install -y zip
-      - name: Install dependencies
-        run: npm ci --omit=dev || npm install --omit=dev
+          package-manager-cache: false
+      # Trusted publishing 要求 npm >= 11.5.1。
+      - run: npm install --global npm@11.19.0
+      - run: npm ci
+      - run: npm run build:check
+      - run: node tools/check-release.mjs
       - name: Get version
         id: ver
         run: echo "VERSION=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
-      - name: Prepare bundle
+      - name: Prepare plugin bundle
         run: |
-          mkdir -p dist
-          # v4.0.0：补 --exclude='node_modules'——此前 npm ci 装出的依赖树（本机 142MB）会被整包打进 release zip；
-          # 依赖由用户侧 npm install/dsh plugin add 安装。同时删掉过时排除项 .e2e-test/.f39/.f3*（测试早已改用 tmpdir，永不匹配）。
-          # v4.3.0 后补 --exclude='docs'：docs/ 是 GitHub Pages 的宣传主页与技术文档站，不属于插件包内容。
-          rsync -a --exclude='node_modules' --exclude='.github' --exclude='docs' --exclude='dist' --exclude='*.zip' --exclude='.git' --exclude='.novel-writer' --exclude='_*.mjs' --exclude='*.bak*' ./ dist/dsh-novel-writer-v${{ steps.ver.outputs.VERSION }}/
-      - name: Create zip
-        run: cd dist && zip -r ../dsh-novel-writer-v${{ steps.ver.outputs.VERSION }}.zip dsh-novel-writer-v${{ steps.ver.outputs.VERSION }}
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+          mkdir -p dist/dsh-novel-writer-v${{ steps.ver.outputs.VERSION }}
+          # 白名单避免把依赖、缓存、站点或开发凭证装进插件 ZIP。
+          cp -r lib mcp skills tools test package.json package-lock.json cordis.patch.yml README.md README.en.md CHANGELOG.md LICENSE server.json smithery.yaml Dockerfile glama.json dist/dsh-novel-writer-v${{ steps.ver.outputs.VERSION }}/
+          cd dist
+          zip -qr ../dsh-novel-writer-v${{ steps.ver.outputs.VERSION }}.zip dsh-novel-writer-v${{ steps.ver.outputs.VERSION }}
+      - name: Prepare npm tarball
+        run: npm pack --pack-destination dist
+      - uses: actions/upload-artifact@v4
         with:
           name: dsh-novel-writer-v${{ steps.ver.outputs.VERSION }}
-          path: dsh-novel-writer-v${{ steps.ver.outputs.VERSION }}.zip
-      - name: Publish to npm
-        if: startsWith(github.ref, 'refs/tags/')
-        run: npm publish --registry https://registry.npmjs.org/
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      # v5.5.0：Release 正文改为从 CHANGELOG.md 自动提取。
-      # 原先这里是写死的「（更新日志待手动填写）」占位串，导致每个新 tag 的 Release 页面
-      # 都只有那句占位——v5.2.0 就是这么漏掉的（事后才手工补）。
-      # 取不到该版本小节时输出一句可读兜底文案，不阻断发布；本地可用 tools/release-notes.mjs 预演。
+          path: |
+            dsh-novel-writer-v${{ steps.ver.outputs.VERSION }}.zip
+            dist/*.tgz
+      - name: Publish to npm via OIDC
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        run: npm publish dist/dsh-novel-writer-${{ steps.ver.outputs.VERSION }}.tgz --access public --registry https://registry.npmjs.org/
       - name: Extract release notes
-        if: startsWith(github.ref, 'refs/tags/')
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
         run: node tools/release-notes.mjs "$GITHUB_REF_NAME" > release-notes.md
       - name: Create Release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: dsh-novel-writer-v${{ steps.ver.outputs.VERSION }}.zip
+          files: |
+            dsh-novel-writer-v${{ steps.ver.outputs.VERSION }}.zip
+            dist/*.tgz
           body_path: release-notes.md
+
+  mcp-registry:
+    needs: package
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    uses: ./.github/workflows/publish-mcp.yml
+    permissions:
+      contents: read
+      id-token: write
+

@@ -4,7 +4,7 @@
 // 用法：node test/mcp-test.mjs（独立于其他四套测试，不依赖任何外部服务）
 
 import { spawn } from "node:child_process";
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
@@ -55,8 +55,8 @@ process.on("exit", () => {
 // ---------------------------------------------------------------------------
 // MCP 客户端桩：spawn 服务器，按行收发 JSON-RPC
 // ---------------------------------------------------------------------------
-function startServer({ args = [], env = {}, cwd = PLUGIN_DIR } = {}) {
-  const child = spawn(process.execPath, [SERVER, ...args], {
+function startServer({ args = [], env = {}, cwd = PLUGIN_DIR, serverPath = SERVER } = {}) {
+  const child = spawn(process.execPath, [serverPath, ...args], {
     cwd,
     env: { ...process.env, DSH_NOVEL_WRITER_STATE: stateFile, ...env },
     stdio: ["pipe", "pipe", "pipe"]
@@ -338,6 +338,41 @@ ok("超长行丢弃写 stderr 且只记字节数（不回显内容）",
   a.stderrText().split("\n").filter((l) => l.includes("已丢弃超长行"))[0] ?? "(无)");
 ok("超长行未污染 stdout（仍无非 JSON 行）", a.badLines.length === 0, a.badLines.join(" | ").slice(0, 120));
 
+const secretMarker = "PRIVATE_INPUT_MARKER_771";
+a.rawLine('{"jsonrpc":"2.0","id":77002,"method":"ping","params":{"pad":"' + secretMarker + "q".repeat(4 * 1024 * 1024) + '"}}');
+await a.request("ping");
+ok("超限输入的正文不进入 stderr", !a.stderrText().includes(secretMarker));
+const utf8Line = '{"jsonrpc":"2.0","id":77003,"method":"ping","params":{"pad":"' + "中".repeat(1500000) + '"}}';
+a.rawLine(utf8Line);
+await a.request("ping");
+ok("行长按 UTF-8 字节计，拒绝超限多字节行",
+  !a.frames.some((frame) => frame?.id === 77003) && a.stderrText().includes("45000"));
+
+const linkedOutside = join(testRoot, "linked-outside");
+symlinkSync(outsideRoot, linkedOutside, process.platform === "win32" ? "junction" : "dir");
+const linkedRoot = await a.request("tools/call", { name: "novel_books", arguments: { root: linkedOutside } });
+ok("显式 root 的目录联接不能越过书库边界",
+  toolText(linkedRoot).includes(testRoot) && !toolText(linkedRoot).includes(outsideRoot));
+const linkedSrc = await a.request("tools/call", { name: "novel_import", arguments: { src: linkedOutside } });
+ok("novel_import 的 src 目录联接被拒绝", linkedSrc.result?.isError === true && toolText(linkedSrc).includes("src 必须位于书库根"));
+const futureSrc = await a.request("tools/call", { name: "novel_import", arguments: { src: join(linkedOutside, "future.md") } });
+ok("尚不存在的 src 子路径仍检查真实祖先", futureSrc.result?.isError === true && toolText(futureSrc).includes("src 必须位于书库根"));
+const dotDotDrafts = join(testRoot, "..drafts");
+mkdirSync(dotDotDrafts);
+const draftsRoot = await a.request("tools/call", { name: "novel_books", arguments: { root: dotDotDrafts } });
+ok("书库内以两个点开头的合法目录不被误判越界", toolText(draftsRoot).includes(dotDotDrafts));
+const linkedBook = join(testRoot, "novels", "外部联接书");
+symlinkSync(outsideRoot, linkedBook, process.platform === "win32" ? "junction" : "dir");
+const linkedBookRead = await a.request("tools/call", { name: "novel_read", arguments: { book: "外部联接书", chapter: "第01章.md" } });
+ok("novel_read 拒绝 novels 下指向外部的书目录联接", linkedBookRead.result?.isError === true && toolText(linkedBookRead).includes("派生路径"), JSON.stringify(linkedBookRead.result ?? null));
+const dataDir = join(testRoot, ".novel-writer");
+rmSync(dataDir, { recursive: true, force: true });
+symlinkSync(outsideRoot, dataDir, process.platform === "win32" ? "junction" : "dir");
+const linkedDataWrite = await a.request("tools/call", { name: "novel_settings", arguments: { book: BOOK, category: "character", action: "add", name: "不应写入" } });
+ok("写入 .novel-writer 外部联接被拒绝", linkedDataWrite.result?.isError === true && toolText(linkedDataWrite).includes("派生路径"), JSON.stringify(linkedDataWrite.result ?? null));
+rmSync(dataDir, { recursive: true, force: true });
+mkdirSync(dataDir, { recursive: true });
+
 // ---------------------------------------------------------------------------
 // ①-b v4.3.0：批量请求（JSON-RPC batching；MCP 2025-06-18 已移除，本服务器按声明的 2024-11-05 保留）
 // ---------------------------------------------------------------------------
@@ -423,6 +458,66 @@ const cCall = await c.request("tools/call", { name: "novel_books", arguments: {}
 const cValue = parseJsonOrNull(toolText(cCall));
 ok("--root= 生效且覆盖环境变量", cValue !== null ? cValue.root === testRoot : toolText(cCall).includes(testRoot), cValue !== null ? String(cValue.root) : toolText(cCall).slice(0, 120));
 ok("--root= 服务器 exit=0", (await c.stop()).code === 0);
+
+// Slow tools and blocked stdout need a deterministic plugin without touching the real registry.
+console.log("\n=== MCP 服务器：取消与输出背压 ===");
+const transportPlugin = join(testRoot, "transport-plugin");
+mkdirSync(join(transportPlugin, "lib"), { recursive: true });
+mkdirSync(join(transportPlugin, "mcp"), { recursive: true });
+writeFileSync(join(transportPlugin, "package.json"), JSON.stringify({ name: "transport-test", version: "1.0.0", type: "module" }));
+writeFileSync(join(transportPlugin, "mcp", "server.mjs"), readFileSync(SERVER));
+writeFileSync(join(transportPlugin, "lib", "index.js"), `
+import { writeFileSync } from "node:fs";
+import { setTimeout as delay } from "node:timers/promises";
+export async function apply(ctx) {
+  ctx.tools.register({
+    name: "novel_wait", description: "wait", parameters: { type: "object", properties: {} },
+    async execute(_args, exec) {
+      writeFileSync(process.env.NW_TEST_STARTS, "started\\n", { flag: "a" });
+      await delay(3000, undefined, { signal: exec.signal });
+      return "completed";
+    }
+  });
+  ctx.tools.register({
+    name: "novel_large", description: "large", parameters: { type: "object", properties: {} },
+    execute() { return "x".repeat(32 * 1024 * 1024); }
+  });
+}
+`);
+const transportServer = join(transportPlugin, "mcp", "server.mjs");
+const startsFile = join(testRoot, "started-tools.txt");
+const transport = startServer({ args: ["--root", testRoot], serverPath: transportServer, env: { NW_TEST_STARTS: startsFile } });
+await transport.request("initialize", { protocolVersion: "2025-11-25", capabilities: {} });
+const activeCall = transport.rawRequest({ method: "tools/call", params: { name: "novel_wait", arguments: {} } });
+for (let i = 0; i < 100 && !existsSync(startsFile); i += 1) {
+  await new Promise((resolve) => setTimeout(resolve, 20));
+}
+const queuedCall = transport.rawRequest({ method: "tools/call", params: { name: "novel_wait", arguments: {} } });
+transport.notify("notifications/cancelled", { requestId: queuedCall.id });
+transport.notify("notifications/cancelled", { requestId: activeCall.id });
+const [activeResult, queuedResult] = await Promise.all([activeCall.promise, queuedCall.promise]);
+ok("取消通知能中断正在运行的工具", activeResult.result?.isError === true && toolText(activeResult).includes("取消"));
+ok("排队但未开始的工具收到取消后不执行",
+  queuedResult.result?.isError === true && readFileSync(startsFile, "utf8").trim().split("\n").length === 1);
+ok("取消后服务器继续响应", (await transport.request("ping")).result !== undefined);
+ok("取消测试服务器 exit=0", (await transport.stop()).code === 0);
+
+const stalledOutput = await new Promise((resolve) => {
+  const child = spawn(process.execPath, [transportServer, "--root", testRoot], {
+    stdio: ["pipe", "pipe", "pipe"], env: { ...process.env, NW_TEST_STARTS: startsFile }
+  });
+  const errors = [];
+  child.stderr.on("data", (chunk) => errors.push(String(chunk)));
+  const guard = setTimeout(() => child.kill("SIGKILL"), 6000);
+  child.on("exit", (code, signal) => {
+    clearTimeout(guard);
+    resolve({ code, signal, errors: errors.join("") });
+  });
+  child.stdin.write(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "novel_large", arguments: {} } }) + "\n");
+});
+ok("客户端停止读取 stdout 时超时断连，不继续积压响应",
+  stalledOutput.code === 1 && stalledOutput.errors.includes("stdout 写入超时"),
+  JSON.stringify({ code: stalledOutput.code, signal: stalledOutput.signal, timeout: stalledOutput.errors.includes("stdout 写入超时") }));
 
 // ---------------------------------------------------------------------------
 // ④ v4.3.0：插件加载失败时的两种行为（用"假插件目录"复现，不碰真实 lib/）

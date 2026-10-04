@@ -1,0 +1,26 @@
+/* V6-components.css (M2) — §4 新建 20 类的统一样式.两空格紧凑写法,零颜色字面量,token 仅白名单 --dsw-* (+沿用 --nw-ease 缓动变量). */
+.nwGCard{margin:0;border:0;border-radius:var(--dsw-radius-xl);background:var(--dsw-alias-bg-layer-2);box-shadow:var(--dsw-elevation-soft);overflow:hidden}
+.nwGCard+.nwGCard{margin-top:12px}
+.nwGCardTitle{padding:14px 16px 6px;font-size:14px;line-height:20px;font-weight:600;color:var(--dsw-alias-label-primary)}
+.nwGCardBody{padding:0}
+.nwPref{display:flex;align-items:center;gap:14px;padding:14px 16px;background:none;transition:background .16s var(--nw-ease,cubic-bezier(.16,1,.3,1))}
+.nwPref:hover{background:var(--dsw-alias-interactive-bg-hover)}
+.nwPrefIcon{flex:none;width:34px;height:34px;display:flex;align-items:center;justify-content:center;border-radius:var(--dsw-radius-md);background:color-mix(in srgb,var(--dsw-alias-state-business-primary) 8%,var(--dsw-alias-bg-layer-2));border:0.5px solid color-mix(in srgb,var(--dsw-alias-state-business-primary) 16%,var(--dsw-alias-bg-layer-2));color:var(--dsw-alias-state-business-primary)}
+.nwPrefGlyph{display:inline-flex;align-items:center;justify-content:center;font-size:15px;line-height:20px;color:var(--dsw-alias-state-business-primary)}
+.nwPrefGlyph svg{width:20px;height:20px;display:block}
+.nwPrefText{flex:1;min-width:0}
+.nwPrefTitle{font-size:14px;line-height:20px;font-weight:500;color:var(--dsw-alias-label-primary)}
+.nwPrefSummary{font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary);margin-top:2px}
+.nwPrefTrail{flex:none;display:flex;align-items:center;gap:8px;margin-left:auto}
+.nwPrefBottom{display:flex;align-items:center;gap:10px;padding:0 16px 12px}
+.nwPref.nwPrefDanger{background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 5%,var(--dsw-alias-bg-layer-2))}
+.nwRowDiv{height:0.5px;margin:0 16px;background:var(--dsw-alias-border-l2)}
+.nwEmpty{display:flex;flex-direction:column;align-items:center;text-align:center;padding:24px 16px}
+.nwEmptyTitle{font-size:14px;line-height:20px;font-weight:600;color:var(--dsw-alias-label-secondary)}
+.nwEmptyHint{font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary);margin-top:4px}
+.nwField{display:flex;align-items:center;gap:10px;padding:10px 16px}
+.nwFieldCtl{flex:none;display:flex;align-items:center;gap:8px;margin-left:auto}
+/* .nwRange 本体外观归 M5(V6-slider-css.txt),此处仅预留 flex 布局槽,合并冲突以 M5 为准. */
+.nwRange{flex:1;min-width:0}
+.nwRangeVal{flex:none;min-width:36px;text-align:right;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion: reduce){.nwGCard,.nwPref{transition:none!important}}

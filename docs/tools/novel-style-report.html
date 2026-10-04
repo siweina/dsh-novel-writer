@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_style_report — 风格画像报告｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_style_report 的实现细节：六维文笔指标的公式、词表与阈值，基线带 μ±σ 的计算与钳制规则，偏离判定分支，以及对调用方模型的约束。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_style_report","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-style-report.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_style_report — 风格画像报告｜dsh-novel-writer 技术文档","description":"novel_style_report 的实现细节：六维文笔指标的公式、词表与阈值，基线带 μ±σ 的计算与钳制规则，偏离判定分支，以及对调用方模型的约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-style-report.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.0.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_style_report, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_style_report — 风格画像报告｜dsh-novel-writer 技术文档","description":"novel_style_report 的实现细节：六维文笔指标的公式、词表与阈值，基线带 μ±σ 的计算与钳制规则，偏离判定分支，以及对调用方模型的约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-style-report.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.1.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_style_report, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -33,6 +33,7 @@
   <main class="docs__main">
     <article class="doc">
       <h1>novel_style_report</h1>
+      <div class="note"><b>v6.1.0：</b>完整报告新增 <code>semanticDiagnostics: { reason, detail, count, at }</code>，表示本次语义风格计算的原因、细节、结果数与时间；功能未启用为 <code>not-run</code>，引擎不可用为 <code>no-engine</code>，精简报告省略明细。</div>
       <p class="doc__lead">
         风格画像报告。对全书逐章测量六个文笔维度，汇总为基线带 μ±σ，并聚合文风指纹、高频词、题材流派、情感量化、氛围 12 维与语义风格距离，作为「测量数据」交给调用方模型做风格判断。<strong>插件只报数、不下结论</strong>：模型的判断可通过 <code>aiJudgment</code> 回传存盘，供后续续写时复用。
       </p>

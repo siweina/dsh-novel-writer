@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_semantic_search — 语义检索｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_semantic_search 的实现细节：本地 bge-small-zh ONNX 推理、150 字切块与章节标记、内容指纹增量索引、128 维降采样与余弦排序，以及引擎不可用时的降级文案与索引缓存边界。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_semantic_search","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-semantic-search.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_semantic_search — 语义检索｜dsh-novel-writer 技术文档","description":"novel_semantic_search 的实现细节：本地 bge-small-zh ONNX 推理、150 字切块与章节标记、内容指纹增量索引、128 维降采样与余弦排序，以及引擎不可用时的降级文案与索引缓存边界。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-semantic-search.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.0.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_semantic_search, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_semantic_search — 语义检索｜dsh-novel-writer 技术文档","description":"novel_semantic_search 的实现细节：本地 bge-small-zh ONNX 推理、150 字切块与章节标记、内容指纹增量索引、128 维降采样与余弦排序，以及引擎不可用时的降级文案与索引缓存边界。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-semantic-search.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.1.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_semantic_search, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -90,15 +90,15 @@ embedMany(chunks)：并发 4；抛错的块整体重试一轮，仍失败则剔�
       <p>批量推理按 <code>id</code> 回填向量而非按下标——失败项被过滤后会缩短数组，按下标回填会造成向量与段落错位。</p>
 
       <h3>3 · 切块与章节标记</h3>
-      <div class="formula">chunkText(text)：
+      <div class="formula">chunkText(text, { chapter })：
   归一 CRLF / CR / U+2028 / U+2029 / U+0085 为 \n
   识别章节标题行（整行 ≤ 40 字，且匹配
     第[零一二三四五六七八九十百千两０-９\d]{1,8}[章节回卷部] / Chapter N / 序章|序言|楔子|引子|尾声|终章|番外）
     命中则切分当前块并切换 chapter 标记；标题行本身不进正文
   单行超 150 字按 [\s\S]{1,150} 切片；再按「先切满 150 字、余量留到下一块」累积
   flush 时机：空行 / 章节切换 / 文本结束
-  过滤：trim 后长度 ≥ 8；但已识别章节内只要有内容就保留（短章节不被吞掉）
-  id = chapter + "#" + 块序号；chapter 无标题时默认为「全书」</div>
+  过滤：无章节上下文时 trim 后长度 ≥ 8；显式传入章节或识别到标题后只要有内容就保留
+  id = chapter + "#" + 块序号；chapter 优先使用调用方传入的章节文件名；整书无上下文/标题时默认为「全书」</div>
       <p>超长行按 150 字硬切是必要的：PDF 或网页复制的无换行文本若整行进模型，会在 512 token 处静默截断，尾部内容丢失。切块长度上限由「累加后判断」改为「切满再留余量」后恒定 ≤ 150 字。</p>
 
       <h3>4 · 余弦排序</h3>
@@ -138,7 +138,7 @@ loadIndexMeta 校验：model 与 dim 必须匹配；任一条目 vec 长度 ≠ 
         <li><strong>异常一律安全降级</strong>：<code>execute</code> 主体被 try 包裹，任何异常返回 <code>available:false</code> 与「语义检索安全降级：&lt;异常前 120 字&gt;（不影响其他工具）」，绝不向宿主裸抛。但<strong>参数缺失的校验在 try 之外</strong>：<code>book</code> / <code>query</code> 为空会正常抛错，不会被伪装成「引擎不可用」。</li>
         <li><strong>索引缓存按内容失效，不靠版本号</strong>：章节文本、章节集或切块边界变化都会改变指纹并触发重建；同一轮工具调用内的多次索引读取有进程内读缓存（键为路径 + mtimeMs + size），写盘后立即失效。缓存文件体积随书增长，<code>items[].t</code> 只保留段落前 200 字。</li>
         <li><strong>索引与检索在同一目录下共享</strong>：普通检索用索引键 <code>&lt;book&gt;</code>；风格对比另有 <code>&lt;book&gt;__style_&lt;章名&gt;</code> 键。两者格式一致、互不覆盖，但<strong>语义引擎的临时索引（如单章范围）不写盘</strong>，以免用局部向量污染全书指纹缓存。</li>
-        <li><strong>可检索范围</strong>：只覆盖 <code>novels/&lt;book&gt;/</code> 下 <code>.md</code> / <code>.markdown</code> / <code>.txt</code> 章节文件，按 <code>scanChapters</code> 的文件名章号排序；<code>创作资料</code>、点号目录与其他扩展名不参与。段落下限 8 字意味着极短的对白碎片不会被索引。</li>
+        <li><strong>可检索范围</strong>：只覆盖 <code>novels/&lt;book&gt;/</code> 下 <code>.md</code> / <code>.markdown</code> / <code>.txt</code> 章节文件，按 <code>scanChapters</code> 的文件名章号排序；<code>创作资料</code>、点号目录与其他扩展名不参与。实际分章索引入口会传入章节文件名，因此无标题的短对白、短动作段也会被索引。</li>
         <li><strong>分值语义</strong>：<code>score</code> 是 128 维降采样向量的余弦值，取值区间为 [−1, 1]（中文段落向量实际多为正值），<strong>没有绝对阈值</strong>——本工具不判断「是否相关」，只按分值降序返回前 <code>top</code> 条。跨版本比较也不成立：v4.3.0 修改了内容指纹的字段定界，既存索引会一次性失效重建；同一查询在重建前后可能因同一原因取得不同分值与排序，属预期的一次性代价。</li>
         <li><strong>与在线模型无关</strong>：本工具不调用任何在线大模型，返回体里也不含模型生成的解释性文本；<code>message</code>、<code>query</code>、<code>text</code> 都是本地字符串。查询本身不会写回书库，检索结果不落盘（仅索引缓存落在 <code>.novel-writer/embedding/</code> 下）。</li>
       </ul>

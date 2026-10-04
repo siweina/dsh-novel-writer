@@ -1,0 +1,50 @@
+/* V6-slider-css.txt (M5) — 只含 nwRange 本体 + nwRangeVal, 由总负责人并入样式表. */
+/* 口径: 轨道/滑块/禁用态/焦点环/值显; 伪元素只做尺寸与圆角, 颜色走本体 token; 动效进 reduced-motion 门. */
+.nwRange {
+  width: 96px;
+  accent-color: var(--dsw-alias-state-business-primary);
+  background: var(--dsw-alias-interactive-bg-active);
+  border-radius: 999px;
+  corner-shape: round;
+}
+.nwRange:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color);
+  outline-offset: 2px;
+}
+.nwRange:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.nwRange::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  corner-shape: round;
+}
+.nwRange::-webkit-slider-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  corner-shape: round;
+}
+.nwRange::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  corner-shape: round;
+}
+.nwRange::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  corner-shape: round;
+}
+.nwRangeVal {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-secondary);
+  min-width: 36px;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .nwRange {
+    transition: opacity 0.15s ease;
+  }
+}

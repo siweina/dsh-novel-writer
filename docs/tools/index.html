@@ -33,6 +33,7 @@
   <main class="docs__main">
     <article class="doc">
       <h1>技术文档</h1>
+      <div class="note"><b>v6.1.0：</b>本地测试版。修复章节查找、复测、文本统计、语义短段落与 MCP/界面问题；当前规则以下列页面为准。历史版本的报告数值可能因计分修正而变化。</div>
       <p class="doc__lead">
         <code>dsh-novel-writer</code> 的 18 个工具全部在本地运行，<strong>不使用在线大模型</strong>：所有指标由规则统计与本地 ONNX 推理得出。本组页面面向二次开发与集成方，逐工具说明参数契约、计算原理、约束边界与源码位置。
       </p>
@@ -57,7 +58,7 @@
       </div>
       <div class="note">
         <b>v6.0.0 界面全面重构（工具与状态文件零变化）。</b>本版把面板外观按 DSH 官方设计体系统一（<code>--dsw-alias-*</code> 语义 token / 0.5px 发丝线 / 官方圆角尺度 / 官方 UI primitives），随后又按「官网式重构」收敛：强调色统一为 DeepSeek 蓝（<code>state-business-primary</code>）、主面板改「品牌光晕头部 + 分区 kicker + 图标卡 + 状态 pill」、内容卡由描边改为软阴影与悬停抬升、二级页标题与按钮家族统一、各级页面宽度恒定一致。若你是从旧版升级，<b>工具数量、参数与返回结构均未变动</b>，无需改任何调用。详解见 <a href="novel-sentence-config.html">novel_sentence_config</a> 的「界面为什么『看起来像 DSH』（v5.5.0）」一节。
-      <br>v6.0.0 再进一层：源码分块 + 构建链装配、8 个统一组件（单一行模式 PreferenceRow / 分组卡 GroupCard）、19+5 枚线图标、阈值 slider 辅助输入、页面级 push-pop 过渡动画；工具 / 参数 / 状态文件依旧零变化。
+      <br>v6.0.0 再进一层：源码分块 + 构建链装配、6 个实际使用的统一组件（单一行模式 PreferenceRow / 分组卡 GroupCard）、19+5 枚线图标、阈值 slider 辅助输入、页面级 push-pop 过渡动画；工具 / 参数 / 状态文件依旧零变化。
         </div>
 
       <h2>工具总览</h2>

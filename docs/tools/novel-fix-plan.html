@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_fix_plan — 改稿台｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_fix_plan 的实现细节：plan / verify / mark 三个动作、mark 的 itemId + state 双必填与其不受引擎门禁约束的边界、待办项的稳定 id 与八类 type、severity 与 effort 的排序口径、locate 的段落级行号归因（宁可粗也不给错的行号）、hint 只给改写方向不生成正文的边界、fix-plan JSON 的原子写落盘，以及「正常文本不产出待办」的误报约束。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_fix_plan","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-fix-plan.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_fix_plan — 改稿台｜dsh-novel-writer 技术文档","description":"novel_fix_plan 的实现细节：plan / verify / mark 三个动作、mark 的 itemId + state 双必填与其不受引擎门禁约束的边界、待办项的稳定 id 与八类 type、severity 与 effort 的排序口径、locate 的段落级行号归因（宁可粗也不给错的行号）、hint 只给改写方向不生成正文的边界、fix-plan JSON 的原子写落盘，以及「正常文本不产出待办」的误报约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-fix-plan.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.0.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_fix_plan, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_fix_plan — 改稿台｜dsh-novel-writer 技术文档","description":"novel_fix_plan 的实现细节：plan / verify / mark 三个动作、mark 的 itemId + state 双必填与其不受引擎门禁约束的边界、待办项的稳定 id 与八类 type、severity 与 effort 的排序口径、locate 的段落级行号归因（宁可粗也不给错的行号）、hint 只给改写方向不生成正文的边界、fix-plan JSON 的原子写落盘，以及「正常文本不产出待办」的误报约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-fix-plan.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.1.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_fix_plan, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -33,6 +33,8 @@
   <main class="docs__main">
     <article class="doc">
       <h1>novel_fix_plan</h1>
+      <div class="note"><b>v6.1.0：</b><code>plan</code> 仍最多展示并保存 12 项；<code>verify</code> 使用未按该上限截断的检测全集比较，不把被高优先级问题挤出的旧项误判已解决。</div>
+      <div class="note"><b>v6.1.0：</b>章节参数先精确匹配完整文件名，再匹配省略扩展名的文件名；同名多扩展名时必须提供完整文件名，明确指定却不存在的扩展名不会改读另一格式。</div>
       <p class="doc__lead">
         改稿台。把某一章的测量偏差翻译成<strong>按优先级排好序的待办清单</strong>：每项带稳定 <code>id</code>、类型、原文定位（<code>lineStart</code> / <code>lineEnd</code> / <code>excerpt</code>）、现值与目标区间、可照改的原著锚段、严重度与改写代价，以及一句<strong>改写方向</strong>。<code>action: "plan"</code> 出清单，<code>"verify"</code> 复测，<code>"mark"</code> 标记单项。<strong>工具本身从不生成改写后的正文句子</strong>。
       </p>
@@ -166,7 +168,7 @@ excerpt = 该行原文 trim 后截 80 字；lineStart = lineEnd = lineNo
     归一化章键 = sanitizeSegment(normalizeChapterKey(chapter))
         ← 例：「1」「01」「第1章.md」都归一为「第01章」；与 novel_summary 的章号键同源
 
-文件内容 = &#123; tool: "novel_fix_plan", version: "5.0.0", book, chapter &#123; file, number, title &#125;,
+文件内容 = &#123; tool: "novel_fix_plan", version: "6.1.0", book, chapter &#123; file, number, title &#125;,
              chapterKey, generatedAt, baselineScope, summary, notes[],
              items: [ &#123; …9 个字段, state: "open"|"done"|"skip", stateAt: ISO|null &#125; ] &#125;
 
@@ -175,13 +177,13 @@ plan   → 重新测量 + 原子写（先写 .tmp-&lt;pid&gt;-&lt;时间戳&gt; 
 verify → 读该文件 + 对当前正文重算，逐项给出三态（**本次不写盘**）
 mark   → 读-改-写该文件，只把 itemId 指定项的 state / stateAt 更新，并刷新 updatedAt</div>
       <p>必然需要落盘：<code>mark</code> 与 <code>verify</code> 要跨调用记得「这一项处理过了」。文件按<strong>书名 + 归一化章键</strong>命名，且章键取自<strong>解析后的章文件</strong>（<code>chapter="1"</code> / <code>"第01章.md"</code> / <code>"码头等船"</code> 三种写法都归到同一份），避免同章不同写法各写一份、<code>verify</code> / <code>mark</code> 换个写法就「找不到清单」。落盘与 <a href="novel-continuity-check.html">novel_continuity_check</a> 的审计报告同处 <code>audits/</code> 目录，文件名前缀 <code>fix-plan-</code> 与审计报告区分。<code>plan</code> 每次重新测量并<strong>整份覆盖</strong>该章的清单，但会按 id 把上一次的人工标记搬过来：<em>N 项此前已人工标记 done/skip（状态已保留）</em>会写进 <code>summary</code>。正文改动后 id 会随位置变化，旧 id 的标记自然失效（不会张冠李戴）。</p>
-      <p>落盘失败（目录只读 / 磁盘满 / 文件被占用）<strong>不抛错</strong>，本次结果仅内存返回；失败原因被追加进内部的 <code>notes</code> 数组。<strong>但要注意：<code>summary</code> 在落盘之前就已拼好，而 <code>notes</code> 不在 <code>plan</code> 的返回字段里</strong>（<code>buildFixPlan</code> 只返回 <code>book</code> / <code>chapter</code> / <code>items</code> / <code>summary</code> / <code>planFile</code>），因此调用方<strong>看不到任何落盘失败的提示</strong>——返回体照常给出一个 <code>planFile</code> 路径，但文件并不存在。要间接发现只能靠随后的 <code>mark</code>：它会报「尚未生成改稿清单」。</p>
+      <p>落盘失败（目录只读 / 磁盘满 / 文件被占用）不抛错，本次清单仍内存返回；<code>summary</code> 明确追加保存失败原因，<code>planFile</code> 为空，调用方不会被误导为已保存。</p>
 
       <h3><code>verify</code> 的三态</h3>
       <table>
         <thead><tr><th><code>status</code></th><th>含义</th><th><code>detail</code> 的形态</th></tr></thead>
         <tbody>
-          <tr><th><strong><code>resolved</code></strong>（已解决）</th><td>该条目<strong>在当前正文中已检不出</strong>——原来的问题项在本次重算的清单里既没有同 id 命中，也没有「同 type + 同 current」或「同 type」的兜底配对。可能是真改好了，也可能是这一段文本被改动后换了形态。</td><td>「当前正文中已检不出该问题（已修复或该处文本已改动）」；若该条曾被人工 <code>done</code> / <code>skip</code>，尾部追加「（人工标记 done / skip）」</td></tr>
+          <tr><th><strong><code>resolved</code></strong>（已解决）</th><td>该条目<strong>在当前正文中已检不出</strong>——原来的问题项在本次重算的清单里既没有同 id 命中，也没有「同 type + 稳定问题身份」或「同 type」的兜底配对。可能是真改好了，也可能是这一段文本被改动后换了形态。</td><td>「当前正文中已检不出该问题（已修复或该处文本已改动）」；若该条曾被人工 <code>done</code> / <code>skip</code>，尾部追加「（人工标记 done / skip）」</td></tr>
           <tr><th><strong><code>pending</code></strong>（仍待处理）</th><td>问题还在。分两种命中路径：<strong>① id 精确命中</strong>（正文该处未动）；<strong>② 同 type 兜底</strong>——行号或数值变了但同类问题仍存在（先找 <code>current</code> 文本也相同的，找不到再放宽到只要同 <code>type</code>），仍判 <code>pending</code>，并在 <code>detail</code> 里说明位置变化。</td><td>①「问题仍存在：&lt;current&gt;」；②「问题仍存在（位置/数值已变化 → 现为第 N 行：&lt;current&gt;）」。<strong>人工标记不改变判定</strong>，只在尾部追加「（人工标记 done / skip）」——避免「标了完成但问题还在」被静默吞掉</td></tr>
           <tr><th><strong><code>new</code></strong>（本次新检出）</th><td>本次重算清单里存在、但上一次落盘清单里没有配对上的条目——改稿最常见的副作用，必须显式报出来，否则「越改越偏」不会被发现。</td><td>「本次新检出：&lt;current&gt;」</td></tr>
         </tbody>
@@ -198,10 +200,10 @@ mark   → 读-改-写该文件，只把 itemId 指定项的 state / stateAt 更
       <h2>约束与边界</h2>
       <ul>
         <li><strong>不生成正文</strong>：<code>hint</code> 只给改写方向，<code>anchor</code> 只给可参照的原著样例；返回体里没有任何「改写后的句子」。插件不调用在线模型，也从不代替作者写字。</li>
-        <li><strong>只读正文，只写自己的清单文件</strong>：<code>plan</code> 不修改章节正文，落盘只发生在 <code>&lt;root&gt;/.novel-writer/audits/</code> 下的 <code>fix-plan-*.json</code>；<code>verify</code> 连清单都不写；<code>mark</code> 只改该文件里的处置状态。</li>
+        <li><strong>只读正文，只写自己的清单文件</strong>：<code>plan</code> 不修改章节正文，落盘只发生在 <code>&lt;root&gt;/.novel-writer/audits/</code> 下的 <code>fix-plan-*.json</code>；<code>verify</code> 连清单都不写，也不写指标缓存或旧版伏笔迁移文件；<code>mark</code> 只改该文件里的处置状态。</li>
         <li><strong>取消会抛错，不会伪装成空结果</strong>：调用被中止时（<code>AbortError</code>）三个动作一律向上抛，<strong>不落进任何降级分支</strong>——否则一次取消会返回「成功但清单为空」，被误读成「这一章没有问题」。</li>
         <li><strong>行号可以被整段，但不会给错</strong>：指标类 <code>locate</code> 的最小粒度是段落；字面类（禁用词 / 语用）才精确到行；<code>lineStart = lineEnd = 0</code> 表示全章 / 跨章层面，需按分支处理。行号是<strong>绝对行号</strong>（与 <a href="novel-read.html">novel_read</a> 同口径），不随任何 <code>offset</code> 重编号。</li>
-        <li><strong>id 与正文位置绑定</strong>：id 由「类型 + 内部 key + 行号区间」派生，因此<strong>正文改动会改变 id</strong>。跨次 <code>verify</code> 先按 id 精确配对，配不上再按「同 type（优先同 current）」兜底，因此挪了位置但问题同类的项仍判 <code>pending</code>；类型也变了或问题消失的项才会落到 <code>resolved</code> / <code>new</code>。这是「稳定 id」的边界：它跨次调用稳定，不跨正文改动稳定。</li>
+        <li><strong>id 与正文位置绑定</strong>：先按 id 精确配对；位置变化后，仅按可确认的问题身份（禁用词、语用命中词、指标方向与摘录等）配对。只同类型不能确认是同一项时分别报告 <code>resolved</code> 与 <code>new</code>。</li>
         <li><strong><code>mark</code> 的校验只有三条</strong>：<code>itemId</code> 非空、<code>state</code> ∈ {<code>done</code>, <code>skip</code>}、该章已落盘清单里存在该 id。任一不满足即报错；<strong>它不重新测量、不校验正文是否真的改了</strong>，标记纯粹是给下一次 <code>plan</code> / <code>verify</code> 看的处置台账。</li>
         <li><strong>依赖已有材料，质量随材料走</strong>：禁用词 / 语用项依赖 <a href="novel-settings.html">novel_settings</a> 的设定表，衔接项依赖上一章可读，伏笔项依赖 <a href="novel-plot.html">novel_plot</a> 的登记质量。材料缺失时相应类别不产出待办（而不是产出猜测），原因写进 <code>notes</code> 与 <code>summary</code>，并随清单一起落盘。</li>
         <li><strong>六维相关项可能整体缺失</strong>：需要<strong>至少 2 个基线章节</strong>（即全书除本章外至少 2 章、全书合计至少 3 章）才能估计作者自身波动；本章正文短于 40 字也跳过。此时句式偏离 / 抽象度过高 / 留白异常三类不产出，原因写进备注；<code>style_check</code> 的同一限制在此同样成立。</li>

@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_sentence_analysis — 句式模式分析｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_sentence_analysis 的实现细节：九类句式的分类优先级与切句规则、句式转移与模板统计、句长分布、情感词扫描与净化、情感曲线与 Valence 量化、风格指纹、节奏建议，以及缓存键、上限与降级路径。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_sentence_analysis","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-analysis.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_sentence_analysis — 句式模式分析｜dsh-novel-writer 技术文档","description":"novel_sentence_analysis 的实现细节：九类句式的分类优先级与切句规则、句式转移与模板统计、句长分布、情感词扫描与净化、情感曲线与 Valence 量化、风格指纹、节奏建议，以及缓存键、上限与降级路径。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-analysis.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.0.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_sentence_analysis, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_sentence_analysis — 句式模式分析｜dsh-novel-writer 技术文档","description":"novel_sentence_analysis 的实现细节：九类句式的分类优先级与切句规则、句式转移与模板统计、句长分布、情感词扫描与净化、情感曲线与 Valence 量化、风格指纹、节奏建议，以及缓存键、上限与降级路径。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-analysis.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.1.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_sentence_analysis, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -33,6 +33,7 @@
   <main class="docs__main">
     <article class="doc">
       <h1>novel_sentence_analysis</h1>
+      <div class="note"><b>v6.1.0：</b>章节参数先精确匹配完整文件名，再匹配省略扩展名的文件名；同名多扩展名时必须提供完整文件名，明确指定却不存在的扩展名不会改读另一格式。</div>
       <p class="doc__lead">
         句式模式分析。逐句把正文分成九类句式并统计占比、转移、模板与段落结构，同时给出句长分布、情感曲线、细节密度、风格指纹与节奏建议。分析范围可以是全书，也可以是单章。<strong>全部为本地规则统计</strong>：情感词命中走词表加否定过滤与副词加权，语义隐性情感是在此之上的可选增强。结果写入书库缓存并同时落盘一份报告 JSON，可用 <code>fresh</code> 强制重算。
       </p>
@@ -84,7 +85,7 @@
       <p>先分段落再切句，两者都做了降噪：</p>
       <div class="formula">splitBlocks(text)：
   归一 CRLF / CR 为 LF
-  段落分隔符 =「前后都是非空行」的中间空行；无空行时每行视为一段
+  段落分隔符 = 正文之间的连续空行段（一个或多个）；无空行时每行视为一段
   跳过 Markdown 标题行（/^#{1,6}\s/）
   跳过分割线（/^[-_*=]{3,}$/）
   末尾过滤空串
@@ -95,7 +96,7 @@ splitSentences(block)：
   句末符后最多吞掉 2 个闭合引号（”」』’" '）</div>
       <p>九类句式的判定是<strong>固定优先级瀑布</strong>，先命中先归类，不做打分：</p>
       <div class="formula">1. 引号内片段含心理标记           → psychology（内心独白，quoted 标记）
-2. 引号内片段（无心理标记）        → dialogue
+2. 对话引号内片段（无心理标记）    → dialogue；书写/标牌/命名语境的引用文字不走此分支
 3. 全文命中心理标记                → psychology
 4. 命中反问强标记                  → rhetoric-question
 5. 以问号结尾                      → question
@@ -104,7 +105,7 @@ splitSentences(block)：
 8. 命中环境标记词表                → environment
 9. 以「…」结尾                     → ellipsis（省略留白）
    否则                            → statement</div>
-      <p>祈使排在感叹之前，是为了让「闭嘴！」这类句归祈使，感叹只留给不含祈使词的叹句。反问分支已剔除「哪里」这一最常见的真疑问词，并把「谁 + 情态」收紧为固定格式（谁知道 / 谁说的 / 谁能想到…），避免把「谁会来参加明天的会议？」判成反问。</p>
+      <p>v6.1.0 支持“小心前面的陷阱！”等长宾语提醒，并排除“注意到”等同形普通用法。祈使排在感叹之前，是为了让「闭嘴！」这类句归祈使，感叹只留给不含祈使词的叹句。反问分支已剔除「哪里」这一最常见的真疑问词，并把「谁 + 情态」收紧为固定格式（谁知道 / 谁说的 / 谁能想到…），避免把「谁会来参加明天的会议？」判成反问。</p>
 
       <h3>2 · 采样上限与密度分母</h3>
       <div class="formula">逐段逐句累计；一旦 sentences.length ≥ maxSentences 即停止（前缀采样），truncated = true
@@ -149,7 +150,7 @@ distribution 桶 = 1-10 / 11-24 / 25-40 / 41+</div>
      窗口 = 当前小句（遇标点截断），再往前最多 6 字
      命中强副词 13 项 → ×1.5；命中弱副词 8 项 → ×0.6；其余 ×1
      单字副词（太 / 略 / 挺）必须紧邻情感词，且左邻 2 字不在 19 项同形非副词搭配内（太阳/策略/省略/挺拔…）</div>
-      <p>「最长匹配 + 区间消费」消除了嵌套双计：「悲痛欲绝」不再被拆成「悲痛」＋「悲痛欲绝」两分。DUTIR 兜底同样按最长优先扫描，但将上限由 4 字提到 8 字（词表最长条目 7 字），使 853 条 ≥5 字的成语级情感词恢复可命中；兜底词不做强弱分级，只进 <code>scores</code> 不进 <code>cleanScores</code>。</p>
+      <p>「最长匹配 + 区间消费」消除了嵌套双计：「悲痛欲绝」不再被拆成「悲痛」＋「悲痛欲绝」两分。DUTIR 兜底同样按最长优先扫描，但将上限由 4 字提到 8 字（词表最长条目 7 字），使 853 条 ≥5 字的成语级情感词恢复可命中；v6.1.0 起兜底词与主词表共享已消费区间，避免“无比幸福”中的“幸福”再次计分。兜底词不做强弱分级，只进 <code>scores</code> 不进 <code>cleanScores</code>。</p>
 
       <h3>6 · 情绪污染源与置信度</h3>
       <div class="formula">污染词表 52 条，分三类：r18 26 条 / battle 13 条 / horror 13 条
@@ -227,7 +228,7 @@ reportFile = &lt;root&gt;/.novel-writer/analysis/&lt;book&gt;-&lt;cacheKey&gt;.j
         <li><strong>参数越界是错误而非钳制</strong>：<code>top</code> / <code>maxSentences</code> / <code>curveSegments</code> 由 <code>optionalInt</code> 校验，非整数或越界直接抛「参数 X 必须是 A 到 B 之间的整数」。内部 <code>analyzeText</code> 另有 <code>≥1</code> 与 <code>1–50</code> 的兜底钳制，供直接调用该函数的一方使用。</li>
         <li><strong>触顶即前缀采样</strong>：超过 <code>maxSentences</code> 后只统计靠前部分，<code>totalSentences</code> 等于上限而不是全书句数。这不是全量结果，提示只写在 <code>guidance</code> 末尾（不加顶层字段），调用方需要全量时应分章调用。</li>
         <li><strong>缓存键含内容指纹与全部参数</strong>：改一章内容、换一个 <code>top</code> 或翻转 <code>enabled</code> / <code>autoAnalyze</code> 都会生成新缓存文件，旧文件不再命中；<code>fresh:true</code> 跳过读取但仍写回同一文件。落盘目录按书最多保留 20 份报告，超出部分按修改时间淘汰，<code>&lt;book&gt;-full.json</code> 与 <code>&lt;book&gt;-chapters-metrics.json</code> 是分析缓存、不匹配报告命名，不会被清理。</li>
-        <li><strong>算法版本是硬失效条件</strong>：缓存内 <code>ver</code> 与 <code>CACHE_VERSION</code>（当前等于插件版本 5.0.0，见源码位置 <code>lib/core.js</code>）不一致时视为过期并重新分析。这保证升级后不会复用旧口径的情感与句式结果。</li>
+        <li><strong>算法版本是硬失效条件</strong>：缓存内 <code>ver</code> 与 <code>CACHE_VERSION</code>（当前等于插件版本 6.1.0，见源码位置 <code>lib/core.js</code>）不一致时视为过期并重新分析。这保证升级后不会复用旧口径的情感与句式结果。</li>
         <li><strong>语义隐性情感受独立门控</strong>：仅当 <code>semanticImplicit</code>（含 <code>semanticEmbedding</code> 总开关）开启且本地引擎可用时才会补充 <code>emotion.quantification.semanticImplicit</code>。「用户明确关闭」与「引擎瞬时不可用」被区分对待——后者不会把缓存里已算好的 <code>semanticImplicit</code> 抹成空。单章分析时命中范围被约束在本章内，越界的旧缓存结果会被重算并写回。</li>
         <li><strong>情感字段可能被裁剪</strong>：<code>emotionCaveat</code> 关闭时 <code>emotion</code> 只保留 <code>dominant</code> / <code>scores</code> / <code>intensity</code> / <code>topWords</code> / <code>curve</code>；<code>emotionComplexity</code> 关闭时删除 <code>quantification</code>。两个开关各自独立生效，关闭其一不会连带剥掉另一个。</li>
         <li><strong>静默降级点</strong>：DUTIR 词表加载失败时跳过兜底（不影响主词表结果）；语义裁决与语义隐性情感失败不阻塞规则结果；缓存写盘失败不影响本次返回值；<code>cleanOutput</code> 统一消除 <code>-0</code>、把 <code>NaN</code> 归一为 <code>null</code>、剔除 <code>undefined</code> 键。</li>

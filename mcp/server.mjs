@@ -22,8 +22,8 @@
  *   DEBUG=1 环境变量：stderr 额外打印完整错误堆栈（默认只打一行摘要，避免绝对路径/书名泄漏）。
  */
 
-import { readFileSync } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const PLUGIN_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -41,6 +41,12 @@ const SERVER_VERSION = readPackageVersion();
 // v4.3.0：单行 JSON-RPC 报文长度上限（字节）。超限行整行丢弃并记 stderr——readline 本身不设上限，
 // 一条畸形超长行（或忘记换行的巨型 payload）会让缓冲区无界增长直到 OOM。
 const MAX_LINE_BYTES = 4 * 1024 * 1024;
+const MAX_PENDING_LINES = 32;
+const OUTPUT_TIMEOUT_MS = 2000;
+// A pipe may accept a large amount of data on Windows even when the peer never
+// reads it. Cap one response before writing so a pathological tool result cannot
+// accumulate indefinitely in the transport or the host process.
+const MAX_OUTPUT_FRAME_BYTES = 8 * 1024 * 1024;
 // DEBUG=1 时 stderr 才输出完整错误堆栈（默认只输出一行摘要，见 logError）
 const DEBUG = process.env.DEBUG === "1";
 
@@ -224,6 +230,7 @@ function isNotification(message) {
 // 一旦开始就只能跑完。现在按 callId 记录 AbortController，取消时 abort，插件侧 fetch/耗时循环可见。
 // ---------------------------------------------------------------------------
 const inFlightAbort = new Map();
+const queuedCalls = new Map();
 
 /** 取该 callId 对应的 AbortController 并注销（同一 id 只会被 abort 一次）。 */
 function takeAbortController(id) {
@@ -244,13 +251,15 @@ function handleCancelled(params) {
     log("收到 notifications/cancelled 但缺少 params.requestId，忽略");
     return;
   }
+  const queued = queuedCalls.get(requestId);
+  if (queued) queued.cancelled = true;
   const controller = takeAbortController(requestId);
-  if (controller === undefined) {
+  if (controller === undefined && !queued) {
     log(`收到 notifications/cancelled（requestId=${String(requestId)}），该请求不在途或已完成`);
     return;
   }
-  controller.abort();
-  log(`已取消在途请求 requestId=${String(requestId)}`);
+  if (controller !== undefined) controller.abort();
+  log(`已取消请求 requestId=${String(requestId)}`);
 }
 
 /** 服务器自身结构不可用（插件加载失败）时的统一答复。 */
@@ -266,36 +275,67 @@ function initFailedError(id) {
 /** src 越界时的标记（tools/call 时报错用，不下传给插件）。 */
 const SRC_OUT_OF_ROOT = Symbol("srcOutOfRoot");
 
+/** 解析已存在的最近祖先，连尚未创建的子路径也按真实目录校验。 */
+function canonicalPath(target) {
+  let current = resolve(target);
+  const missing = [];
+  while (!existsSync(current)) {
+    const parent = dirname(current);
+    if (parent === current) throw new Error("无法解析路径的真实祖先");
+    missing.unshift(basename(current));
+    current = parent;
+  }
+  return resolve(realpathSync.native(current), ...missing);
+}
+
 /** 判断路径是否落在 --root 指定的书库根内（含根本身）。 */
 function isInsideRoot(target) {
-  const base = resolve(LIBRARY_ROOT);
-  const rel = relative(base, target);
-  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+  const rel = relative(canonicalPath(LIBRARY_ROOT), canonicalPath(target));
+  return rel === "" || (rel !== ".." && !rel.startsWith(".." + sep) && !isAbsolute(rel));
 }
 
 function buildArgs(name, raw) {
   const args = raw && typeof raw === "object" && !Array.isArray(raw) ? { ...raw } : {};
   // 调用方未显式给 root 时注入服务器启动时确定的书库根目录
   if (typeof args.root !== "string" || args.root.trim() === "") {
-    args.root = LIBRARY_ROOT;
+    args.root = canonicalPath(LIBRARY_ROOT);
   } else {
     // v4.3.0 安全修正（P1-6）：旧版把调用方给的 root 原样放行——"只读写书库根目录"的承诺等于交给
     // 调用方决定（配合 novel_import{src,move:true} 就能复制/删除盘上任意 .md/.txt）。
     // 现限定：调用方给的 root 必须落在启动参数 --root 指定的书库根内（含根本身），越界则回退并记日志。
     const requested = resolve(args.root.trim());
     if (isInsideRoot(requested)) {
-      args.root = requested;
+      args.root = canonicalPath(requested);
     } else {
       log(`拒绝越界 root：${requested}（不在书库根 ${resolve(LIBRARY_ROOT)} 内），已回退该书库根`);
-      args.root = LIBRARY_ROOT;
+      args.root = canonicalPath(LIBRARY_ROOT);
     }
   }
   // v4.3.0：novel_import 的 src 默认限制在书库根内；确需导入外部稿件时用 --allow-external-src 放开
   if (name === "novel_import" && typeof args.src === "string" && args.src.trim() !== "") {
     const src = resolve(args.src.trim());
     if (!ALLOW_EXTERNAL_SRC && !isInsideRoot(src)) args[SRC_OUT_OF_ROOT] = src;
+    else if (!ALLOW_EXTERNAL_SRC) args.src = canonicalPath(src);
   }
   return args;
+}
+
+/** Guard paths derived inside the plugin from root/book before handing them over. */
+function derivedPathViolation(args) {
+  const root = args && typeof args.root === "string" ? args.root : LIBRARY_ROOT;
+  const derivedRoots = [
+    ["novels", join(root, "novels")],
+    [".novel-writer", join(root, ".novel-writer")],
+    ["novels/创作资料", join(root, "novels", "创作资料")]
+  ];
+  for (const [label, target] of derivedRoots) {
+    if (!isInsideRoot(target)) return `${label} 必须位于书库根内`;
+  }
+  if (typeof args?.book === "string" && args.book.trim() !== "") {
+    const bookPath = join(root, "novels", args.book.trim());
+    if (!isInsideRoot(bookPath)) return "book 必须解析到书库根内的 novels 子目录";
+  }
+  return null;
 }
 
 /**
@@ -342,6 +382,12 @@ function toolListPayload() {
 }
 
 async function handleToolCall(id, params) {
+  if (queuedCalls.get(id)?.cancelled) {
+    return rpcResult(id, {
+      content: [{ type: "text", text: "错误：工具请求已被客户端取消（notifications/cancelled）。" }],
+      isError: true
+    });
+  }
   const name = params && typeof params.name === "string" ? params.name : "";
   if (name === "") {
     return rpcError(id, -32602, "无效参数：tools/call 需要字符串 name");
@@ -371,6 +417,14 @@ async function handleToolCall(id, params) {
         text: `错误：src 必须位于书库根（${resolve(LIBRARY_ROOT)}）内，已拒绝 ${blocked}。`
           + "如确需导入外部目录的稿件，请用 --allow-external-src 重新启动本 MCP 服务器。"
       }],
+      isError: true
+    });
+  }
+  const derivedViolation = derivedPathViolation(args);
+  if (derivedViolation !== null) {
+    log(`拒绝越界派生路径：${derivedViolation}`);
+    return rpcResult(id, {
+      content: [{ type: "text", text: `错误：派生路径不安全：${derivedViolation}。` }],
       isError: true
     });
   }
@@ -479,78 +533,42 @@ async function handleMessage(message) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// stdout 写入与背压（v4.3.0）：write() 返回 false 说明内核管道缓冲已满，
-// 旧实现无视返回值继续写 → 大响应/慢客户端时 Node 内部缓冲无界增长。
-// 现在返回"本次写入完成"的等待函数，调用方 await 到 drain 事件再写下一帧。
-// ---------------------------------------------------------------------------
-let backpressured = false;
-const drainWaiters = new Set();
-
-function handleDrain() {
-  backpressured = false;
-  const waiters = [...drainWaiters];
-  drainWaiters.clear();
-  for (const resolve of waiters) resolve();
-}
-
-process.stdout.on("drain", handleDrain);
+// Each response must flush before the next one is written. A non-reading client
+// terminates the transport after the deadline instead of accumulating frames.
 process.stdout.on("error", (error) => {
-  // 客户端断开后 stdout 可能报 EPIPE：唤醒等待者并记日志，不让队列卡死
   log("stdout 错误（客户端可能已断开）：" + toText(error && error.message));
-  handleDrain();
 });
 
-function writeMessage(payload) {
-  if (backpressured) {
-    return new Promise((resolve) => {
-      drainWaiters.add(resolve);
-      try {
-        if (process.stdout.write(JSON.stringify(payload) + "\n") === false) backpressured = true;
-      } catch (error) {
-        log("stdout 写入失败（客户端可能已断开）：" + toText(error && error.message));
-      }
-    });
-  }
-  try {
-    if (process.stdout.write(JSON.stringify(payload) + "\n") === false) {
-      backpressured = true;
-      return new Promise((resolve) => drainWaiters.add(resolve));
-    }
-  } catch (error) {
-    log("stdout 写入失败（客户端可能已断开）：" + toText(error && error.message));
-  }
-  return null;
-}
-
-/** 退出前等 stdout 缓冲排空，避免最后一条响应被截断。 */
-function flushStdout() {
-  if (!backpressured) return Promise.resolve();
-  return new Promise((resolve) => {
-    const done = () => {
+function writeChunk(frame, offset) {
+  return new Promise((resolveWrite, rejectWrite) => {
+    let settled = false;
+    const chunk = frame.subarray(offset, offset + Math.min(16 * 1024, frame.length - offset));
+    // Writable.write 的回调只接收可选错误参数，不会返回写入字节数。
+    // 这里按提交给 stdout 的 chunk 长度推进偏移，避免 offset 变成 NaN 后卡死。
+    const finish = (error) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
-      resolve();
+      if (error) rejectWrite(error);
+      else resolveWrite(chunk.length);
     };
-    drainWaiters.add(done);
-    const timer = setTimeout(done, 1000);
-    if (typeof timer.unref === "function") timer.unref();
+    const timer = setTimeout(() => finish(new Error("stdout 写入超时，客户端未读取响应")), OUTPUT_TIMEOUT_MS);
+    try {
+      process.stdout.write(chunk, finish);
+    } catch (error) {
+      finish(error);
+    }
   });
 }
 
-/**
- * 写一帧并遵守背压：返回"可以继续写下一帧"的等待 Promise（未背压时返回 null）。
- * 加 2 秒兜底——drain 事件理论上必然到来，但客户端半死（不读也不关）时不能让串行队列永久卡住。
- */
-function writeAndWait(payload) {
-  const waitForDrain = writeMessage(payload);
-  if (waitForDrain === null) return Promise.resolve();
-  return Promise.race([
-    waitForDrain,
-    new Promise((resolve) => {
-      const timer = setTimeout(resolve, 2000);
-      if (typeof timer.unref === "function") timer.unref();
-    })
-  ]);
+async function writeAndWait(payload) {
+  const frame = Buffer.from(JSON.stringify(payload) + "\n", "utf8");
+  if (frame.length > MAX_OUTPUT_FRAME_BYTES) {
+    throw new Error(`stdout 写入超时：响应帧 ${frame.length} 字节超过 ${MAX_OUTPUT_FRAME_BYTES} 字节安全上限，客户端未读取响应`);
+  }
+  for (let offset = 0; offset < frame.length;) {
+    offset += await writeChunk(frame, offset);
+  }
 }
 
 async function handleLine(line) {
@@ -578,62 +596,89 @@ async function handleLine(line) {
     response = rpcError(id, -32603, "内部错误：" + toText(error && error.message));
   }
   if (response !== null && response !== undefined) {
-    // 背压：write() 返回 false 时等 drain 再处理下一行，避免 Node 内部写缓冲无界增长
+    // The write callback fires after this frame is flushed; timeout closes a stalled pipe.
     await writeAndWait(response);
   }
 }
 
 // ---------------------------------------------------------------------------
-// stdio 主循环（换行分隔 JSON-RPC 2.0）
-// v4.3.0：不再用 readline —— 它没有行长上限，一条畸形超长行会让缓冲区无界增长；
-// 这里自己按 \n 切分并设 MAX_LINE_BYTES 上限（超限整行丢弃、只记长度，绝不打正文）。
+// stdio 主循环：按原始字节分帧，避免 UTF-8 解码后的字符数误作字节数。
 // ---------------------------------------------------------------------------
 let queue = Promise.resolve();
 let closed = false;
-let buffer = "";
-let bufferBytes = 0;      // 未结束行已缓冲的字节数（用于判断是否越过上限）
-let dropping = false;      // 正在丢弃一条超限行：丢弃到下一个换行为止
+let bufferParts = [];
+let bufferBytes = 0;
+let dropping = false;
 let droppedBytes = 0;
+let pendingLines = 0;
 
 function enqueueLine(line) {
-  // 串行处理，保证同一连接内响应顺序与请求顺序一致
-  queue = queue.then(() => handleLine(line)).catch((error) => logError("行处理异常：", error));
+  if (line.trim() === "") return;
+  let message;
+  try { message = JSON.parse(line); } catch { /* 解析错误仍由 handleLine 应答 */ }
+  if (message && !Array.isArray(message) && message.method === "notifications/cancelled" && isNotification(message)) {
+    handleCancelled(message.params);
+    return;
+  }
+  const tracked = [];
+  for (const item of Array.isArray(message) ? message : [message]) {
+    if (item && !Array.isArray(item) && item.method === "tools/call" && !isNotification(item)) {
+      const entry = { cancelled: false };
+      queuedCalls.set(item.id, entry);
+      tracked.push([item.id, entry]);
+    }
+  }
+  if (pendingLines >= MAX_PENDING_LINES) {
+    log(`待处理请求超过 ${MAX_PENDING_LINES} 行，关闭连接`);
+    process.exit(1);
+  }
+  pendingLines += 1;
+  // Calls stay serialized, but cancellation notifications bypass this queue.
+  queue = queue.then(() => handleLine(line)).finally(() => {
+    pendingLines -= 1;
+    for (const [id, entry] of tracked) if (queuedCalls.get(id) === entry) queuedCalls.delete(id);
+  }).catch((error) => {
+    logError("行处理异常，关闭连接：", error);
+    process.exit(1);
+  });
 }
 
 function onStdinData(chunk) {
-  if (dropping) {
-    const cut = chunk.indexOf("\n");
-    if (cut === -1) {
-      droppedBytes += chunk.length;
-      return;
+  let start = 0;
+  while (start < chunk.length) {
+    const end = chunk.indexOf(10, start);
+    const hasNewline = end !== -1;
+    const stop = hasNewline ? end : chunk.length;
+    const length = stop - start;
+    if (dropping) {
+      droppedBytes += length + (hasNewline ? 1 : 0);
+      if (hasNewline) {
+        log(`已丢弃超长行（>${MAX_LINE_BYTES} 字节，共 ${droppedBytes} 字节）`);
+        dropping = false;
+        droppedBytes = 0;
+      }
+    } else if (bufferBytes + length > MAX_LINE_BYTES) {
+      droppedBytes = bufferBytes + length + (hasNewline ? 1 : 0);
+      bufferParts = [];
+      bufferBytes = 0;
+      if (hasNewline) {
+        log(`已丢弃超长行（>${MAX_LINE_BYTES} 字节，共 ${droppedBytes} 字节）`);
+        droppedBytes = 0;
+      } else {
+        dropping = true;
+      }
+    } else {
+      if (length > 0) bufferParts.push(chunk.subarray(start, stop));
+      bufferBytes += length;
+      if (hasNewline) {
+        const line = Buffer.concat(bufferParts, bufferBytes).toString("utf8").replace(/\r$/, "");
+        bufferParts = [];
+        bufferBytes = 0;
+        enqueueLine(line);
+      }
     }
-    droppedBytes += cut + 1;
-    dropping = false;
-    log(`已丢弃超长行（>${MAX_LINE_BYTES} 字节，共 ${droppedBytes} 字节）`);
-    droppedBytes = 0;
-    bufferBytes = 0;
-    onStdinData(chunk.slice(cut + 1));
-    return;
-  }
-  buffer += chunk;
-  bufferBytes += chunk.length;
-  const parts = buffer.split("\n");
-  buffer = parts.pop(); // 末尾是不完整行，留到下一个 chunk
-  bufferBytes = buffer.length;
-  for (const line of parts) {
-    const text = line.replace(/\r$/, "");
-    if (text.length > MAX_LINE_BYTES) {
-      // 超限整行丢弃（只记字节数，绝不打正文——这行很可能是被误塞进来的稿件内容）
-      log(`已丢弃超长行（>${MAX_LINE_BYTES} 字节，实际 ${text.length} 字节）`);
-      continue;
-    }
-    enqueueLine(text);
-  }
-  if (bufferBytes > MAX_LINE_BYTES) {
-    droppedBytes = buffer;
-    buffer = "";
-    bufferBytes = 0;
-    dropping = true;
+    if (!hasNewline) break;
+    start = stop + 1;
   }
 }
 
@@ -646,16 +691,16 @@ function onStdinEnd() {
     droppedBytes = 0;
     dropping = false;
   }
-  if (buffer !== "") {
-    enqueueLine(buffer);
-    buffer = "";
+  if (bufferBytes > 0) {
+    enqueueLine(Buffer.concat(bufferParts, bufferBytes).toString("utf8"));
+    bufferParts = [];
+    bufferBytes = 0;
   }
   if (closed) return;
   closed = true;
   const done = () => process.exit(0);
   // 等队列清空并让 stdout 落盘后再退出，避免最后一条响应被截断
   queue
-    .then(() => flushStdout())
     .then(() => {
       log("stdin 已关闭，服务器正常退出");
       done();
@@ -669,7 +714,6 @@ function onStdinEnd() {
   timer.unref();
 }
 
-process.stdin.setEncoding("utf8");
 process.stdin.on("data", onStdinData);
 process.stdin.on("end", onStdinEnd);
 process.stdin.on("error", (error) => {
