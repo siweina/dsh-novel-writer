@@ -5,6 +5,10 @@ name: Publish to MCP Registry
 # 因此这里先等 npm 上出现该版本，再发布元数据（避免与 release.yml 的 npm publish 抢跑）。
 on:
   workflow_call:
+  # v6.3.0：允许手动单独触发。release.yml 把 MCP 发布串在 package 作业之后，
+  # 一旦 npm 那一步失败（例如 npm 侧尚未配置可信发布），MCP 元数据就再没有机会发出——
+  # 而它其实只依赖「npm 上该版本已就绪」，与 npm 那一步是否由 CI 完成无关。
+  workflow_dispatch:
 permissions:
   contents: read
   id-token: write
