@@ -73,7 +73,10 @@ jobs:
             dist/*.tgz
       - name: Publish to npm via OIDC
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
-        run: npm publish dist/dsh-novel-writer-${{ steps.ver.outputs.VERSION }}.tgz --access public --registry https://registry.npmjs.org/
+        # 注意：必须以 ./ 开头。npm 会把 `dist/xxx.tgz` 当成 GitHub 的 `user/repo` 简写
+        # （实测报错：`git ls-remote ssh://git@github.com/dist/dsh-novel-writer-6.3.0.tgz.git`
+        # → Permission denied (publickey)），于是这一步从未真正发出过包。
+        run: npm publish "./dist/dsh-novel-writer-${{ steps.ver.outputs.VERSION }}.tgz" --access public --registry https://registry.npmjs.org/
       - name: Extract release notes
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
         run: node tools/release-notes.mjs "$GITHUB_REF_NAME" > release-notes.md
