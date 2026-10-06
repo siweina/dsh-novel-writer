@@ -22,6 +22,7 @@
 
     { g: '设定、剧情与资料', file: 'novel-plot',     name: 'novel_plot',     title: '伏笔登记表' },
     { g: '设定、剧情与资料', file: 'novel-settings', name: 'novel_settings', title: '设定五张表' },
+    { g: '设定、剧情与资料', file: 'novel-lexicon',  name: 'novel_lexicon',  title: '必用词表' },
     { g: '设定、剧情与资料', file: 'novel-summary',  name: 'novel_summary',  title: '章节摘要' },
     { g: '设定、剧情与资料', file: 'novel-outline',  name: 'novel_outline',  title: '创作资料' },
 

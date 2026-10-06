@@ -10,17 +10,19 @@ English | [中文](./README.md)
 [![GitHub stars](https://img.shields.io/github/stars/siweina/dsh-novel-writer.svg?style=flat-square&color=orange)](https://github.com/siweina/dsh-novel-writer/stargazers)
 [![siweina/dsh-novel-writer MCP server](https://glama.ai/mcp/servers/siweina/dsh-novel-writer/badges/score.svg)](https://glama.ai/mcp/servers/siweina/dsh-novel-writer)
 
-**18 tools covering the whole loop: gather inputs before you write → quantify & self-check → work a prioritised fix list → audit the cross-chapter structure.**
+**19 tools covering the whole loop: gather inputs before you write → quantify & self-check → work a prioritised fix list → audit the cross-chapter structure.**
 One call before writing gathers **16 inputs** (missing one is how style drift starts); after you write, you don't just get numbers — you get a **priority-ordered to-do list** (line-anchored original text, current vs. target values, reference passages, **direction only, never ghost-written prose**); across chapters you can finally see "the thread snapped, a character vanished, a hook was forgotten".
 Sentence, emotion and semantic analysis all run **on your machine**: a 24MB Chinese model ships with the package,
 **zero API cost, your manuscript never leaves the device**. Built for DeepSeek Harness (DSH); the same engine is also
 exposed as a **stdio MCP server** for Claude Desktop / Cursor.
 
-[Website](https://siweina.github.io/dsh-novel-writer/) · [Technical docs (parameters & examples for all 18 tools)](https://siweina.github.io/dsh-novel-writer/tools/) · [Install](#install) · [The writing loop](#the-writing-loop-end-to-end) · [60-second start](#60-second-start) · [See the output](#see-the-output) · [The 18 tools](#provided-tools-18) · [MCP server](#mcp-server-usable-outside-dsh)
+[Website](https://siweina.github.io/dsh-novel-writer/) · [Technical docs (parameters & examples for all 19 tools)](https://siweina.github.io/dsh-novel-writer/tools/) · [Install](#install) · [The writing loop](#the-writing-loop-end-to-end) · [60-second start](#60-second-start) · [See the output](#see-the-output) · [The 19 tools](#provided-tools-19) · [MCP server](#mcp-server-usable-outside-dsh)
 
 ---
 
-For the latest version and downloads, see [**Releases**](https://github.com/siweina/dsh-novel-writer/releases).
+## v6.3.0 local test build
+
+This release works through the v6.1.0 / v6.2.0 defect lists (protocol layer, rendering, lexicon data safety, UI and metadata) and rebuilds the required-lexicon panel. See [CHANGELOG.md](./CHANGELOG.md). Development: `npm ci`, `npm run build:check`, and `npm test`. All client build sources are included in this repository.
 
 ## The writing loop (end to end)
 
@@ -152,7 +154,7 @@ fixAnchors：3 条原著锚段（对话 / 心理 / 描写各一条，供逐句�
 | Cost | **0 (local inference)** | Billed per token | Self-hosted |
 | Purpose-built for Chinese fiction | **Yes** | Generic | No |
 | Style baseline (μ±σ) | **Yes** | Rare | No |
-| DSH integration | **18 tools + official seats & website-style UI** | None | None |
+| DSH integration | **19 tools + official seats & website-style UI** | None | None |
 | Usable without DSH | **Yes (MCP)** | Yes | You wrap it yourself |
 
 > **A note for non-Chinese users**: this plugin is designed for analysing and writing Chinese fiction — the sentence-pattern,
@@ -180,7 +182,7 @@ fixAnchors：3 条原著锚段（对话 / 心理 / 描写各一条，供逐句�
 
 ---
 
-## Provided Tools (18)
+## Provided Tools (19)
 
 > Parameters, return shapes and worked examples for every tool live in the [online tool manual](https://siweina.github.io/dsh-novel-writer/tools/).
 
@@ -204,12 +206,13 @@ fixAnchors：3 条原著锚段（对话 / 心理 / 描写各一条，供逐句�
 | `novel_outline` | **Creation-file management** (bible/characters/outline/hooks/status) |
 | `novel_chapter_brief` | **Chapter brief** — one call before writing gathers everything (previous-chapter hand-off / chapter direction / characters / open threads / wording rules / style baseline / anchors & skeletons / avoid-list / checklist) |
 | `novel_fix_plan` | **Fix plan** — turns style diagnostics into a priority-ordered to-do list (line anchors + reference passages), re-checkable after edits; **direction only, never generates prose** |
+| `novel_lexicon` | **Required-lexicon table** — per-book + global two-layer registry of proper nouns and author-favoured wording, batch import, hard-checklist injection into the chapter brief, and a wording audit for finished drafts |
 
 ---
 
 ## MCP server (usable outside DSH)
 
-The package ships a **stdio MCP server** (`mcp/server.mjs`) that exposes all 18 tools to any MCP client,
+The package ships a **stdio MCP server** (`mcp/server.mjs`) that exposes all 19 tools to any MCP client,
 e.g. Claude Desktop or Cursor. **It runs as a local process on your own machine — no server, no network, no daemon.**
 
 ```bash

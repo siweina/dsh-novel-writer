@@ -1,6 +1,6 @@
-# v6.1.0 本地文档更新
+# v6.3.0 本地文档更新
 
-当前站点源码对应 6.1.0；尚未部署。首页用“本地测试版”，不声称 npm 已上线。同步了章节解析、复测全集/配对、退场、情感去重、短块索引、诊断输出与界面生命周期。发布步骤见 [releasing.md](./releasing.md)。以下保留站点维护历史。
+当前站点源码对应 6.3.0；尚未部署。首页用“本地测试版”，不声称 npm 已上线。本轮同步第 19 个工具 `novel_lexicon`（必用词表）的技术文档页，并写清它引入的一批缺陷在 6.3.0 的修复口径（开写包`【必用词·优先使用】`分区、词表文件损坏拒写、面板视图与分段控件）。发布步骤见 [releasing.md](./releasing.md)。以下保留站点维护历史。
 
 # dsh-novel-writer · 宣传页 + 技术文档
 
@@ -16,10 +16,10 @@ styles.css                 宣传页设计系统（配色 / 排版 / 响应式 /
 script.js                  宣传页交互（滚动进场 / 能力卡展开 / 复制 / 分页 / 移动端菜单）
 README.md                  本文件
 tools/
-  index.html               技术文档总览（18 个工具的分组索引 + 该调哪个工具 + 共同约定）
+  index.html               技术文档总览（19 个工具的分组索引 + 该调哪个工具 + 共同约定）
   docs.css                 文档三栏布局（侧栏 / 正文 / 右侧目录）
   docs.js                  侧栏、目录、上下页的渲染（工具清单唯一数据源）
-  novel-books.html         以下 18 个为工具子页面，文件名即 docs.js 中的 file 字段
+  novel-books.html         以下 19 个为工具子页面，文件名即 docs.js 中的 file 字段
   novel-chapters.html
   novel-read.html
   novel-new-chapter.html
@@ -33,6 +33,7 @@ tools/
   novel-semantic-search.html
   novel-plot.html
   novel-settings.html
+  novel-lexicon.html
   novel-summary.html
   novel-outline.html
   novel-continuity-check.html
@@ -127,7 +128,11 @@ python -m http.server 8080
 
 ## 数据来源
 
-页面数字与链接取自插件仓库的实际状态（v5.0.0）：18 个工具、`bge-small-zh-v1.5` 量化模型约 24MB、Node ≥ 22.3、Glama 评分 B / 18 tools、npm latest 5.0.0。发新版后需同步首屏版本号与胶囊链接、`#trust` 区块、页脚链接。
+页面数字与链接取自**本地源码的实际状态**：19 个工具、`bge-small-zh-v1.5` 量化模型约 24MB、Node ≥ 22.3。**外部平台的数字可能滞后**——Glama 的收录与 npm `latest` 反映的是**已发布版本**，不是本地测试版（当前 npm `latest` 为 6.1.0）。发新版后需同步首屏版本号与胶囊链接、`#trust` 区块、页脚链接。
+
+> **v6.3.0（2026-10-06）：站点同步到第 19 个工具的最终状态。** 版本口径：根 `index.html` 与全部 **19 个** `tools/novel-*.html` 的 JSON-LD `softwareVersion` → **6.3.0**（`tools/check-release.mjs` 会逐一断言其等于 `package.json` 的版本）；首屏品牌版本号 → `v6.3.0`；`sitemap.xml` 的 `lastmod` → 2026-10-06 并收录新页。**新增页面** `tools/novel-lexicon.html`（必用词表：两层存储与同名覆盖、条目字段归一、批量录入行格式、九个 action 的返回体、开写包`【必用词·优先使用】`硬清单与 60/200 截断、成稿 `audit` 的覆盖率与「通用词顶替」行号、与 `worldview` 禁用词的分工）。其余改动：`tools/docs.js` 工具清单补 `novel_lexicon`（侧栏与上下页自动接上）；`tools/index.html` 补工具卡 + 「该调哪个工具」补一行（我想让 AI 必须用我的专有名词 / 惯用词）+ 顶部注记改为 v6.3.0 + 数据落盘目录补 `lexicon`；`tools/novel-chapter-brief.html` 补 `lexicon` 字段（返回体 16 → 17 键）、新增「6 · 必用词 `lexicon`（硬清单）」小节、`budget` 表补 `lexicon` 60/200 行、优雅降级补四条词表情形、`plan.checklist` 口径补硬指令；`tools/novel-settings.html` 的「相关工具」补禁用词与必用词的分工；`tools/novel-sentence-config.html` 的功能开关由 9 键改 **10 键**（新增 `lexiconFirst`，默认开）并在 `ALL_TOOLS` 枚举里补第 19 个工具。工具数 18 → 19 的**当前口径**表述全站同步；历史叙述（如 v5.0.0 的「工具数 16 → 18」、各版本条目里的「18 个工具页」）一律保持原样。
+>
+> **本轮刻意的两处不改**（v6.3.0）：① 首屏 Release 胶囊保持 `be1f035` 定下的<strong>通用链接</strong>（`github.com/siweina/dsh-novel-writer/releases`，文字 `Releases`），<strong>不</strong>写回 `releases/tag/v6.3.0`——tag 在站点推送时可能尚未创建，通用链接不会 404；② `#trust` 的 npm 格子保持「查看 npm 已发布版本」，没有可翻的版本字面量。发版后若确实要回到「胶囊写死版本号」的旧口径，改这两处即可。
 
 > **v5.0.0 已改好、尚未推送**（站点是公开在线的，改完后版本号先于发布指向 5.0.0）：全部页面（现 18 个工具页 + 宣传页 + 文档总览）的 JSON-LD `softwareVersion` → 5.0.0；首屏品牌版本号、胶囊内的 Release 链接与文字、`#trust` 的 `latest` → 5.0.0；`16 个工具` / `16 tools` → 18。**新增两个页面**：`tools/novel-chapter-brief.html`（开写包）与 `tools/novel-fix-plan.html`（改稿台），并同步了 `docs.js` 工具清单、`sitemap.xml`、`tools/index.html` 的工具卡与新增的「该调哪个工具」小节、`index.html` 的两张能力卡（能力卡由 9 张变 11 张，`more-8`/`more-9` 之后的编号顺延为 `more-10`/`more-11`）。`tools/novel-plot.html` 增加了 `action: "graph"` 结构视图（不新增工具）。**推送时请与 5.0.0 的 tag 同一次推送**，否则会出现「在线页面写着 5.0.0、Release 与 npm 仍是 4.3.1」的窗口期（与 v4.3.1 那次同型，只是这次窗口不会自动闭合，因为站点改动是提前做好的）。
 >

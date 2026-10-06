@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * C-audit.mjs —— dsh-novel-writer UI 改造 · 规则审计 CLI
+ * ui-audit.mjs —— dsh-novel-writer UI 改造 · 规则审计 CLI
  *
  * 用法：
- *   node C-audit.mjs <client.js 路径> [--json] [--tokens <tokens.md>] [--classes <classes.txt>]
+ *   node tools/ui-audit.mjs <client.js 路径> [--json] [--tokens <tokens.md>] [--classes <classes.txt>]
  *                                    [--skip 1,7] [--max-text <n>]
  *
  * 判定契约 §6 的 11 条规则（R1..R10 + 汇总）。有「错误」级违规时退出码 = 1；
- * 只有「提示(warn)」级发现时退出码 = 0（低误报策略：边界写法降级为提示，见 C-notes.md）。
+ * 只有「提示(warn)」级发现时退出码 = 0（低误报策略：边界写法降级为提示，见 tools/ui-audit-README.md）。
  * 退出码：0 = PASS / 1 = FAIL（有 error）/ 2 = 用法或 IO 致命错误。
  *
  * 实现要点：
@@ -1128,7 +1128,7 @@ function parseArgs(argv) {
   return opts;
 }
 
-const USAGE = `用法：node C-audit.mjs <client.js 路径> [选项]
+const USAGE = `用法：node tools/ui-audit.mjs <client.js 路径> [选项]
 
 选项：
   --json                  输出机器可读 JSON

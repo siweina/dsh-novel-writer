@@ -174,6 +174,16 @@ function toolText(response) {
   return String(response?.result?.content?.[0]?.text ?? "");
 }
 
+/**
+ * 取 render 文本里 `<path>` 标记的值（没有则返回 null）。
+ * v6.3.0（清单第 92 条）：`<path>` 统一为**书库根相对路径**，所以这里不再期待绝对路径；
+ * 跨用例比对时用「path 值 + 返回体里的书/内容」共同定位目标，而不是拿本机绝对路径当锚。
+ */
+function pathTagOf(text) {
+  const match = /<path>([^<]*)<\/path>/.exec(String(text));
+  return match ? match[1] : null;
+}
+
 function parseJsonOrNull(text) {
   try {
     return JSON.parse(text);
@@ -235,7 +245,12 @@ if (booksValue !== null) {
   ok("识别到 2 章的书", Boolean(book) && book.chapters === 2, JSON.stringify(booksValue.books ?? null));
 } else {
   ok("文本输出含书名与章节数", booksText.includes(BOOK) && booksText.includes("2"), booksText.slice(0, 120));
-  ok("文本输出含书库根目录", booksText.includes(testRoot), booksText.slice(0, 120));
+  // v6.3.0（清单第 92 条）：`<path>` 改为书库根相对路径，本断言相应改为断言相对路径形态——
+  // 保留原意图（路径必须指向书库），但不再锁死本机绝对路径，同时反证绝对路径没有泄漏进模型上下文。
+  const booksPath = pathTagOf(booksText);
+  ok("文本输出用书库根相对路径",
+    booksPath === "novels" && !booksText.includes(testRoot),
+    `path=${String(booksPath)}；含绝对路径=${booksText.includes(testRoot)}`);
 }
 // v4.3.0：render 快速路径必须真的生效——插件全部 render 都返回 [{type:"text",text}]，
 // 旧实现只认字符串 → 这里收到的会是整包 JSON（以 "{" 开头），精修文本被丢弃。
@@ -251,11 +266,18 @@ ok("novel_import src 越界被拒（默认限根内）",
 ok("越界拦截提示 --allow-external-src 开关", toolText(importBlocked).includes("--allow-external-src"), toolText(importBlocked).slice(0, 140));
 
 // 调用方显式传 root 时不得被服务器默认值覆盖
+// v6.3.0（清单第 92 条）：`<path>` 统一为书库根相对路径，两个书库都渲染成 `novels`，
+// 无法再用路径值区分 → 改用**返回内容**区分：显式 root（空书库）必须显示空库文案且不列任何作品。
 const explicitCall = await a.request("tools/call", { name: "novel_books", arguments: { root: emptyRoot } });
 const explicitValue = parseJsonOrNull(toolText(explicitCall));
-ok("调用方显式 root 优先于服务器 --root", explicitValue !== null
-  ? explicitValue.root === emptyRoot && explicitValue.books.length === 0
-  : toolText(explicitCall).includes("empty-root"), explicitValue !== null ? JSON.stringify(explicitValue) : toolText(explicitCall).slice(0, 120));
+{
+  const explicitText = toolText(explicitCall);
+  const listedBooks = explicitText.split("\n").filter((line) => line.startsWith("- "));
+  ok("调用方显式 root 优先于服务器 --root", explicitValue !== null
+    ? explicitValue.root === emptyRoot && explicitValue.books.length === 0
+    : explicitText.includes("暂无作品") && listedBooks.length === 0,
+    explicitValue !== null ? JSON.stringify(explicitValue) : explicitText.slice(0, 120).replace(/\n/g, " "));
+}
 
 const readCall = await a.request("tools/call", { name: "novel_read", arguments: { book: BOOK, chapter: "1" } });
 ok("novel_read 成功", readCall.result !== undefined && readCall.result.isError !== true, JSON.stringify(readCall.result ?? null).slice(0, 160));
@@ -356,8 +378,19 @@ ok("行长按 UTF-8 字节计，拒绝超限多字节行",
 const linkedOutside = join(testRoot, "linked-outside");
 symlinkSync(outsideRoot, linkedOutside, process.platform === "win32" ? "junction" : "dir");
 const linkedRoot = await a.request("tools/call", { name: "novel_books", arguments: { root: linkedOutside } });
-ok("显式 root 的目录联接不能越过书库边界",
-  toolText(linkedRoot).includes(testRoot) && !toolText(linkedRoot).includes(outsideRoot));
+// v6.3.0（清单第 92 条）：`<path>` 已是书库根相对路径，输出里不再出现本机绝对路径，
+// 判据相应改为「要么被越界拦截（isError），要么给出的相对路径必须落在库内（只认 novels）」——
+// 无论哪条分支，都不能把库外目录当书库根成功列出。
+{
+  const linkedText = toolText(linkedRoot);
+  const linkedPath = pathTagOf(linkedText);
+  const escaped = (linkedPath !== null) && (linkedPath.includes("..") || linkedText.includes(outsideRoot));
+  // v6.3.0（独立校验）：`linkedPath === null`（渲染里没有 <path>）时旧写法会 !escaped → 恒真，
+  // 断言退化为永真。现在要求 <path> 必须存在，否则算失败。
+  ok("显式 root 的目录联接不能越过书库边界",
+    linkedPath !== null && (linkedRoot.result?.isError === true || !escaped),
+    `isError=${linkedRoot.result?.isError === true} path=${String(linkedPath)}`);
+}
 const linkedSrc = await a.request("tools/call", { name: "novel_import", arguments: { src: linkedOutside } });
 ok("novel_import 的 src 目录联接被拒绝", linkedSrc.result?.isError === true && toolText(linkedSrc).includes("src 必须位于书库根"));
 const futureSrc = await a.request("tools/call", { name: "novel_import", arguments: { src: join(linkedOutside, "future.md") } });
@@ -365,7 +398,17 @@ ok("尚不存在的 src 子路径仍检查真实祖先", futureSrc.result?.isErr
 const dotDotDrafts = join(testRoot, "..drafts");
 mkdirSync(dotDotDrafts);
 const draftsRoot = await a.request("tools/call", { name: "novel_books", arguments: { root: dotDotDrafts } });
-ok("书库内以两个点开头的合法目录不被误判越界", toolText(draftsRoot).includes(dotDotDrafts));
+// v6.3.0（清单第 92 条）：输出改相对路径后，无法再用「含 ..drafts 绝对路径」证明没被误判越界；
+// 改用返回内容证明调用**真的成功执行到了列书库那一步**，并且用的就是那个空目录作为根。
+// v6.3.0（独立校验）：旧写的 `|| draftsText.includes("- ")` 对任何非空书库都成立——
+// "root 被尊重（空目录 → 暂无作品）"与"root 被忽略退回默认书库（列出测试书）"两种情形都会通过，
+// 判别力被抹平。现在只认空库文案，并要求**不出现**默认书库的作品行。
+{
+  const draftsText = toolText(draftsRoot);
+  ok("书库内以两个点开头的合法目录不被误判越界",
+    draftsRoot.result?.isError !== true && draftsText.includes("暂无作品") && !draftsText.includes(BOOK),
+    `isError=${draftsRoot.result?.isError === true} path=${String(pathTagOf(draftsText))} 含作品行=${draftsText.includes(BOOK)}`);
+}
 const linkedBook = join(testRoot, "novels", "外部联接书");
 symlinkSync(outsideRoot, linkedBook, process.platform === "win32" ? "junction" : "dir");
 const linkedBookRead = await a.request("tools/call", { name: "novel_read", arguments: { book: "外部联接书", chapter: "第01章.md" } });
@@ -450,7 +493,14 @@ const b = startServer({ args: [], env: { DSH_NOVEL_WRITER_ROOT: testRoot }, cwd:
 await b.request("initialize", { protocolVersion: "2024-11-05", capabilities: {} });
 const bCall = await b.request("tools/call", { name: "novel_books", arguments: {} });
 const bValue = parseJsonOrNull(toolText(bCall));
-ok("env 指定书库被识别", bValue !== null ? bValue.root === testRoot : toolText(bCall).includes(testRoot), bValue !== null ? String(bValue.root) : toolText(bCall).slice(0, 120));
+// v6.3.0（清单第 92 条）：`<path>` 已是相对路径（两个书库都渲染成 `novels`），
+// 无法再用绝对路径区分根目录 → 改用「列出的作品」证明生效的确实是 env 指的那本书库。
+{
+  const bText = toolText(bCall);
+  ok("env 指定书库被识别",
+    bValue !== null ? bValue.root === testRoot : (bText.includes(BOOK) && pathTagOf(bText) === "novels"),
+    bValue !== null ? String(bValue.root) : bText.slice(0, 120).replace(/\n/g, " "));
+}
 ok("env 服务器 exit=0", (await b.stop()).code === 0);
 
 // ---------------------------------------------------------------------------
@@ -461,7 +511,15 @@ const c = startServer({ args: ["--root=" + testRoot], env: { DSH_NOVEL_WRITER_RO
 await c.request("initialize", { protocolVersion: "2024-11-05", capabilities: {} });
 const cCall = await c.request("tools/call", { name: "novel_books", arguments: {} });
 const cValue = parseJsonOrNull(toolText(cCall));
-ok("--root= 生效且覆盖环境变量", cValue !== null ? cValue.root === testRoot : toolText(cCall).includes(testRoot), cValue !== null ? String(cValue.root) : toolText(cCall).slice(0, 120));
+// v6.3.0（清单第 92 条）：同 ② —— 两个候选根目录（--root 与 env）都渲染成 `novels`，
+// 用「是否列出了那本书」判断优先级：命令行 --root 赢 → 看到 测试书；env 赢 → 只剩空库文案。
+{
+  const cText = toolText(cCall);
+  const cListed = cText.split("\n").filter((line) => line.startsWith("- "));
+  ok("--root= 生效且覆盖环境变量",
+    cValue !== null ? cValue.root === testRoot : (cText.includes(BOOK) && cListed.length > 0),
+    cValue !== null ? String(cValue.root) : `${cText.slice(0, 100).replace(/\n/g, " ")}（列出 ${cListed.length} 本）`);
+}
 ok("--root= 服务器 exit=0", (await c.stop()).code === 0);
 
 // Slow tools and blocked stdout need a deterministic plugin without touching the real registry.

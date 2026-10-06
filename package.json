@@ -1,7 +1,7 @@
 {
     "name": "dsh-novel-writer",
-    "version": "6.1.0",
-    "description": "小说写作助手插件（v6.1.0）：句式/情感/意象分析、伏笔设定管理、本地语义检索、氛围光谱、风格画像报告、文笔六维基线带、原创模式与创作资料、写作哨兵（衔接/OOC/大纲）；界面全面重构为「DSH 官方 token 用料 + MIUⅨ 风格信息架构」（源码分块 + 构建链装配、6 个统一组件、PreferenceRow 单一行模式、分组卡片、24 枚线图标、阈值 slider 辅助输入）；附 stdio MCP 服务器（Claude Desktop / Cursor 可用）。",
+    "version": "6.3.0",
+    "description": "小说写作助手插件（v6.3.0）：句式/情感/意象分析、伏笔设定管理、本地语义检索、氛围光谱、风格画像报告、文笔六维基线带、原创模式与创作资料、写作哨兵（衔接/OOC/大纲）；**新增必用词表（专有词/作者惯用词的书级+全局两层登记、批量导入、开写包硬清单注入、成稿用词审计与侧边栏词表面板）**；界面为「DSH 官方 token 用料 + MIUⅨ 风格信息架构」（源码分块 + 构建链装配、6 个统一组件、PreferenceRow 单一行模式、分组卡片、26 枚线图标、阈值 slider 辅助输入）；附 stdio MCP 服务器（Claude Desktop / Cursor 可用）。",
     "mcpName": "io.github.siweina/dsh-novel-writer",
     "type": "module",
     "main": "lib/index.js",

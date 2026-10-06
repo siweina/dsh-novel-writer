@@ -2,8 +2,8 @@
     "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
     "name": "io.github.siweina/dsh-novel-writer",
     "title": "dsh-novel-writer — 网文写作体检",
-    "description": "Offline toolkit: 18 tools for Chinese web-novel style, plot-thread and continuity audits.",
-    "version": "6.1.0",
+    "description": "Offline toolkit: 19 tools for Chinese web-novel style, plot-thread and continuity audits.",
+    "version": "6.3.0",
     "repository": {
         "url": "https://github.com/siweina/dsh-novel-writer",
         "source": "github"
@@ -13,7 +13,7 @@
         {
             "registryType": "npm",
             "identifier": "dsh-novel-writer",
-            "version": "6.1.0",
+            "version": "6.3.0",
             "runtimeHint": "npx",
             "packageArguments": [
                 {

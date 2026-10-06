@@ -13,7 +13,7 @@ function TolRangeRow(el, t, mk, d, setDraft, state) {
       el("input", { type: "range", className: "nwRange", min: 0, max: 99, step: 1,
         value: empty ? 0 : v, disabled: !!(state && state.loading),
         "aria-label": label, "aria-valuetext": empty ? label : (String(v) + "%"),
-        onChange: onEv, onInput: onEv }),
+        onChange: onEv }),
       el("span", { className: "nwRangeVal" }, empty ? "-" : (String(v) + "%")));
   }
   return [mkOne("low", t("baseline.low")), mkOne("high", t("baseline.high"))];

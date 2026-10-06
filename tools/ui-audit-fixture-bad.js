@@ -1,8 +1,8 @@
 /**
- * C-fixture-bad.js —— 规则审计 CLI 的「故意违规样本」
+ * ui-audit-fixture-bad.js —— 规则审计 CLI 的「故意违规样本」
  *
- * 用途：自测 F:\doment\_ui-work\C-audit.mjs
- * 期望：`node C-audit.mjs C-fixture-bad.js` → 退出码非 0（FAIL），
+ * 用途：自测同目录的 tools/ui-audit.mjs
+ * 期望：`node tools/ui-audit.mjs tools/ui-audit-fixture-bad.js` → 退出码非 0（FAIL），
  *       且 R1..R10 每条规则至少命中一次（见文件内 /* Rn *​/ 标注）。
  *
  * 它不是真插件，只用于验证审计工具的检出能力；请勿照抄任何写法。

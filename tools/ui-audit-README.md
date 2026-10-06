@@ -6,7 +6,7 @@
 
 ## §1 铁律（违反即任务失败）
 
-1. **你只能创建/修改 §2 分配给自己的文件。** 严禁改：`F:\doment\dsh-novel-writer\lib\client.js`（**只有总负责人能改**，它必须保持单文件——宿主按 `exports["./client"]` 整体物化，不能 import 兄弟模块）、`package.json`、`test/*`、`README*`、`CHANGELOG.md`、`F:\测试用例\_release\repo`（发布克隆）、`C:\Users\zg\.dsh\**`（已安装的桌面 profile）、以及**其它子代理的任何文件**。
+1. **你只能创建/修改 §2 分配给自己的文件。** 严禁改：`lib/client.js`（**只有总负责人能改**，它必须保持单文件——宿主按 `exports["./client"]` 整体物化，不能 import 兄弟模块）、`package.json`、`test/*`、`README*`、`CHANGELOG.md`、发布克隆目录、已安装的桌面 profile（`~/.dsh/**`）、以及**其它子代理的任何文件**。
 2. 只读检查仓库任意文件是允许且鼓励的；**写**只允许写自己的文件。
 3. 禁止：`pnpm/npm install`、git 操作、删除文件、改环境变量、联网写操作、修改插件运行期状态。
 4. 禁止再开子代理。
@@ -20,7 +20,7 @@
 |---|---|---|
 | A（CSS） | `F:\doment\_ui-work\A-css.css`、`F:\doment\_ui-work\A-check.mjs`、`F:\doment\_ui-work\A-notes.md` | 完整的新 CSS 文本（将被整体替换进 client.js 的 `const CSS = \`…\`` 模板）+ 自检脚本 + 说明 |
 | B（适配层） | `F:\doment\_ui-work\B-adapter.js`、`F:\doment\_ui-work\B-adapter-test.mjs`、`F:\doment\_ui-work\B-notes.md` | 自包含代码块 + 独立测试 + 说明 |
-| C（审计工具） | `F:\doment\_ui-work\C-audit.mjs`、`F:\doment\_ui-work\C-fixture-good.js`、`F:\doment\_ui-work\C-fixture-bad.js`、`F:\doment\_ui-work\C-notes.md` | 规则审计 CLI + 好坏样本自测 + 说明 |
+| C（审计工具） | `tools/ui-audit.mjs`、`tools/ui-audit-fixture-good.js`、`tools/ui-audit-fixture-bad.js`、本文件 | 规则审计 CLI + 好坏样本自测 + 说明 |
 | 总负责人（我） | `lib/client.js` 及仓库其余文件 | 集成：splice A/B、改造控件调用点、消除内联样式、跑全套测试、真机验证 |
 
 **你的产物是"文本块"，不是要你直接改 client.js。** 块必须能原样插入/替换，且自包含（不 import 本地文件）。
@@ -47,11 +47,11 @@
 10. hover/动效不得牺牲键盘焦点可见性与 `prefers-reduced-motion` 行为。
 
 参考数据（已为你生成，直接读）：
-- `F:\doment\_ui-work\tokens.md` —— **362 个 `--dsw-*` token 白名单**（从实际装机的官方/第三方包里取证，含来源）。**只用白名单里的 token**，且优先 `--dsw-alias-*` 语义别名。
-- `F:\doment\_ui-work\classes.txt` —— 现有 109 个 `nw*` 类名（CSS 定义 106 + JS 使用 80 的并集）。
+- `tools/tokens.md` —— **362 个 `--dsw-*` token 白名单**（从实际装机的官方/第三方包里取证，含来源）。**只用白名单里的 token**，且优先 `--dsw-alias-*` 语义别名。
+- `tools/classes.txt` —— 现有 109 个 `nw*` 类名（CSS 定义 106 + JS 使用 80 的并集）。
 - 官方组件与类型的解包副本：`F:\doment\_ui020\`（`dsh-client-ui-primitives`、`dsh-client-ui-sidebar`、`dsh-client-ui-settings`、`dsh-client-ui-layout` 等）。
 - 可参考的第三方成熟写法：`C:\Users\zg\.dsh\profiles\desktop\node_modules\@linxin666\*\lib\client.js`（它们的 CSS 内嵌在 `const css = "…"` 里）。
-- 待改造源码（只读）：`F:\doment\dsh-novel-writer\lib\client.js`（CSS 模板在文件开头 `const CSS = \`…\``，其余是 React 组件）。
+- 待改造源码（只读）：`lib/client.js`（CSS 模板在文件开头 `const CSS = \`…\``，其余是 React 组件）。
 
 ## §4 A 的规格（CSS）
 
@@ -119,7 +119,7 @@ var NW_UI = createNovelWriterUI(react, require);
 
 ## §6 C 的规格（规则审计 CLI）
 
-产物 `C-audit.mjs`，用法 `node C-audit.mjs <client.js 路径> [--json]`，逐条检查并**带行号**报告；有违规时退出码非 0：
+产物 `ui-audit.mjs`，用法 `node tools/ui-audit.mjs <client.js 路径> [--json]`，逐条检查并**带行号**报告；有违规时退出码非 0：
 
 1. CSS 模板内零颜色字面量（`#hex` / `rgb(` / `rgba(` / `hsl(` / 渐变里的色值）。
 2. JS 部分零内联 `style` 对象含色值/`linear-gradient`/裸圆角数值/裸 `fontSize` 数值。
@@ -128,12 +128,12 @@ var NW_UI = createNovelWriterUI(react, require);
 5. 使用了 `--dsw-elevation-*` 的表面不得同时有 `--dsw-alias-border-*` 边框。
 6. 每条含 `font-size` 的规则（或同行）必须有 `line-height`。
 7. 不得出现主题选择器（`prefers-color-scheme` / `[data-ds-dark-theme]` / `.dark`）或 `::-webkit-scrollbar`。
-8. 每个 `var(--dsw-*)` 必须在 `F:\doment\_ui-work\tokens.md` 白名单里（从该文件解析 token 名）。
+8. 每个 `var(--dsw-*)` 必须在 `tools/tokens.md` 白名单里（从该文件解析 token 名）。
 9. 类名契约双向：`classes.txt` 里每个类名都要在 CSS 里定义；JS 里每个 `className` 用到的 `nw*` 类名也必须在 CSS 里定义。
 10. 启动安全：JS 里不得出现 `ctx.inject(` 形式的 cordis 服务等待；`require("@deepseek-ai/dsh-client-ui-primitives")` 必须出现在 `try` 块内。
 11. 输出格式：`文件:行 规则编号 说明`，末尾汇总各类计数。
 
-必须自带自测：`C-fixture-good.js`（全部通过）与 `C-fixture-bad.js`（每条规则至少触发一次），并在 `C-notes.md` 记录 `node C-audit.mjs C-fixture-good.js` 退出 0、`node C-audit.mjs C-fixture-bad.js` 退出非 0 的实测输出。**C 不对现有 client.js 的通过性负责**——它只做工具；违规是总负责人去修。
+必须自带自测：`tools/ui-audit-fixture-good.js`（全部通过）与 `tools/ui-audit-fixture-bad.js`（每条规则至少触发一次），并在本文件记录 `node tools/ui-audit.mjs tools/ui-audit-fixture-good.js` 退出 0、`node tools/ui-audit.mjs tools/ui-audit-fixture-bad.js` 退出非 0 的实测输出。**C 不对现有 client.js 的通过性负责**——它只做工具；违规是总负责人去修。
 
 ## §7 报告格式（必须按此结构）
 

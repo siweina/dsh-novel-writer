@@ -1,8 +1,8 @@
 /**
- * C-fixture-good.js —— 规则审计 CLI 的「最小合规样本」
+ * ui-audit-fixture-good.js —— 规则审计 CLI 的「最小合规样本」
  *
- * 用途：自测 F:\doment\_ui-work\C-audit.mjs
- * 期望：`node C-audit.mjs C-fixture-good.js` → 退出码 0，判定 PASS。
+ * 用途：自测同目录的 tools/ui-audit.mjs
+ * 期望：`node tools/ui-audit.mjs tools/ui-audit-fixture-good.js` → 退出码 0，判定 PASS。
  *
  * 它不是真插件（id 是 c-fixture-good），也不会被宿主加载；
  * 只需具备 client.js 的两个特征：`var CSS = `…`` 的 CSS 模板 + 用 react.createElement 的组件。

@@ -1,7 +1,7 @@
 ---
 name: novel-writing
-description: 中文网文写作助手（dsh-novel-writer 插件）：章节库浏览与阅读、句式/情感/风格基线分析、伏笔与设定表管理、章节摘要、连贯性审计（衔接/OOC/大纲走偏）、本地语义检索、原创模式创作资料。当用户要写/续写/改稿中文小说，或要看文风与情感量化报告时使用。
-whenToUse: 用户提到小说、网文、章节、续写、改稿、文风、句式分析、伏笔、设定表、人物卡、大纲、章节摘要时
+description: 中文网文写作助手（dsh-novel-writer 插件）：章节库浏览与阅读、句式/情感/风格基线分析、伏笔与设定表管理、必用词表（专有词/惯用词的优先用词与成稿用词审计）、章节摘要、连贯性审计（衔接/OOC/大纲走偏）、本地语义检索、原创模式创作资料。当用户要写/续写/改稿中文小说，或要看文风与情感量化报告、要固定用词或模仿作者用词时使用。
+whenToUse: 用户提到小说、网文、章节、续写、改稿、文风、句式分析、伏笔、设定表、人物卡、大纲、章节摘要、专有名词、必用词、惯用词、用词模仿时
 ---
 
 # 小说写作助手 (novel-writing)
@@ -86,6 +86,18 @@ whenToUse: 用户提到小说、网文、章节、续写、改稿、文风、句
 - **只读**：不写任何文件（仅复用既有分析缓存）。
 - **优雅降级**：没有大纲 / 没有伏笔 / 没有设定表 / 书只有 1 章 —— 一律返回空值并在 `degraded` 说明原因，**绝不抛错**（唯一例外：书名目录不存在）。
 - 用法要点：拿到之后**先读锚段再动笔**；`baseline` 的数字只做事后校验，不要把数字翻译成写作规则；`avoid` 里的东西不要写。
+
+## 必用词表 / 优先用词（v6.2.0 新增，`novel_lexicon`）
+
+把「某场景**必须使用**的专有名词 / 作者惯用词」登记成表。与 `novel_settings category=worldview` 的 `bannedWords` 分工明确：**worldview 管"不要写什么"（禁词），本表管"必须写什么"（优先词）**。目的是阻止模型退回自己惯用的通用说法。
+
+- **两层存储**（书级同名覆盖全局）：全局层 `<root>/.novel-writer/lexicon/_global.json`（跨书惯用词）｜书级层 `<root>/.novel-writer/lexicon/<书名>.json`（本书专名）。
+- **开关**：功能开关 `lexiconFirst`（侧边栏「必用词优先（专有词表）」，**默认开**）；另有每层自己的 `enabled`（`action="toggle"`）。开关打开且词表非空时，`novel_chapter_brief` 返回 `lexicon` 分区并在 `plan.checklist` 里给硬指令。
+- **条目字段**：`term`（词条）｜`kind`（专名 / 偏好词 / 称呼 / 场景词 / 口头禅 / 其他，可自定义）｜`scene`（适用场景：本章大纲方向行含该词时优先注入）｜`avoid[]`（**通用替身词**：正文里出现它即等于没用必用词）｜`aliases[]`（等价写法，审计算命中）｜`note`｜`priority`（`high`）｜`enabled`。
+- **action**：`list`（默认合并两层，可按 `query` 过滤）｜`add`（`terms` 数组或 `text` 批量文本）｜`update`（含 `newTerm` 改名、单条停用）｜`delete`（`terms` 指定；整层清空须显式 `all=true`）｜`import`（`text` 每行一条：`词` 或 `词|类型|场景|替身1,替身2|备注`，`replace=true` 整层覆盖）｜`scan`（从本书正文高频词提候选，正文高频词往往就是作者的用词偏好）｜`audit`（**成稿审计**）｜`export`｜`toggle`。
+- **audit（只读）**：给 `chapter`（章号 / 文件名 / 标题子串，或 `all`=全书，省略=最后一章），返回 `covered`（已用必用词 + 首见行）｜`missing`（一次没用）｜`avoidHits`（**通用词顶替**：行号 + 原句片段 + 应改成的必用词）｜`coverage`。**它不改正文**，只把「该用没用」变成可定位的行号。
+- 用法要点：写完一章跑一次 `audit`，把 `avoidHits` 逐处改成表内词；`scan` 出的候选词由用户挑选后再 `add`（可一次几百条）。
+- 界面：侧边栏「必用词表」页可做分级列表、搜索、单条增删改、批量粘贴导入（书级 / 全局 / 合并三种视图），工具开关页也有 `novel_lexicon` 的启停与词表目录入口。
 
 ## 改稿台（v5.0.0 新增，`novel_fix_plan`）
 
@@ -172,6 +184,25 @@ novel_sentence_analysis 的 emotion.quantification 是纯规则计算的数字�
 - **composites**：全书高频复合情感对（悲喜交加×N 等）。
 
 用法：把这些数字直接转化为写作指令（如"C=0.7 → 这段要矛盾螺旋，不能平滑"），不要为了判断情感去读整章原文。
+
+### 对外契约字段（v6.3.0 声明，**不是死代码**）
+
+`emotion.quantification.stats` 与 `emotion.quantification.implicit` 里有 9 个字段在**包内没有直接读取方**，但它们是对外契约的一部分——`lib/index.js` 的 `output.schema` 以 `additionalProperties: true` 把 stats / implicit 整包透传给模型，CHANGELOG 也已把 `deltaBasis` / `adjPairs` 公告为新增返回字段，因此**删不得**：
+
+| 字段 | 所属 | 语义 |
+|---|---|---|
+| `windows` | stats | 窗口总数（**不是**有命中的窗口数） |
+| `hitWindows` | stats | 有情绪命中的窗口数 |
+| `adjPairs` | stats | 相邻撕裂的有效对数（`adjVariance` 的分母）；`0` = 没有任何可测量的相邻撕裂 |
+| `deltaBasis` | stats | `delta` / `deltaRobust` 的采样基标识（二者现已统一为全窗口等距序列 `seriesFull`） |
+| `deltaRobust` | stats | 稳健趋势（首尾三分位均值差），与 `delta` 的差异只来自估计器，不再是采样基差异 |
+| `posRatio` / `negRatio` | stats | 正向 / 负向词占比（分母为情绪词总数） |
+| `totalAllHits` | implicit | 意象类命中总数（`topCarriers` 只是其 top 子集） |
+| `topCarriers` | implicit | 命中最多的意象载体清单 |
+
+口径：**「零读即删」只适用于纯内部中间变量**（如已删除的 `windowCount` / `hitWindowCount` / `weightedTotal`）；返回面字段一律「保留 + 本节声明」。若要收缩返回面，必须与 `lib/index.js` 的 `output.schema` 及 CHANGELOG **同批变更**，否则模型侧会静默少字段。
+
+（同款口径见 `lib/analysis.js` 头注释 v4.3.0 两节。）
 
 ## 语义隐性情感（v2.0.0）
 

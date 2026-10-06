@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_settings — 设定五张表｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_settings 的实现细节：五张设定表的 listKey 映射、category 与 action 的枚举回退、各动作返回体差异、worldview 语用规范自动推导、scan 候选提取正则与 detect 文化基准评分公式。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_settings","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-settings.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_settings — 设定五张表｜dsh-novel-writer 技术文档","description":"novel_settings 的实现细节：五张设定表的 listKey 映射、category 与 action 的枚举回退、各动作返回体差异、worldview 语用规范自动推导、scan 候选提取正则与 detect 文化基准评分公式。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-settings.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.1.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_settings, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_settings — 设定五张表｜dsh-novel-writer 技术文档","description":"novel_settings 的实现细节：五张设定表的 listKey 映射、category 与 action 的枚举回退、各动作返回体差异、worldview 语用规范自动推导、scan 候选提取正则与 detect 文化基准评分公式。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-settings.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.3.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_settings, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -218,6 +218,7 @@ modern &gt;= 5 且 modern &gt;= max(western, eastern, 1)
 
       <h2>相关工具</h2>
       <ul>
+        <li><a href="novel-lexicon.html">novel_lexicon</a> —— <strong>必用词表</strong>（「必须写什么」）。与本工具 <code>worldview</code> 的分工：本工具的 <code>bannedWords</code> / <code>speechStyle</code> 管「<strong>不要写什么</strong>」（禁词与语用规范，为文化基准一致服务），词表管「<strong>必须写什么</strong>」（优先词，为模仿作者的用词习惯服务）；两者互补、不重复——同一个概念的两面可以分别登记（禁「铜灯」+ 必用「青铜灯」）。</li>
         <li><a href="novel-continuity-check.html">novel_continuity_check</a> —— 消费本工具的五张表：登记人物的缺场 / 别名未用、设定表重复条目、按 <code>worldview</code> 的 <code>bannedWords</code> 与 <code>speechStyle</code> 做的用语冲突与语用冲突扫描都在彼处实现。</li>
         <li><a href="novel-plot.html">novel_plot</a> —— 伏笔登记表，可用 <code>relatedCharacters</code> / <code>locations</code> 引用本工具登记的条目名。</li>
         <li><a href="novel-outline.html">novel_outline</a> —— 创作资料（创作设定 / 人物设定 / 剧情大纲 / 钩子记录 / 创作状态卡），与本工具的五张表是两套并行的资料体系。</li>

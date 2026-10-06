@@ -4,21 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>技术文档总览｜dsh-novel-writer</title>
-<meta name="description" content="dsh-novel-writer 的 18 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
+<meta name="description" content="dsh-novel-writer 的 19 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
 <link rel="stylesheet" href="../styles.css">
 <link rel="stylesheet" href="docs.css">
 <link rel="canonical" href="https://siweina.github.io/dsh-novel-writer/tools/index.html">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="dsh-novel-writer">
 <meta property="og:title" content="技术文档总览｜dsh-novel-writer">
-<meta property="og:description" content="dsh-novel-writer 的 18 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
+<meta property="og:description" content="dsh-novel-writer 的 19 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
 <meta property="og:url" content="https://siweina.github.io/dsh-novel-writer/tools/index.html">
 <meta property="og:locale" content="zh_CN">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="技术文档总览｜dsh-novel-writer">
-<meta name="twitter:description" content="dsh-novel-writer 的 18 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
+<meta name="twitter:description" content="dsh-novel-writer 的 19 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","name":"技术文档总览｜dsh-novel-writer","description":"dsh-novel-writer 的 18 个工具实现细节：参数契约、计算原理、约束边界与源码位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/index.html","inLanguage":"zh-CN","isPartOf":{"@type":"WebSite","name":"dsh-novel-writer","url":"https://siweina.github.io/dsh-novel-writer/"}}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","name":"技术文档总览｜dsh-novel-writer","description":"dsh-novel-writer 的 19 个工具实现细节：参数契约、计算原理、约束边界与源码位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/index.html","inLanguage":"zh-CN","isPartOf":{"@type":"WebSite","name":"dsh-novel-writer","url":"https://siweina.github.io/dsh-novel-writer/"}}</script>
 </head>
 <body class="docs">
 
@@ -33,9 +33,10 @@
   <main class="docs__main">
     <article class="doc">
       <h1>技术文档</h1>
-      <div class="note"><b>v6.1.0：</b>本地测试版。修复章节查找、复测、文本统计、语义短段落与 MCP/界面问题；当前规则以下列页面为准。历史版本的报告数值可能因计分修正而变化。</div>
+      <div class="note"><b>v6.3.0：</b>本地测试版。第 19 个工具 <a href="novel-lexicon.html">novel_lexicon</a>（必用词表，v6.2.0 新增）在本版修掉一批缺陷并对齐界面：<strong>开写包补上 <code>【必用词·优先使用】</code> 分区</strong>（此前 <code>plan.checklist</code> 的硬指令指向一个不存在的分区，<code>avoid</code> 勿用词一条都到不了模型）、<strong>词表文件损坏后按层开关会把整层条目静默清空</strong>（现改为拒写并明确报「词表文件损坏」，原条目不再丢失）、面板「合并 / 全局」两个视图加载失败，均已修复；词表面板三层视图改用官方分段控件，改名撞车改为明确报错。工具数与参数契约不变（19 个）。</div>
+      <div class="note"><b>v6.1.0：</b>修复章节查找、复测、文本统计、语义短段落与 MCP/界面问题；当前规则以下列页面为准。历史版本的报告数值可能因计分修正而变化。</div>
       <p class="doc__lead">
-        <code>dsh-novel-writer</code> 的 18 个工具全部在本地运行，<strong>不使用在线大模型</strong>：所有指标由规则统计与本地 ONNX 推理得出。本组页面面向二次开发与集成方，逐工具说明参数契约、计算原理、约束边界与源码位置。
+        <code>dsh-novel-writer</code> 的 19 个工具全部在本地运行，<strong>不使用在线大模型</strong>：所有指标由规则统计与本地 ONNX 推理得出。本组页面面向二次开发与集成方，逐工具说明参数契约、计算原理、约束边界与源码位置。
       </p>
 
       <h2>阅读约定</h2>
@@ -87,6 +88,7 @@
       <div class="tools__grid">
         <a class="tools__card" href="novel-plot.html"><b>novel_plot</b><span>伏笔与剧情钩子登记：open / done 状态，scan 自动标注被提及的章节；action: graph 结构视图给出跨章的伏笔生命周期、人物出场矩阵与线索活跃度。</span></a>
         <a class="tools__card" href="novel-settings.html"><b>novel_settings</b><span>人物、地点、道具、时间线、世界观用语规范五张表的增删改查。</span></a>
+        <a class="tools__card" href="novel-lexicon.html"><b>novel_lexicon</b><span>必用词表：把「必须使用的专有名词 / 作者惯用词」登记成表（书级 + 全局两层），动笔前由开写包作为硬清单注入，成稿用 audit 扫覆盖率与「通用词顶替」的行号与原句。</span></a>
         <a class="tools__card" href="novel-summary.html"><b>novel_summary</b><span>章节摘要按章管理，供长篇续写时快速回忆前情。</span></a>
         <a class="tools__card" href="novel-outline.html"><b>novel_outline</b><span>创作资料维护：创作设定、人物、大纲、钩子记录与创作状态卡。</span></a>
       </div>
@@ -98,7 +100,7 @@
       </div>
 
       <h2>该调哪个工具</h2>
-      <p>工具数到 18 之后，「选对工具」本身也有了成本。下表按<strong>你想回答的问题</strong>给出口径；其中三个分析类工具名字最像，一并说明区别。</p>
+      <p>工具数到 19 之后，「选对工具」本身也有了成本。下表按<strong>你想回答的问题</strong>给出口径；其中三个分析类工具名字最像，一并说明区别。</p>
       <table>
         <thead><tr><th>你想回答的问题</th><th>用哪个</th><th>主要输出</th></tr></thead>
         <tbody>
@@ -108,6 +110,7 @@
           <tr><th>动笔前我<strong>该读哪些材料</strong></th><td><a href="novel-chapter-brief.html">novel_chapter_brief</a></td><td>承接口、上一章钩子、大纲方向行、命中人物卡、未回收伏笔及埋设距离、世界观禁用词、六维基线、锚段与骨架、禁用清单与三段式 plan</td></tr>
           <tr><th>这一章<strong>要改哪里</strong>、改完没有</th><td><a href="novel-fix-plan.html">novel_fix_plan</a></td><td>按 severity → effort 排序的待办清单（带段落行号与<strong>改写方向</strong>，不给改写后的正文）+ <code>verify</code> 三态复测</td></tr>
           <tr><th>全书有没有<strong>断线 / 丢人 / 忘伏笔</strong></th><td><a href="novel-plot.html">novel_plot</a>（<code>action: "graph"</code>）</td><td>伏笔生命周期与埋设距离、人物出场矩阵与连续缺席（≥ 5 章）、线索活跃度与最大空档、时间线顺序核对、大纲方向行对照</td></tr>
+          <tr><th>我想让 AI <strong>必须用我的专有名词 / 惯用词</strong></th><td><a href="novel-lexicon.html">novel_lexicon</a></td><td>开写包注入的硬清单（<code>lexicon</code> 分组词条 + <code>plan.checklist</code> 硬指令）、成稿 <code>audit</code> 的覆盖率与未使用清单、以及「通用词替身顶替」的行号与原句（只读）</td></tr>
         </tbody>
       </table>
       <div class="note">
@@ -119,13 +122,13 @@
       <p>所有工具接受可选的 <code>root</code>（含 <code>novels</code> 子目录的目录）。解析优先级：调用参数 <code>root</code> → 插件配置项 → MCP 启动参数 <code>--root</code> → 环境变量 <code>DSH_NOVEL_WRITER_ROOT</code> → 当前工作目录。MCP 形态下，参数里的 <code>root</code> 必须落在启动时 <code>--root</code> 指定范围内；<strong>越界时由 MCP 层静默回退到 <code>--root</code>，只写入 stderr 日志，调用方不会收到错误</strong>（插件层 <code>resolveRoot</code> 本身不做范围校验，范围校验只在 MCP 层 <code>isInsideRoot</code> 进行）。书名、分类等片段经 <code>sanitizeSegment</code> 过滤，防止路径穿越。</p>
 
       <h3>数据落盘</h3>
-      <p>所有派生数据集中写在 <code>&lt;书库根&gt;/.novel-writer/</code> 下：<code>plots</code>（伏笔）、<code>settings</code>（设定）、<code>summaries</code>（摘要）、<code>analysis</code>（分析报告）、<code>audits</code>（审计）、<code>embedding</code>（语义索引）、<code>style-reports</code>（风格画像）。写盘采用临时文件 + 原子替换；失败会抛出 <code>ENOVELWRITEFAIL</code> 而不是静默丢弃。</p>
+      <p>所有派生数据集中写在 <code>&lt;书库根&gt;/.novel-writer/</code> 下：<code>plots</code>（伏笔）、<code>settings</code>（设定）、<code>lexicon</code>（必用词表）、<code>summaries</code>（摘要）、<code>analysis</code>（分析报告）、<code>audits</code>（审计）、<code>embedding</code>（语义索引）、<code>style-reports</code>（风格画像）。写盘采用临时文件 + 原子替换；失败会抛出 <code>ENOVELWRITEFAIL</code> 而不是静默丢弃。</p>
 
       <h3>语义引擎的可用性</h3>
       <p>语义检索、语义风格距离与语义隐性情感依赖随包分发的 <code>bge-small-zh-v1.5</code> 量化模型（约 24MB）与 <code>onnxruntime-web</code>（WASM）。引擎不可用时这些能力自动降级为纯规则模式，其余功能不受影响；返回体会以 <code>skippedDims</code> 或专用文案说明降级原因，而非返回空结果。</p>
 
       <h3>MCP 形态的边界</h3>
-      <p>包内 <code>mcp/server.mjs</code> 把同样 18 个工具暴露为 stdio MCP 服务器（可用 Streamable HTTP 传输）。协议侧：未知工具返回 <code>-32602</code>（Protocol Error）；支持 2025-11-25 / 2025-06-18 / 2025-03-26 / 2024-11-05 版本协商并原样回显；JSON-RPC 批量请求自 2025-06-18 起按规范拒绝；单行报文上限 4 MiB；<code>novel_import</code> 的 <code>src</code> 默认限制在书库根内，需显式加 <code>--allow-external-src</code> 才能放开。</p>
+      <p>包内 <code>mcp/server.mjs</code> 把同样 19 个工具暴露为 stdio MCP 服务器（可用 Streamable HTTP 传输）。协议侧：未知工具返回 <code>-32602</code>（Protocol Error）；支持 2025-11-25 / 2025-06-18 / 2025-03-26 / 2024-11-05 版本协商并原样回显；JSON-RPC 批量请求自 2025-06-18 起按规范拒绝；单行报文上限 4 MiB；<code>novel_import</code> 的 <code>src</code> 默认限制在书库根内，需显式加 <code>--allow-external-src</code> 才能放开。</p>
     </article>
 
     <nav class="docs__pager" id="docsPager"></nav>

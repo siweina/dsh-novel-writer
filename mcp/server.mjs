@@ -50,6 +50,35 @@ const MAX_OUTPUT_FRAME_BYTES = 8 * 1024 * 1024;
 // DEBUG=1 时 stderr 才输出完整错误堆栈（默认只输出一行摘要，见 logError）
 const DEBUG = process.env.DEBUG === "1";
 
+// ---------------------------------------------------------------------------
+// v6.3.0 修复（旧清单第 71 条）：进程级异常处理器与 console 改道必须注册在**任何 await 之前**。
+// 旧版把它们写在模块底部（插件 import/apply 之后）——插件加载期间（顶层 await 挂起时）产生的
+// 浮动 Promise 拒绝没有处理器，Node 默认 --unhandled-rejections=throw 会直接崩进程：实测 exit=1、
+// 0 个 JSON-RPC 帧、--ignore-plugin-load-error 完全无效、stderr 是 Node 默认完整堆栈（含绝对路径）。
+// 现在放在模块顶部（仍在常量初始化之后、首次 await 之前，log/logError 依赖的 SERVER_NAME/DEBUG 均已就绪）：
+// 加载期异常走与底部原来同一条"记 stderr"降级路径；退出码语义不变——uncaughtException 仍 exit 1，
+// 加载失败/队列异常照旧 1，EOF 照旧 0，unhandledRejection 仍只记日志不外抛。
+//
+// stdout 保护：插件内部若出现 console.log/info/debug（当前 lib/ 无此类调用），一律改道 stderr，
+// 避免任何一行非 JSON 内容混进协议通道；同样必须早于插件加载，否则加载期日志会落进协议通道。
+// ---------------------------------------------------------------------------
+process.on("unhandledRejection", (reason) => {
+  logError("未处理的 Promise 拒绝：", reason);
+});
+process.on("uncaughtException", (error) => {
+  logError("未捕获异常：", error);
+  process.exit(1);
+});
+for (const method of ["log", "info", "debug"]) {
+  console[method] = (...args) => {
+    try {
+      process.stderr.write(`[plugin:${method}] ${args.map(toText).join(" ")}\n`);
+    } catch {
+      /* 忽略 */
+    }
+  };
+}
+
 /** 读插件 package.json 的 version（服务器版本随插件版本走）。 */
 function readPackageVersion() {
   try {
@@ -82,10 +111,32 @@ function log(message) {
   }
 }
 
+// v6.3.0（独立校验）：stderr 里不再出现**书库根**的绝对路径。之前只消除了堆栈帧与插件安装路径，
+// 但错误消息本身往往内嵌书库根（如「书库中未找到作品目录：F:\…\novels\某书」），仍会进客户端日志。
+// 现在把已解析的书库根（及其 resolve / 正斜杠变体）替换成占位符 <书库根>，定位信息（书名、子路径）保留。
+let REDACT_ROOTS = [];
+function redactRoots(text) {
+  let out = text;
+  for (const root of REDACT_ROOTS) {
+    if (typeof root !== "string" || root.length < 3) continue;
+    const forms = new Set([root, resolve(root), root.replace(/\\/g, "/"), resolve(root).replace(/\\/g, "/")]);
+    for (const form of forms) {
+      if (typeof form === "string" && form.length >= 3) out = out.split(form).join("<书库根>");
+    }
+  }
+  return out;
+}
+
 function logError(prefix, error) {
   // v4.3.0：默认只打一行摘要——错误堆栈里含调用方机器上的绝对路径，错误消息里可能夹带书名/路径片段，
   // 而 stderr 会被 MCP 客户端原样写进日志文件。需要完整堆栈时用 DEBUG=1 显式开启。
-  const summary = toText(error).replace(/\s+/g, " ").trim();
+  // v6.3.0 修复（旧清单第 70 条）：摘要只取 error.message，不再走 toText()——toText 对 Error 优先返回
+  // stack，于是"默认不打堆栈"名存实亡：实测 DEBUG 未开时 stderr 直接出现
+  // 「…执行失败：Error: 书库中未找到作品目录：… at scanChapters (file:///F:/…/lib/core.js:302:11) at async …」，
+  // 插件安装绝对路径照样进了客户端日志。现在保留可诊断的单行摘要（error.message 全文，超 200 字符才截断 +
+  // 记总长度），堆栈只在下面的 DEBUG 分支输出；Error 无 message 时退回 name（如 "TypeError"）而不是堆栈。
+  const raw = error instanceof Error ? (error.message || error.name || String(error)) : error;
+  const summary = redactRoots(toText(raw).replace(/\s+/g, " ").trim());
   log(prefix + (summary.length > 200 ? summary.slice(0, 200) + `…(共 ${summary.length} 字符)` : summary));
   if (DEBUG) {
     const stack = error instanceof Error && typeof error.stack === "string" ? error.stack : "";
@@ -94,18 +145,9 @@ function logError(prefix, error) {
 }
 
 // ---------------------------------------------------------------------------
-// stdout 保护：插件内部若出现 console.log/info/debug（当前 lib/ 无此类调用），
-// 一律改道 stderr，避免任何一行非 JSON 内容混进协议通道。
+// stdout 保护（console 改道）已随进程级异常处理器一起上移到模块顶部——见文件开头 v6.3.0 注释：
+// 它必须早于插件加载的顶层 await，否则加载期的插件日志会落进协议通道。
 // ---------------------------------------------------------------------------
-for (const method of ["log", "info", "debug"]) {
-  console[method] = (...args) => {
-    try {
-      process.stderr.write(`[plugin:${method}] ${args.map(toText).join(" ")}\n`);
-    } catch {
-      /* 忽略 */
-    }
-  };
-}
 
 // ---------------------------------------------------------------------------
 // 书库根目录：命令行 --root > 环境变量 DSH_NOVEL_WRITER_ROOT > process.cwd()
@@ -115,16 +157,25 @@ function parseCliRoot(argv) {
     const arg = argv[i];
     if (arg === "--root") {
       const value = argv[i + 1];
-      if (typeof value !== "string" || value.trim() === "") {
-        log("警告：--root 缺少路径值，忽略该参数");
+      // v6.3.0 修复（旧清单第 72 条）：取值以 "-" 开头说明下一个开关被吞成了路径值
+      // （实测 `node mcp/server.mjs --root --allow-external-src` 把书库根指到 "...\--allow-external-src"，
+      // 且不告警）。现在按"缺值"处理：告警 + 回退到环境变量/cwd。
+      if (typeof value !== "string" || value.trim() === "" || value.trim().startsWith("-")) {
+        log(value && value.trim().startsWith("-")
+          ? `警告：--root 缺少路径值（下一个参数 "${value.trim()}" 是开关，不是路径），忽略该参数，回退到环境变量或当前目录`
+          : "警告：--root 缺少路径值，忽略该参数");
         return null;
       }
       return value.trim();
     }
     if (arg.startsWith("--root=")) {
       const value = arg.slice("--root=".length).trim();
-      if (value === "") {
-        log("警告：--root= 缺少路径值，忽略该参数");
+      // v6.3.0：`--root=` 形式同样按"取值以 - 开头即缺值"处理（与上面的空格形式同口径，
+      // 避免 `--root=--allow-external-src` 这类笔误静默把书库根指到一个开关名上）。
+      if (value === "" || value.startsWith("-")) {
+        log(value === ""
+          ? "警告：--root= 缺少路径值，忽略该参数"
+          : `警告：--root= 的取值 "${value}" 以 - 开头（疑似把开关写成了路径），忽略该参数，回退到环境变量或当前目录`);
         return null;
       }
       return value;
@@ -144,6 +195,8 @@ function resolveLibraryRoot(argv) {
 }
 
 const { root: LIBRARY_ROOT, source: ROOT_SOURCE } = resolveLibraryRoot(process.argv.slice(2));
+// v6.3.0：stderr 摘要里把书库根的绝对路径替换成 <书库根>（见 logError 上方的 redactRoots）
+REDACT_ROOTS = [LIBRARY_ROOT];
 // v4.3.0：默认禁止 novel_import 读取书库根之外的目录（防"文档注入 → 复制任意 .md/.txt 进书库再读出"）
 const ALLOW_EXTERNAL_SRC = process.argv.slice(2).includes("--allow-external-src");
 
@@ -187,7 +240,7 @@ try {
     logError("插件加载失败，服务器退出（如需保留服务器并回 JSON-RPC 错误帧，改用 --ignore-plugin-load-error）：", error);
     process.exit(1);
   }
-  INIT_FAILED = error && error.message ? String(error.message) : toText(error);
+  INIT_FAILED = initFailedSummary(error);
   logError("插件加载失败，--ignore-plugin-load-error 已生效：initialize 仍会应答，其余请求回 -32603。原因：", error);
 }
 
@@ -267,6 +320,15 @@ function initFailedError(id) {
   return rpcError(id, -32603, "服务器初始化失败：插件加载出错，工具不可用"
     + (INIT_FAILED ? `（${INIT_FAILED}）` : "")
     + "。请在启动日志中确认插件依赖是否完整。");
+}
+
+/** v6.3.0（旧清单第 70 条附带收紧）：回给客户端的加载失败原因只取首行并限长——
+ * 旧版把 error.message 原样塞进 -32603，而语法错误的 message 带多行代码框（含插件文件内容与安装绝对路径），
+ * 这条文本会随 JSON-RPC 错误帧进客户端日志。首行足以定位原因，详细信息仍全文写在 stderr。 */
+function initFailedSummary(error) {
+  const raw = error && error.message ? String(error.message) : toText(error);
+  const first = raw.split(/\r?\n/).map((line) => line.trim()).find((line) => line !== "") ?? "";
+  return first.length > 200 ? first.slice(0, 200) + "…" : first;
 }
 
 // ---------------------------------------------------------------------------
@@ -722,11 +784,5 @@ process.stdin.on("error", (error) => {
 });
 process.stdin.resume();
 
-// 未捕获异常不让进程静默崩溃：全部记到 stderr
-process.on("unhandledRejection", (reason) => {
-  logError("未处理的 Promise 拒绝：", reason);
-});
-process.on("uncaughtException", (error) => {
-  logError("未捕获异常：", error);
-  process.exit(1);
-});
+// 注：process.on("unhandledRejection") / process.on("uncaughtException") 与 console 改道已在模块顶部注册
+// （见文件开头 v6.3.0 注释）——它们必须在插件加载的顶层 await 之前生效，否则加载期的浮动拒绝会绕过处理器崩进程。

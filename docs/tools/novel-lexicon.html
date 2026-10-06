@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>novel_lexicon — 必用词表｜dsh-novel-writer 技术文档</title>
+<meta name="description" content="novel_lexicon 的实现细节：必用词表的两层存储（书级 / 全局）与同名覆盖规则、条目字段归一、批量录入行格式、九个 action 的返回体差异、开写包【必用词·优先使用】硬清单的选取与 60/200 截断、成稿 audit 的覆盖率与「通用词替身顶替」行号归因，以及与 novel_settings worldview bannedWords 的分工。">
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="docs.css">
+<link rel="canonical" href="https://siweina.github.io/dsh-novel-writer/tools/novel-lexicon.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="dsh-novel-writer">
+<meta property="og:title" content="novel_lexicon — 必用词表｜dsh-novel-writer 技术文档">
+<meta property="og:description" content="novel_lexicon 的实现细节：必用词表的两层存储（书级 / 全局）与同名覆盖规则、条目字段归一、批量录入行格式、九个 action 的返回体差异、开写包【必用词·优先使用】硬清单的选取与 60/200 截断、成稿 audit 的覆盖率与「通用词替身顶替」行号归因，以及与 novel_settings worldview bannedWords 的分工。">
+<meta property="og:url" content="https://siweina.github.io/dsh-novel-writer/tools/novel-lexicon.html">
+<meta property="og:locale" content="zh_CN">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="novel_lexicon — 必用词表｜dsh-novel-writer 技术文档">
+<meta name="twitter:description" content="novel_lexicon 的实现细节：两层存储与同名覆盖、九个 action、开写包硬清单注入与 60/200 截断、audit 的覆盖率与通用词顶替行号、与 worldview bannedWords 的分工。">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_lexicon","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-lexicon.html"}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_lexicon — 必用词表｜dsh-novel-writer 技术文档","description":"novel_lexicon 的实现细节：两层存储与同名覆盖、条目字段归一、批量录入行格式、九个 action、开写包硬清单注入与 60/200 截断、成稿 audit 的覆盖率与通用词顶替行号归因、与 novel_settings worldview bannedWords 的分工。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-lexicon.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.3.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_lexicon, 必用词表, 优先用词, dsh-novel-writer, MCP 工具文档"}</script>
+</head>
+<body class="docs">
+
+<header class="docs__top">
+  <a class="docs__brand" href="../index.html">← dsh-novel-writer</a>
+  <span class="docs__crumb">技术文档 / <code>novel_lexicon</code></span>
+</header>
+
+<div class="docs__layout">
+  <aside class="docs__side" id="docsSide"></aside>
+
+  <main class="docs__main">
+    <article class="doc">
+      <h1>novel_lexicon</h1>
+      <div class="note"><b>v6.3.0：</b>本页描述的是修复后的最终行为。本版修掉了必用词表引入的一批缺陷：① <a href="novel-chapter-brief.html">novel_chapter_brief</a> 此前<strong>不渲染</strong> <code>【必用词·优先使用】</code> 分区（<code>plan.checklist</code> 的硬指令指向一个不存在的分区，<code>avoid</code> 勿用词一条都到不了模型），现已接上；② 词表文件损坏时，按层开关 / 保存会把整层条目静默清空，现改为<strong>拒写</strong>并明确报「词表文件损坏」；③ 词表面板「合并 / 全局」两个视图此前加载失败，现已修复；④ 改名撞车（<code>newTerm</code> 与该层已有条目同名）由静默合并改为明确报错。词表面板三层视图改用与「提示词档位」相同的官方分段控件，表单与列表改用其它面板一致的组件。</div>
+      <p class="doc__lead">
+        必用词表（优先用词）。把「某场景必须使用的专有名词 / 作者惯用词」登记成表，让写作时的用词<strong>从「AI 自己惯用的通用说法」变成「表内词」</strong>：动笔前由 <a href="novel-chapter-brief.html">novel_chapter_brief</a> 作为<strong>硬清单</strong>注入，成稿后用 <code>action: "audit"</code>（<strong>只读</strong>）扫覆盖率与「通用词替身顶替」的行号与原句。两层存储——全局层放跨书惯用词，书级层放本书专名，<strong>同名条目以书级为准</strong>。工具本身<strong>不改正文、不生成文本</strong>。
+      </p>
+
+      <h2>参数</h2>
+      <table>
+        <thead><tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><th><code>action</code></th><td>string</td><td><strong>是</strong></td><td>枚举 <code>list</code> / <code>add</code> / <code>update</code> / <code>delete</code> / <code>import</code> / <code>scan</code> / <code>audit</code> / <code>export</code> / <code>toggle</code>。<strong>唯一必填参数</strong>；非枚举值不回落，直接抛「未知 action」。</td></tr>
+          <tr><th><code>book</code></th><td>string</td><td>否</td><td>书名（<code>novels/</code> 下的子目录名），经 <code>sanitizeSegment</code> 过滤。<strong><code>scope: "global"</code> 时可省略</strong>；其余写操作与 <code>scan</code> / <code>audit</code> 缺书名会报错。</td></tr>
+          <tr><th><code>scope</code></th><td>string</td><td>否</td><td>作用层：<code>book</code>（本书，<strong>写操作默认</strong>） / <code>global</code>（全局层） / <code>all</code>（两层合并，<strong><code>list</code> 默认</strong>；<code>update</code> 时按「先书级、后全局」查找）。非枚举值按 <code>book</code> 处理。</td></tr>
+          <tr><th><code>terms</code></th><td>string[]</td><td>否</td><td><code>add</code> / <code>delete</code> 用：词条数组，可一次几百条。<code>add</code> 时每项既是纯词条，也可写成 <code>词|类型|场景|替身1,替身2|备注</code>。<code>#</code> 开头的项按注释<strong>跳过</strong>（不登记）。</td></tr>
+          <tr><th><code>text</code></th><td>string</td><td>否</td><td><code>add</code> / <code>import</code> 用：批量文本，<strong>每行一条</strong>，格式同 <code>terms</code>；<code>#</code> 开头为注释。</td></tr>
+          <tr><th><code>term</code></th><td>string</td><td>否</td><td><code>update</code> 用：目标词条（<strong>精确全等</strong>定位）；<code>delete</code> 用：要删的词条（等价于 <code>terms</code> 里的一个）。</td></tr>
+          <tr><th><code>newTerm</code></th><td>string</td><td>否</td><td><code>update</code> 用：把词条改成新名字。目标词条不存在时报错；新名字<strong>与同层已有条目同名</strong>时报错（除非显式传 <code>overwrite: true</code>，此时用旧条目覆盖同名条目）。</td></tr>
+          <tr><th><code>kind</code></th><td>string</td><td>否</td><td>类型：<code>专名</code> / <code>偏好词</code> / <code>称呼</code> / <code>场景词</code> / <code>口头禅</code> / <code>其他</code>（<code>LEXICON_KINDS</code>），<strong>也可自定义</strong>（落盘截 12 字）。决定开写包与渲染的分组标题。</td></tr>
+          <tr><th><code>scene</code></th><td>string</td><td>否</td><td>适用场景标签。<strong>本章大纲方向行里含该词时，该条在开写包里优先占位</strong>（排序权重最高）。落盘截 200 字。</td></tr>
+          <tr><th><code>note</code></th><td>string</td><td>否</td><td>用法 / 搭配说明。落盘截 200 字，注入与渲染时原样带上。</td></tr>
+          <tr><th><code>avoid</code></th><td>string[]</td><td>否</td><td><strong>通用替身词</strong>：正文里出现它，即等于「没用必用词」。<code>audit</code> 据此报出<strong>行号与原句</strong>；开写包按每条 2（compact）/ 3（full）个注入。传字符串时按逗号 / 顿号 / 空格切分。</td></tr>
+          <tr><th><code>aliases</code></th><td>string[]</td><td>否</td><td>等价写法（别名）。<code>audit</code> 同样算命中，不报「未使用」。切分规则同 <code>avoid</code>。</td></tr>
+          <tr><th><code>priority</code></th><td>string</td><td>否</td><td>枚举 <code>high</code> / <code>normal</code>。<strong>只有 <code>high</code> 会被记录</strong>（其它值不落盘），作用是注入与审计排序靠前、渲染带 ★。</td></tr>
+          <tr><th><code>enabled</code></th><td>boolean</td><td>否</td><td><code>toggle</code> 用：整层开关；<code>update</code> 用：<strong>单条启停</strong>（<code>false</code> 的条目不再注入、不参与审计）。</td></tr>
+          <tr><th><code>overwrite</code></th><td>boolean</td><td>否</td><td><code>add</code> / <code>import</code> 用：同名词条是否覆盖（<strong>默认 <code>true</code></strong>；传 <code>false</code> 时同名条目进 <code>skipped</code>）。<code>update</code> 改名撞车时也用它表示「允许覆盖同名条目」。</td></tr>
+          <tr><th><code>replace</code></th><td>boolean</td><td>否</td><td><code>import</code> 用：<code>true</code> = <strong>整层替换</strong>（先清空该层再写入）；默认 <code>false</code> = 合并追加。</td></tr>
+          <tr><th><code>all</code></th><td>boolean</td><td>否</td><td><code>delete</code> 用：<strong>清空该层全部词条</strong>，<strong>必须显式传 <code>true</code></strong>（只传 <code>terms</code> 空数组不会清空，而是报错）。</td></tr>
+          <tr><th><code>chapter</code></th><td>string</td><td>否</td><td><code>audit</code> 用：章号 / 文件名 / 标题子串，或 <code>all</code>（<code>全书</code> 亦可）；<strong>省略时审计最后一章</strong>。</td></tr>
+          <tr><th><code>query</code></th><td>string</td><td>否</td><td><code>list</code> 用：子串过滤，命中范围为 <code>term</code> / <code>kind</code> / <code>scene</code> / <code>note</code> / <code>avoid</code>。过滤只影响 <code>entries</code>，不影响 <code>counts</code>。</td></tr>
+          <tr><th><code>limit</code></th><td>integer</td><td>否</td><td><code>list</code> 用：返回条数上限，默认 <strong>200</strong>，钳到 <code>[1, 1000]</code>。<code>scan</code> 用：候选词上限，默认 <strong>60</strong>，钳到 <code>[1, 400]</code>。</td></tr>
+          <tr><th><code>offset</code></th><td>integer</td><td>否</td><td><code>list</code> 用：起始偏移，默认 <code>0</code>（须 ≥ 0）。越界时返回空页并在 <code>message</code> 里说明。</td></tr>
+          <tr><th><code>root</code></th><td>string</td><td>否</td><td>章节库根目录。MCP 形态下越界值被静默回退到启动参数 <code>--root</code> 指定的书库根。</td></tr>
+        </tbody>
+      </table>
+      <p>参数对象声明 <code>additionalProperties: false</code>。<code>kind</code> / <code>scene</code> / <code>note</code> / <code>priority</code> / <code>avoid</code> / <code>aliases</code> 六个字段会作为「公共字段」<strong>套用到本批全部词条</strong>上，但<strong>逐行解析出的值优先</strong>（<code>{ ...shared, ...parsed }</code>）。</p>
+      <table>
+        <thead><tr><th><code>action</code></th><th>作用</th><th>目标层</th><th>必填</th></tr></thead>
+        <tbody>
+          <tr><th><code>list</code></th><td>查看词条（默认<strong>合并两层</strong>），支持子串过滤与分页</td><td><code>all</code>（默认） / <code>book</code> / <code>global</code></td><td><code>action</code>；<code>scope:"book"</code> 时还需 <code>book</code></td></tr>
+          <tr><th><code>add</code></th><td>批量登记（<code>terms</code> 数组或 <code>text</code> 文本），可一次几百条</td><td><code>book</code>（默认） / <code>global</code></td><td><code>action</code> + 词条</td></tr>
+          <tr><th><code>update</code></th><td>改单条：改字段、改名（<code>newTerm</code>）、单条停用（<code>enabled:false</code>）</td><td><code>book</code>（默认） / <code>global</code> / <code>all</code>（先书级后全局）</td><td><code>action</code> + <code>term</code></td></tr>
+          <tr><th><code>delete</code></th><td>删除指定词条；<code>all:true</code> 整层清空</td><td><code>book</code>（默认） / <code>global</code></td><td><code>action</code> + <code>terms</code>（或 <code>all:true</code>）</td></tr>
+          <tr><th><code>import</code></th><td>文本批量导入（每行一条）；<code>replace:true</code> 整层覆盖</td><td><code>book</code>（默认） / <code>global</code></td><td><code>action</code> + <code>text</code></td></tr>
+          <tr><th><code>scan</code></th><td>从<strong>本书正文</strong>高频词提取候选，供挑选后 <code>add</code></td><td>—（读全书，只读）</td><td><code>action</code> + <code>book</code></td></tr>
+          <tr><th><code>audit</code></th><td>成稿用词审计：覆盖率 + 未使用清单 + 通用词顶替的行号与原句（<strong>只读</strong>）</td><td>—（读合并两层词表）</td><td><code>action</code> + <code>book</code></td></tr>
+          <tr><th><code>export</code></th><td>导出某一层的全部词条 JSON</td><td><code>book</code>（默认） / <code>global</code></td><td><code>action</code></td></tr>
+          <tr><th><code>toggle</code></th><td>开 / 关某一层（<code>enabled</code> 必填布尔）</td><td><code>book</code>（默认） / <code>global</code></td><td><code>action</code> + <code>enabled</code></td></tr>
+        </tbody>
+      </table>
+
+      <h3>批量录入格式</h3>
+      <p>每行一条，五列以 <code>|</code> 或 Tab 分隔，两侧空白自动裁剪；<code>#</code> 开头为注释行。<strong>只写第一列也能登记</strong>（其余字段留空或由公共参数补）。</p>
+      <pre><code># 本书专名（书级层）：词|类型|场景|通用替身词|备注
+星轨|专名|战斗|轨道,轨迹|跃迁场面统一用这个词
+青铜灯|偏好词|夜巡|铜灯,油灯|主角随身物，别写成「提灯」
+阿砚|称呼|日常|沈砚,砚哥|琉璃只在私下这样叫
+北境哨塔</code></pre>
+      <p>第四列的替身词按逗号 / 顿号 / 空格切分；第 5 列为备注。写成 <code>词|类型</code> 或 <code>词|类型|场景</code> 也成立——<strong>后面的列可以省略，中间不能跳过</strong>（想只给备注就得把前三列写满）。Tab 分隔与 <code>|</code> 等价，从表格或 Excel 里直接粘贴即可。</p>
+
+      <h2>输出结构</h2>
+      <p>契约必返字段（<code>output.schema.required</code>）：<code>action</code>、<code>message</code>。其余字段<strong>按动作出现</strong>，形态并不统一；渲染层 <code>formatLexicon</code> 把返回体压成固定格式文本。</p>
+      <table>
+        <thead><tr><th>动作</th><th>返回的字段</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><th><code>list</code></th><td><code>entries</code> + <code>counts</code> + <code>files</code> + <code>layers</code>（合并层）或 <code>enabled</code>（单层）</td><td><code>entries</code> 是本页（分页后）；<code>layers</code> 分列两层的开关——<strong>合并视图没有「那一层」的开关</strong>，旧版此处恒回 <code>enabled:true</code>，两层都关时仍渲染「本层开关：开」</td></tr>
+          <tr><th><code>add</code> / <code>import</code></th><td><code>added</code> / <code>updated</code> / <code>skipped</code> + <code>entries</code>（前 50 条）+ <code>counts</code> + <code>files</code> + <code>enabled</code></td><td>三个统计数组装的是<strong>词条名</strong>；<code>skipped</code> 仅在 <code>overwrite:false</code> 且同名时非空</td></tr>
+          <tr><th><code>update</code></th><td><code>updated</code>（单个元素）+ <code>entries</code>（前 50 条）+ <code>counts</code> + <code>files</code> + <code>enabled</code></td><td>改名成功时 <code>updated[0]</code> 是新名；撞车覆盖时 <code>message</code> 追加「（原「X」已被覆盖）」</td></tr>
+          <tr><th><code>delete</code></th><td><code>removed</code> + <code>counts</code> + <code>files</code> + <code>enabled</code></td><td>一条都没命中即报错，<strong>不返回空删除结果</strong></td></tr>
+          <tr><th><code>scan</code></th><td><code>candidates</code> + <code>counts</code></td><td>候选为对象数组 <code>[{ term, count, exists }]</code>，<code>exists</code> 表示已登记</td></tr>
+          <tr><th><code>audit</code></th><td><code>audit</code> + <code>counts</code> + <code>files</code> + <code>lexiconFirst</code></td><td><code>lexiconFirst</code> 是<strong>插件级「必用词优先」开关</strong>的当前状态（旧版借用了 <code>enabled</code> 键，语义串味）</td></tr>
+          <tr><th><code>export</code></th><td><code>entries</code>（该层<strong>全量</strong>）+ <code>counts</code> + <code>files</code> + <code>enabled</code></td><td>该层文件不存在时按空表导出，并在 <code>message</code> 里说明</td></tr>
+          <tr><th><code>toggle</code></th><td><code>counts</code> + <code>files</code> + <code>enabled</code></td><td><code>message</code> 同时给出插件级 <code>lexiconFirst</code> 的当前取值，避免与层开关混淆</td></tr>
+        </tbody>
+      </table>
+      <table>
+        <thead><tr><th>字段</th><th>类型</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr><th><code>entries</code></th><td>object[]</td><td>词条数组，元素 <code>&#123; term, kind?, scene?, note?, avoid?, aliases?, priority?, enabled?, scope? &#125;</code>。<code>scope</code> 取 <code>book</code> / <code>global</code>，是<strong>读取侧派生</strong>的字段，不落盘</td></tr>
+          <tr><th><code>counts</code></th><td>object</td><td><code>&#123; book, global, effective &#125;</code>：两层各自的条目数与合并后的生效条数。<strong>不随 query 过滤变化</strong></td></tr>
+          <tr><th><code>layers</code></th><td>object</td><td><code>&#123; book, global &#125;</code> 两层的开关状态，仅 <code>list</code> 的合并视图返回</td></tr>
+          <tr><th><code>enabled</code></th><td>boolean</td><td><strong>被操作那一层</strong>的开关（<code>toggle</code> 回读值；<code>export</code> 为该层状态；单层 <code>list</code> 为该层状态）</td></tr>
+          <tr><th><code>lexiconFirst</code></th><td>boolean</td><td><code>audit</code> 专用：插件级「必用词优先」总开关</td></tr>
+          <tr><th><code>files</code></th><td>object</td><td><code>&#123; book?, global? &#125;</code> 词表文件的绝对路径，可直接给用户看</td></tr>
+          <tr><th><code>candidates</code></th><td>object[]</td><td><code>scan</code> 的候选词 <code>[{ term, count, exists }]</code>，按正文词频降序</td></tr>
+          <tr><th><code>audit</code></th><td>object</td><td><code>&#123; scopeText, total, coveredCount, missingCount, coverage, covered[], missing[], avoidHits[] &#125;</code>，见下文「审计口径」</td></tr>
+        </tbody>
+      </table>
+      <div class="warn">
+        <b>渲染文本把「本层开关」与「插件级开关」分开写。</b>单层操作打印 <code>本层开关：开/关</code>；<code>list</code> 合并视图打印 <code>各层开关：本书 开 / 全局 关</code>；<code>audit</code> 打印 <code>「必用词优先」插件级开关：开/关</code>。三者是<strong>三个不同层次</strong>的开关，改一个不动另两个。
+      </div>
+
+      <h2>计算原理</h2>
+
+      <h3>1 · 两层存储与合并视图</h3>
+      <div class="formula">词表目录 = &lt;书库根&gt;/.novel-writer/lexicon/
+    全局层 = lexicon/_global.json        ← <code>_global</code> 是保留书号，不属于任何一本书
+    书级层 = lexicon/&lt;书名&gt;.json
+
+合并视图 readLexicon(root, book):
+    全局层在前、书级层在后，同名以<strong>书级</strong>为准（Map.set 覆盖）
+    某层 enabled === false → <strong>整层不参与合并</strong>
+    counts = &#123; global: 全局条数, book: 书级条数, effective: 合并后条数 &#125;</div>
+      <p>落盘结构为 <code>&#123; book, enabled, entries, updatedAt &#125;</code>，写入走 <code>atomicWriteJson</code>（临时文件 + 原子替换），成功后把书库根记入全局状态（供 UI 定位数据目录）。<strong>读侧容忍空书名</strong>（退化为只读全局层），<strong>写侧要求显式书名</strong>——避免「以为在写本书、实际动了全局」。</p>
+
+      <h3>2 · 条目归一 <code>normalizeLexiconEntry</code></h3>
+      <div class="formula">term  = String(entry.term ?? entry.word ?? entry.name).trim()
+        term 为空 或 长度 &gt; 60 → <strong>整条丢弃</strong>（不污染词表）
+kind  = 非空时落盘，截 12 字（可自定义，不限枚举）
+scene / note = 非空时落盘，截 200 字
+avoid / aliases = 数组（或按 [,，、\s]+ 切分的字符串）
+        → 逐项 trim、去空、去重，并<strong>剔除与 term 相同的项</strong>；为空则不落盘
+priority = 仅 <code>"high"</code> 落盘（normal 与其它值都不写这个键）
+enabled  = 仅 <code>false</code> 落盘（true 不写这个键，即「默认启用」）</div>
+      <p><code>normalizeLexiconList</code> 再对同一 <code>term</code> 做<strong>后写覆盖前写</strong>（字段浅合并，保持首次出现顺序）。书级覆盖全局走的也是这条规则。</p>
+
+      <h3>3 · 批量行解析 <code>parseLexiconLine</code></h3>
+      <div class="formula">空行、<code>#</code> 开头 → null（跳过，不登记）
+否则按 /\s*[|\t]\s*/ 切列：
+    cut[0] → term（为空则跳过）
+    cut[1] → kind      cut[2] → scene
+    cut[3] → avoid（按 [,，、\s]+ 切分）
+    cut[4] → note</div>
+      <p><code>terms</code> 数组里的字符串项与 <code>text</code> 的每一行走的是<strong>同一个解析器</strong>——注释行在两处都被跳过（历史缺陷：<code>terms</code> 曾用 <code>?? &#123; term: raw &#125;</code> 兜底，把 <code>#这是注释吗</code> 登记成字面词条，并在开写包里当硬清单注入）。</p>
+
+      <h3>4 · 合并追加 <code>mergeLexiconEntries</code></h3>
+      <div class="formula">existing 中已有同 term：
+    overwrite !== false → 用新条目浅合并覆盖（进 updated）
+    overwrite === false → 跳过（进 skipped）
+新 term → push（进 added）</div>
+      <p><code>import</code> 且 <code>replace === true</code> 时，合并基数为<strong>空数组</strong>——该层原条目被整体丢弃，这是唯一会「减少条目」的写入路径，用前请确认。</p>
+
+      <h3>5 · 开写包注入（硬清单）</h3>
+      <p>开关 <code>lexiconFirst</code>（功能开关，<strong>默认开</strong>）打开、且合并视图条数非空时，<a href="novel-chapter-brief.html">novel_chapter_brief</a> 返回体新增 <code>lexicon</code> 字段，并在 <code>plan.checklist</code> 里追加一条硬指令。</p>
+      <div class="formula">lexicon = &#123;
+    enabled: true,
+    total:   参与排序的启用条目数,
+    shown:   本次注入条数,
+    truncated: total &gt; shown,
+    groups: [ &#123; kind, terms: [ &#123; term, avoid[], scene?, note?, priority?, scope? &#125; ] &#125; ],
+    counts:  &#123; book, global, effective &#125;,
+    files:   &#123; book, global &#125;
+&#125;
+
+排序 selectLexiconForBrief（分数降序，同分保持登记顺序）:
+    score = （scene 命中本章大纲方向行 ? 4 : 0）
+          + （priority === "high" ? 2 : 0）
+          + （scope === "book" ? 1 : 0）
+    场景命中 → 高优先 → 书级条目先占位，其余按登记顺序补足到上限
+
+注入上限 = BRIEF_BUDGETS.lexicon     compact 60 条 / full 200 条
+每条保留的 avoid 个数 = avoidPerTerm compact 2 个 / full 3 个</div>
+      <p>渲染文本的分区（<code>render</code>）形如：</p>
+      <pre><code>【必用词·优先使用】凡涉及以下概念，必须用表内词写成；标了「勿用」的通用说法一个都不要出现：
+〔专名〕
+  - 星轨｜（勿用：轨道/轨迹）｜场景:战斗｜跃迁场面统一用这个词
+  - 青铜灯★｜（勿用：铜灯/油灯）
+〔称呼〕
+  - 阿砚｜（勿用：沈砚）
+  （共 124 条，本章只注入 60 条；完整表用 novel_lexicon action=list）</code></pre>
+      <p>同一次返回的 <code>plan.checklist</code> 里会多出一条（前 12 个词条列名，超出以「等 N 个」收尾）：</p>
+      <pre><code>□ 必用词优先（硬约束，完整表见上方【必用词·优先使用】）：凡涉及这些概念，必须用表内词写成
+  —— 星轨、青铜灯、阿砚 等 124 个；标了「勿用」的通用说法一个都不要出现</code></pre>
+      <p>词条被截断时，<code>degraded</code> 追加一条说明总量与注入量；层被单独关闭时明确写「本书层已关闭（N 条）」；开关关闭但词表非空时写「已登记 N 条，但「必用词优先」开关当前为关闭」。</p>
+
+      <h3>6 · 成稿审计 <code>audit</code>（只读）</h3>
+      <div class="formula">对每一条启用词条（排序同开写包，上限 0 = 不限）：
+    forms = [term, ...aliases]
+    count = forms 在正文各行的<strong>子串命中次数合计</strong>（同一行可多次命中）
+    count &gt; 0 → covered  &#123; term, count, firstLine &#125;
+    count = 0 → missing  &#123; term, kind, scene, priority &#125;
+    每条 avoid 词：正文任一行 <code>indexOf</code> 命中即记一行
+        avoidHits &#123; term, word, line, snippet（该行前 46 字 + …） &#125;
+
+coverage = round(covered.length / total × 1000) / 10   ← 单位为 %
+total = 0（词表为空）→ coverage 记 100，message 改为「先用 action=add 登记」</div>
+      <p><code>chapter: "all"</code>（或 <code>全书</code>）时<strong>逐章审计再合并</strong>：<code>covered</code> 累加各章命中数并附 <code>firstChapter</code>（首次命中的章），<code>avoidHits</code> 附 <code>chapter</code>，<code>missing</code> 剔除已在别章命中的词条；因此<strong>行号是该章文件内的真实行号</strong>，渲染成 <code>第N章 Lx</code>。省略 <code>chapter</code> 时审计<strong>最后一章</strong>，渲染成 <code>第 N 章《标题》</code>。</p>
+      <p>渲染文本形如：</p>
+      <pre><code>【用词审计】第 12 章《渡口》：必用词 24 条，命中 9 条（覆盖率 37.5%）
+  已用：星轨×4(首见 L12)、青铜灯×1(首见 L31)
+  **未使用**：阿砚、北境哨塔★
+  **通用词顶替**（该处本该用必用词）：
+    - L44 「铜灯」→ 应写成「青铜灯」：他把铜灯搁在船头，火苗缩成一点。</code></pre>
+
+      <h3>7 · 候选词提取 <code>scan</code></h3>
+      <div class="formula">text = 全书正文（逐章读取、章间补换行）
+keywords = extractKeywords(text, 400)         ← 与 novel_keywords 同一套中文词组统计
+candidates = keywords.map(k =&gt; &#123; term, count, exists &#125;).slice(0, limit)   ← 默认 60，上限 400
+exists = 该词已在合并两层词表中</div>
+      <p>候选<strong>不会被自动登记</strong>：<code>scan</code> 只回答「这本书正文里高频出现的是哪些词」，要不要收进词表由调用方决定。正文高频词往往正是作者的用词偏好，是补齐 <code>avoid</code>（作者不会用的通用说法）最容易的入口。</p>
+
+      <h3>8 · 与世界观禁用词的分工</h3>
+      <div class="note">
+        <b><a href="novel-settings.html">novel_settings</a> <code>category=worldview</code> 的 <code>bannedWords</code> 管「<em>不要写什么</em>」（禁词），本工具管「<em>必须写什么</em>」（优先词）。</b>两者互补、不重复：禁词为<strong>文化基准一致</strong>服务（欧式背景不写「上香」，中式背景不写「神甫」），由 <code>novel_continuity_check</code> 的用语冲突扫描消费；必用词为<strong>模仿作者的用词习惯</strong>服务（该写「青铜灯」而不是「铜灯」），由开写包注入、由 <code>audit</code> 复核。<strong>同一个词完全可以同时出现在两处</strong>（例如把「铜灯」写进 <code>bannedWords</code>、把「青铜灯」写进词表的 <code>term</code>），但常规做法是：禁词表只放「读者一眼能看出时代/文化错位」的词，词表放「本书专名与作者惯用词」，并在 <code>avoid</code> 里点出 AI 容易退回的通用说法。
+      </div>
+
+      <h2>约束与边界</h2>
+      <ul>
+        <li><strong><code>action</code> 是唯一必填参数</strong>（<code>required: ["action"]</code>），且<strong>没有隐式默认值</strong>——非枚举值直接抛「未知 action」。</li>
+        <li><strong>缺书名的后果按动作不同</strong>：<code>list</code> 默认 <code>scope:"all"</code>，无书名时<strong>退化为只读全局层</strong>（不报错）；<code>scope:"book"</code>、<code>add</code> / <code>import</code> / <code>update</code> / <code>delete</code> / <code>export</code> / <code>toggle</code> / <code>scan</code> / <code>audit</code> 缺书名一律报错「缺少 book 参数（只有 scope=global 的操作可以省略书名）」。</li>
+        <li><strong><code>scope</code> 的默认值是「按动作」而非统一</strong>：写操作为 <code>book</code>，<code>list</code> 为 <code>all</code>。<code>update</code> 传 <code>all</code> 时<strong>先查书级、再查全局</strong>，只改第一个命中的层，不会两层同时改。</li>
+        <li><strong>定位是精确全等</strong>：<code>term</code> / <code>newTerm</code> 只做 <code>trim</code>，不做其它归一——「青铜灯」与「青铜 灯」是两个条目。改名后原文里的旧写法<strong>不会</strong>被自动改写。</li>
+        <li><strong>改名撞车必须显式确认</strong>：<code>newTerm</code> 与同层已有条目同名时，默认<strong>报错</strong>并说明「直接改名会与它合并、丢掉 aliases/priority/enabled 等字段」；只有传 <code>overwrite: true</code> 才用旧条目覆盖同名条目（返回 <code>message</code> 会注明「（原「X」已被覆盖）」）。</li>
+        <li><strong>整层清空是显式动作</strong>：<code>delete</code> 必须给 <code>terms</code>（或 <code>all: true</code>）；一条都没命中时<strong>报错并列出词条名</strong>，不会静默成功。要减少条目请用 <code>delete</code>，不要用 <code>import replace:true</code> 的副作用。</li>
+        <li><strong>词表文件损坏时默认拒绝写入</strong>：读盘区分「文件不存在」（<code>corrupt:false</code>）与「内容读不出来」（<code>corrupt:true</code> + <code>corruptFile(s)</code>，含 JSON 解析失败与权限/IO 类读取失败）。损坏层上执行 <code>add</code> / <code>import</code> / <code>update</code> / <code>delete</code> / <code>toggle</code> 会抛 <code>ENOVELWRITEFAIL</code>，消息里给出文件路径与修复指引；要丢弃其内容重建必须<strong>显式确认</strong>——工具侧传 <code>force:true</code>（或正常数据下用于同名词条覆盖的 <code>overwrite:true</code>，仅在目标层已损坏时才等价于 force），UI 侧在二次确认后走 <code>POST /api/dsh-novel-writer/lexicon</code>（<code>overwrite:true</code> / <code>force:true</code>）。这样「读成空表 → 写回空表」的清空路径就不存在了。</li>
+        <li><strong>写路径有文件级事务</strong>：五个写动作的「读—改—写」整体包在 <code>withLexiconTx</code> 内（按涉及层的词表文件路径排序后依次加锁，<code>scope:"all"</code> 会同时锁两层且不会与单层操作死锁），并发调用不会基于同一旧快照互相覆盖。<strong>HTTP 路由侧的 <code>/lexicon</code> POST 走同一把锁</strong>（v6.3.0 起：用与 <code>withLexiconTx</code> 相同的 file key 包住整段读—改—写）——界面上的 toggle / save / import <strong>全部走这条路由</strong>，此前它与工具侧不互斥、两边同时写同一层会丢更新；现在「路由↔路由」与「路由↔工具」都串行化。</li>
+        <li><strong>HTTP 路由的请求体上限 1MB</strong>（超出返回 <code>413</code>）。几千条以内够用；更大批量请用工具的 <code>import</code> 分批导入。<code>scope:"book"</code> 且书名为空时返回 <code>400</code>（<strong>不会</strong>自动写全局层）；<code>scope:"global"</code> 时不校验 <code>book</code>。</li>
+        <li><strong>审计是子串匹配，没有词边界</strong>：<code>avoid</code> 词「轨道」会在「轨道车」里命中；条目「星」会命中「星期」。写词条时避免用过短或高频的通用字，必要时用 <code>aliases</code> 明确写法。</li>
+        <li><strong>覆盖率的分母是词表条数，不是字数</strong>：<code>coverage = 命中词条数 / 词表条数</code>。词表越大，覆盖率天然越低——它是「本章涉及的概念里有多少用对了词」的粗略指示，不是写作质量分数。</li>
+        <li><strong><code>audit</code> 只读、绝不改正文</strong>，也不生成替换后的句子：它只回答「哪一行、哪个通用说法、本该写成哪个表内词」。改写仍由作者或宿主模型完成。</li>
+        <li><strong>注入与开关的层次</strong>：<code>lexiconFirst</code>（插件级，默认开）关掉后<strong>只是不注入、audit 也提示未生效</strong>，词表自身的增删改查、导入导出、层开关<strong>照常可用</strong>；书级层与全局层各有独立开关，关掉某一层只影响该层是否参与合并视图与注入。</li>
+        <li><strong><code>lexicon</code> 字段在开写包里「有就返回、没有就整键省略」</strong>：开关关闭、词表为空、或读取失败时该键<strong>不出现</strong>（读取失败会在 <code>degraded</code> 里写明原因）。调用方读它前必须先判存在性。</li>
+        <li><strong>截断只影响注入，不影响词表</strong>：compact 60 / full 200 条与每条 2 / 3 个 <code>avoid</code> 都是返回体预算，词表本身与 <code>list</code> / <code>export</code> 的取数不受影响。</li>
+        <li><strong><code>scan</code> 读全书正文</strong>：I/O 与内存开销随全书字数线性增长（与 <code>novel_keywords</code> 同源）；作品目录不存在时抛错，空目录返回空候选。</li>
+        <li><strong>MCP 形态下的 root 限制</strong>：参数 <code>root</code> 必须落在服务器启动参数 <code>--root</code> 的书库根之内，越界会被静默回退并记 stderr。</li>
+        <li><strong>界面入口</strong>：侧边栏「必用词表」页（三层视图 合并 / 本书 / 全局、当前书下拉、单条增改、批量导入、搜索、逐条删除、本层开关、词表目录入口），设置页「功能开关」里的 <code>lexiconFirst</code> 行，工具页的 <code>novel_lexicon</code> 行都指向同一份数据；GUI 走 <code>GET /api/dsh-novel-writer/lexicon?book=&amp;scope=all|book|global&amp;q=</code> 与 <code>POST</code>（<code>&#123; op: "save" | "import" | "toggle", scope, book?, entries? | text? | enabled?, replace?, overwrite? &#125;</code>），与工具侧共用同一套归一与合并逻辑。</li>
+      </ul>
+
+      <h2>相关工具</h2>
+      <ul>
+        <li><a href="novel-chapter-brief.html">novel_chapter_brief</a> —— 消费本工具的<strong>主路径</strong>：把词表作为硬清单注入（<code>lexicon</code> 字段 + <code>【必用词·优先使用】</code> 分区 + <code>plan.checklist</code> 硬指令）。</li>
+        <li><a href="novel-settings.html">novel_settings</a> —— 世界观用语规范：<code>worldview</code> 的 <code>bannedWords</code> / <code>speechStyle</code> 管「不要写什么」，与本工具的「必须写什么」互补。</li>
+        <li><a href="novel-continuity-check.html">novel_continuity_check</a> —— 消费设定表的禁用词做用语冲突扫描；词表不参与该扫描（词表的问题由 <code>audit</code> 回答）。</li>
+        <li><a href="novel-keywords.html">novel_keywords</a> —— 与本工具的 <code>scan</code> 同源（<code>extractKeywords</code>），前者给全书关键词报告，后者给「可登记为必用词」的候选清单。</li>
+        <li><a href="novel-sentence-config.html">novel_sentence_config</a> —— 功能开关 <code>lexiconFirst</code>（默认开）的读写入口。</li>
+      </ul>
+
+      <h2>源码位置</h2>
+      <ul>
+        <li><span class="src">lib/core.js</span> —— <strong>词表数据层</strong>：<code>LEXICON_KINDS</code> / <code>GLOBAL_LEXICON_BOOK</code> / <code>lexiconDir</code> / <code>lexiconFile</code> / <code>isGlobalLexiconScope</code> / <code>parseLexiconLine</code> / <code>classifyLexiconReadError</code> / <code>readLexiconFile</code> / <code>readLexicon</code> / <code>writeLexicon</code> / <code>normalizeLexiconEntry</code> / <code>normalizeLexiconList</code> / <code>lexiconEntryLine</code> / <code>mergeLexiconEntries</code> / <code>selectLexiconForBrief</code> / <code>groupLexiconByKind</code> / <code>auditLexicon</code>（约 2470–2760 行）。</li>
+        <li><span class="src">lib/core.js</span> —— <strong>宿主 UI 路由</strong>：<code>lexiconHandler</code>（约 1398–1550 行，GET 读 / POST <code>save</code>·<code>import</code>·<code>toggle</code>，含损坏层的 <code>409</code> 拒写）；路由注册 <code>&#123; path: "/api/dsh-novel-writer/lexicon" &#125;</code>（约 1680 行）；数据目录占位 <code>lexicon-dir</code>（约 1590–1605 行）。</li>
+        <li><span class="src">lib/index.js</span> —— <strong>工具 action</strong>：<code>registerNovelLexicon</code>（九个动作的参数 schema、分支与返回体）、<code>formatLexicon</code>（文本渲染）、<code>mergeChapterAudits</code>（全书审计的逐章合并）、<code>withLexiconTx</code>（写路径文件事务）；开写包 render 的 <code>【必用词·优先使用】</code> 分区也在本文件（<code>novel_chapter_brief</code> 的 <code>render</code> 内）。</li>
+        <li><span class="src">lib/brief.js</span> —— 开写包注入：<code>BRIEF_BUDGETS</code> 的 <code>lexicon</code> / <code>avoidPerTerm</code> 两档上限、<code>lexiconFirst</code> 开关判定、两层开关与截断的 <code>degraded</code> 文案、<code>plan.checklist</code> 的硬指令。</li>
+        <li><span class="src">lib/prompts.js</span> —— 系统提示词里的「必用词优先」纪律（通用档与写作 / 审计 / 建资料三个场景各自的分工表述）。</li>
+        <li><span class="src">lib/client.js</span> —— 侧边栏「必用词表」页（三层视图 / 表单 / 导入 / 搜索 / 逐条删除 / 层开关 / 目录入口）与两枚线图标 <code>navLexicon</code> / <code>lexiconFirst</code>（共 26 枚）。</li>
+        <li><span class="src">test/lexicon-test.mjs</span> —— 14 个用例：行解析归一、两层合并与覆盖、九个 action、输出契约、开写包注入与开关门禁、场景命中排序、截断说明、审计只读性。</li>
+      </ul>
+    </article>
+
+    <nav class="docs__pager" id="docsPager"></nav>
+  </main>
+
+  <aside class="docs__toc" id="docsToc"></aside>
+</div>
+
+<script src="docs.js"></script>
+</body>
+</html>

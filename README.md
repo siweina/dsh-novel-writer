@@ -10,16 +10,18 @@
 [![GitHub stars](https://img.shields.io/github/stars/siweina/dsh-novel-writer.svg?style=flat-square&color=orange)](https://github.com/siweina/dsh-novel-writer/stargazers)
 [![siweina/dsh-novel-writer MCP server](https://glama.ai/mcp/servers/siweina/dsh-novel-writer/badges/score.svg)](https://glama.ai/mcp/servers/siweina/dsh-novel-writer)
 
-**18 个工具，覆盖「动笔前取材料 → 写完量化自检 → 改稿按优先级复测 → 跨章结构体检」整条流程。**
+**19 个工具，覆盖「动笔前取材料 → 写完量化自检 → 改稿按优先级复测 → 跨章结构体检」整条流程。**
 动笔前**一次调用取齐 16 项材料**（漏读一样就漂移）；改稿不再只丢给你一堆数字，而是**按严重度排好的待办**（带原句行号、当前值与目标值、原著锚段，**只给方向不代写**）；跨章层面能查「线断了、人丢了、伏笔忘了」。
 句式 / 情感 / 语义全部**在本地算**：24MB 中文模型随包分发，**零 API 花费、正文不出本机**。
 为 DeepSeek Harness（DSH）打造；同一套能力也可作为 **MCP 服务器**给 Claude Desktop / Cursor 使用。
 
-[官网](https://siweina.github.io/dsh-novel-writer/) · [技术文档（18 个工具的参数与示例）](https://siweina.github.io/dsh-novel-writer/tools/) · [安装](#安装) · [写作流程](#写作流程一条能走完的闭环) · [60 秒上手](#60-秒上手) · [看看输出](#看看输出长什么样) · [18 个工具](#提供的工具18-个) · [MCP 服务器](#mcp-服务器非-dsh-用户也能用)
+[官网](https://siweina.github.io/dsh-novel-writer/) · [技术文档（19 个工具的参数与示例）](https://siweina.github.io/dsh-novel-writer/tools/) · [安装](#安装) · [写作流程](#写作流程一条能走完的闭环) · [60 秒上手](#60-秒上手) · [看看输出](#看看输出长什么样) · [19 个工具](#提供的工具19-个) · [MCP 服务器](#mcp-服务器非-dsh-用户也能用)
 
 ---
 
-最新版本与下载请查看 [**Releases**](https://github.com/siweina/dsh-novel-writer/releases)。
+## v6.3.0 本地测试版
+
+本版按 v6.1.0 / v6.2.0 两份缺陷清单逐条修复（协议层、渲染层、词表数据安全、界面与元数据），并重做了「必用词表」面板。完整改动见 [CHANGELOG.md](./CHANGELOG.md)。开发者可运行 `npm ci`、`npm run build:check`、`npm test`；构建源已随仓库提供，不再依赖其他目录。发布准备见 [docs/releasing.md](https://github.com/siweina/dsh-novel-writer/blob/main/docs/releasing.md)。
 
 ## 写作流程（一条能走完的闭环）
 
@@ -151,7 +153,7 @@ fixAnchors：3 条原著锚段（对话 / 心理 / 描写各一条，供逐句�
 | 花费 | **0（本地推理）** | 按 token 计费 | 自建 |
 | 中文小说专用 | **是** | 通用 | 否 |
 | 风格基线（μ±σ） | **有** | 少见 | 无 |
-| 与 DSH 集成 | **18 工具 + 官方席位与官网式界面** | 无 | 无 |
+| 与 DSH 集成 | **19 工具 + 官方席位与官网式界面** | 无 | 无 |
 | 非 DSH 用户可用 | **可以（MCP）** | 可以 | 需自己封装 |
 
 > **致非中文用户**：本插件为中文小说分析写作而设计——句式、情感、意象等核心能力以及内置的语义模型，全部针对中文语料构建与调优。在深耕中文的同时兼顾英文等其他语言，确实超出了我目前的能力范围。若因此给您带来不便，我深感抱歉，恳请谅解。
@@ -176,7 +178,7 @@ fixAnchors：3 条原著锚段（对话 / 心理 / 描写各一条，供逐句�
 
 ---
 
-## 提供的工具（18 个）
+## 提供的工具（19 个）
 
 > 每个工具的参数、返回结构与示例，见[在线工具手册](https://siweina.github.io/dsh-novel-writer/tools/)。
 
@@ -200,12 +202,13 @@ fixAnchors：3 条原著锚段（对话 / 心理 / 描写各一条，供逐句�
 | `novel_outline` | **创作资料管理**（创作设定/人物/大纲/钩子/状态卡） |
 | `novel_chapter_brief` | **开写包**——动笔前一次调用取齐材料（上一章承接口/本章方向/相关人物/待回收伏笔/用语规范/风格基线/锚段与骨架/禁用清单/开写清单） |
 | `novel_fix_plan` | **改稿台**——把风格诊断变成按优先级排好的待办（带行号定位与锚段），改完可复测；**只给方向不生成正文** |
+| `novel_lexicon` | **必用词表**——专有词/作者惯用词的书级+全局两层登记、批量导入、开写包硬清单注入、成稿用词审计 |
 
 ---
 
 ## MCP 服务器（非 DSH 用户也能用）
 
-包里自带一个 **stdio MCP 服务器**（`mcp/server.mjs`），把 18 个工具原样暴露给任何 MCP 客户端，
+包里自带一个 **stdio MCP 服务器**（`mcp/server.mjs`），把 19 个工具原样暴露给任何 MCP 客户端，
 例如 Claude Desktop、Cursor。**它是跑在你自己电脑上的本地进程，不需要服务器、不需要联网、不需要常驻。**
 
 ```bash

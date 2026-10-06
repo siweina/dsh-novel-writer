@@ -118,7 +118,12 @@ globalThis.document = {
   documentElement: Object.assign(new HTMLElementStub("html"), { lang: "zh" }),
   addEventListener: (type, fn) => { (documentListeners.get(type) || documentListeners.set(type, []).get(type)).push(fn); },
   removeEventListener: (type, fn) => { documentListeners.set(type, (documentListeners.get(type) || []).filter((f) => f !== fn)); },
-  dispatchEvent: (event) => { dispatchDocumentEvent(event); return true; }
+  // v6.3.0：插件现在把 dsh-panel-activate 派发在 **document** 上（与同族插件 dsh-ssh / task-board 一致；
+  // 旧实现派发在 documentElement 且 bubbles:false，冒泡阶段到不了 document，等于没人收得到）。
+  // 这里记录一份派发目标，供断言检查「派发在正确的目标上」——旧断言只能去 documentElement 上找事件，
+  // 正是它把那个 bug 锁住的原因。
+  _dispatched: [],
+  dispatchEvent: function (event) { this._dispatched.push(event); dispatchDocumentEvent(event); return true; }
 };
 globalThis.MutationObserver = class { constructor(cb) { this.cb = cb; } observe() {} disconnect() {} };
 const loaded = {};
@@ -383,12 +388,15 @@ if (panels[0].style.display !== "none") fail("面板初始应隐藏，实际 dis
 console.log("面板容器挂载:", panels[0].dataset.dshNovelWriterView, "| 初始 display:", panels[0].style.display, "✓");
 
 // v4.0.0：点击侧边栏入口 → 面板打开（激活属性 + dsh-panel-activate 事件 + 容器显示）
+// v6.3.0：断言改为检查 document 上的派发（正确目标），而不是 documentElement
 document.documentElement._dispatched.length = 0;
+document._dispatched.length = 0;
 entries[0].click();
 const activated = document.documentElement.dataset.dshNovelWriterActive === "";
-const activatedEvent = document.documentElement._dispatched.find((e) => e.type === "dsh-panel-activate" && e.detail === "novel-writer");
+const activatedEvent = document._dispatched.find((e) => e.type === "dsh-panel-activate" && e.detail === "novel-writer");
 if (!activated) fail("点击入口后面板未激活（documentElement.dataset.dshNovelWriterActive 缺失）");
-if (!activatedEvent) fail("点击入口后未派发 dsh-panel-activate 事件（detail=novel-writer）");
+if (!activatedEvent) fail("点击入口后未在 document 上派发 dsh-panel-activate 事件（detail=novel-writer）");
+if (document.documentElement._dispatched.some((e) => e.type === "dsh-panel-activate")) fail("dsh-panel-activate 不应派发在 documentElement 上（bubbles:false 时 document 上的监听收不到）");
 if (panels[0].style.display !== "block") fail("面板打开后容器应 display:block，实际 " + panels[0].style.display);
 if (entries[0].dataset.active !== "true") fail("侧边栏入口未标记 active");
 console.log("面板打开: 激活属性 ✓ 事件 ✓ 容器显示 ✓ 入口 active ✓");
@@ -429,10 +437,38 @@ console.log("面板组件渲染: 组件数 " + panelRender.stats.components + " 
 const panelProps = panelRender.element.props;
 const controller = panelProps.controller;
 if (!controller || typeof controller.getSnapshot !== "function") fail("PanelView 未拿到可用的 controller");
-for (const view of ["features", "tools", "baseline", "creation", "reports", "model"]) {
+for (const view of ["features", "tools", "baseline", "creation", "reports", "model", "lexicon"]) {
   controller.set({ view }, { silent: true });
   if (controller.getSnapshot().view !== view) fail("controller.set 未生效：view=" + view);
 }
+// v6.2.0：词表页在有数据时也必须能渲染（列表 / 表单 / 展开的批量导入区三条分支）
+const lexRenderBefore = renderLog.length;
+controller.set({
+  view: "lexicon",
+  lexicon: {
+    ok: true,
+    book: "测试",
+    scope: "all",
+    entries: [
+      { term: "星轨", kind: "专名", scene: "战斗", avoid: ["轨道"], note: "跃迁用", scope: "book", enabled: true },
+      { term: "潮汐税", kind: "偏好词", scope: "global" }
+    ],
+    counts: { book: 1, global: 1, effective: 2 },
+    books: ["测试", "另一本"],
+    bookEnabled: true,
+    globalEnabled: true,
+    files: { book: "x.json", global: "y.json" },
+    dir: "lexicon"
+  },
+  lexiconQuery: "",
+  lexiconForm: { term: "青铜灯", kind: "专名", scene: "", avoid: "铜灯,油灯", note: "", editing: "" },
+  lexiconImportOpen: true,
+  lexiconImportText: "北境哨塔|专名"
+}, { silent: true });
+if (renderLog.length <= lexRenderBefore) fail("词表页加载数据后未触发重渲染");
+// 搜索过滤分支：只留一条
+controller.set({ lexiconQuery: "潮汐" }, { silent: true });
+controller.set({ lexiconQuery: "" }, { silent: true });
 const viewRenders = renderLog.length;
 if (viewRenders <= 1) fail("切换视图未触发任何重渲染（订阅失效）");
 // 弹窗分支（rawModal / rawPromiseOpen）也必须能渲染——真机上这两条是"非净化模式"的必走路径
@@ -650,4 +686,7 @@ if (hookViolations.length > 0) {
 }
 console.log("hook 稳定性: " + (process.env.NW_TEST_PRIMITIVES === "1" ? "官方原语路径" : "回退路径") + " 跨视图/弹窗切换零违规 ✓");
 
-cleanupHooks(); // 执行 effect 清理（取消控制器订阅），避免残留句柄影响进程退出console.log("CLIENT OK");
+cleanupHooks(); // 执行 effect 清理（取消控制器订阅），避免残留句柄影响进程退出
+// v6.3.0：成功标记原先被吞进上一行的行尾注释里（`…进程退出console.log("CLIENT OK");`），
+// 等于这一行从来没打印过——既有缺陷（v6.2.0 起就在），本次一并修掉。
+console.log("CLIENT OK");

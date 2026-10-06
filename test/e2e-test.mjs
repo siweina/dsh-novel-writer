@@ -166,7 +166,9 @@ await (async function outputContractCheck() {
     novel_outline: { book: "测试", action: "read", file: "status", root: testRoot },
     // v5.0.0：写作能力层的两个新工具也纳入循环契约校验
     novel_chapter_brief: { book: "测试", chapter: "1", root: testRoot },
-    novel_fix_plan: { book: "测试", chapter: "第01章", action: "plan", root: testRoot }
+    novel_fix_plan: { book: "测试", chapter: "第01章", action: "plan", root: testRoot },
+    // v6.2.0：必用词表（list 分支最轻，不写盘；写盘分支由 lexicon-test 覆盖）
+    novel_lexicon: { action: "list", book: "测试", scope: "all", root: testRoot }
   };
   // v4.0.0：这 4 个工具没有"循环调用样例"（analysis 会写缓存与 miss 断言冲突），改为在各自调用点断言契约
   const CONTRACT_AT_CALLSITE = ["novel_new_chapter", "novel_import", "novel_sentence_analysis", "novel_semantic_search"];

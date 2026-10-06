@@ -1,4 +1,4 @@
-# 6.1.0 本地发布检查
+# 6.3.0 本地发布检查
 
 这份说明对应当前仓库的 GitHub Actions 发布链路。当前工作只完成本地修复、构建和测试，不会自动推送 GitHub、创建 Release 或发布 npm。
 
@@ -9,11 +9,11 @@ npm ci
 npm run check
 ```
 
-`npm run check` 会检查客户端构建产物、版本号一致性、主页和工具文档版本，以及全部回归测试。
+`npm run check` 会检查客户端构建产物、版本号一致性、主页和工具文档版本，以及全部回归测试。其中 `node tools/check-release.mjs` 的三条硬门禁与本站直接相关：① `package.json` / `package-lock.json` / `server.json` 三处版本必须与 `CHANGELOG.md` 的当前小节一致；② `lib/core.js` 的 `ALL_TOOLS` 必须是 **19 个**（工具数文案漂移会在这里被挡住）；③ `docs/index.html` 与**每一个** `docs/tools/novel-*.html` 的 JSON-LD `softwareVersion` 都必须等于 `package.json` 的版本——发版前请确认站点侧已翻到同一版本号。
 
 ## GitHub Actions
 
-`.github/workflows/release.yml` 在 `v6.1.0` 这类 tag 上执行测试、生成 ZIP 和 npm tarball，然后才进入发布步骤。普通分支、Pull Request 和手动运行只做测试和打包，不发布 npm。
+`.github/workflows/release.yml` 在 `v6.3.0` 这类 tag 上执行测试、生成 ZIP 和 npm tarball，然后才进入发布步骤。普通分支、Pull Request 和手动运行只做测试和打包，不发布 npm。
 
 ## npm Trusted Publishing
 
