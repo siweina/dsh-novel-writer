@@ -71,12 +71,32 @@ jobs:
           path: |
             dsh-novel-writer-v${{ steps.ver.outputs.VERSION }}.zip
             dist/*.tgz
-      - name: Publish to npm via OIDC
+      - name: Verify npm credentials
+        # 凭据自检：确认仓库 secret NPM_TOKEN 已正确接入并可用。
+        # tag 发布会用它发版；workflow_dispatch（只出测试产物、不发布）也会跑它——
+        # 这样可以在不真正发包的前提下验证接线，失败时一眼分辨「凭据问题」还是「打包问题」。
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm whoami --registry https://registry.npmjs.org/
+      - name: Publish to npm
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
-        # 注意：必须以 ./ 开头。npm 会把 `dist/xxx.tgz` 当成 GitHub 的 `user/repo` 简写
-        # （实测报错：`git ls-remote ssh://git@github.com/dist/dsh-novel-writer-6.3.0.tgz.git`
-        # → Permission denied (publickey)），于是这一步从未真正发出过包。
-        run: npm publish "./dist/dsh-novel-writer-${{ steps.ver.outputs.VERSION }}.tgz" --access public --registry https://registry.npmjs.org/
+        # 认证走仓库 secret NPM_TOKEN，不再依赖 OIDC：npm 侧未配置 Trusted Publisher 时，
+        # OIDC 发布会返回 `404 PUT /<pkg>`（npm 用 404 避免泄露包是否存在），
+        # 而这一步失败会把后面的 Create Release 与 MCP Registry 一起跳过。
+        # 另外，tarball 路径必须以 ./ 开头：npm 会把 `dist/xxx.tgz` 当成 GitHub 的 `user/repo` 简写
+        # （实测 `git ls-remote ssh://git@github.com/dist/dsh-novel-writer-6.3.0.tgz.git`
+        # → Permission denied (publickey)），此前这一步因此从未真正发出过包。
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.VERSION }}"
+          if npm view "dsh-novel-writer@$VERSION" version >/dev/null 2>&1; then
+            echo "::notice::npm 上已存在 dsh-novel-writer@$VERSION（重跑同一 tag 时会遇到），跳过发布；Release 与 MCP 元数据照常继续。"
+          else
+            npm publish "./dist/dsh-novel-writer-$VERSION.tgz" --access public --registry https://registry.npmjs.org/
+          fi
       - name: Extract release notes
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
         run: node tools/release-notes.mjs "$GITHUB_REF_NAME" > release-notes.md
