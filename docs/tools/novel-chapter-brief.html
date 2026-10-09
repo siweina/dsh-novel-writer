@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_chapter_brief — 开写包｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_chapter_brief 的实现细节：一次只读调用装配动笔前的全部材料 —— 承接口 anchor、上一章钩子、大纲方向行、命中人物卡、未回收伏笔与 distance、世界观禁用词、必用词硬清单（lexicon）、六维基线、原著锚段与句式骨架、上一章自检结论、禁用清单与 plan；含 budget 两档截断口径与空库 / 无大纲 / 单章作品的优雅降级路径。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_chapter_brief","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-chapter-brief.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_chapter_brief — 开写包｜dsh-novel-writer 技术文档","description":"novel_chapter_brief 的实现细节：一次只读调用装配动笔前的全部材料 —— 承接口 anchor、上一章钩子、大纲方向行、命中人物卡、未回收伏笔与 distance、世界观禁用词、必用词硬清单（lexicon）、六维基线、原著锚段与句式骨架、上一章自检结论、禁用清单与 plan；含 budget 两档截断口径与空库 / 无大纲 / 单章作品的优雅降级路径。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-chapter-brief.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.3.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_chapter_brief, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_chapter_brief — 开写包｜dsh-novel-writer 技术文档","description":"novel_chapter_brief 的实现细节：一次只读调用装配动笔前的全部材料 —— 承接口 anchor、上一章钩子、大纲方向行、命中人物卡、未回收伏笔与 distance、世界观禁用词、必用词硬清单（lexicon）、六维基线、原著锚段与句式骨架、上一章自检结论、禁用清单与 plan；含 budget 两档截断口径与空库 / 无大纲 / 单章作品的优雅降级路径。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-chapter-brief.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.4.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_chapter_brief, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -66,13 +66,13 @@
           <tr><th><code>outlineDirection</code></th><td>string</td><td>本章的大纲方向行（创作资料「剧情大纲.md」中对应章号的那一行）。无大纲或未排到该章时为空串并计入 <code>degraded</code>。</td></tr>
           <tr><th><code>characters</code></th><td>array</td><td>按命中过滤的人物卡（<strong>三源合并</strong>：<code>novel_settings</code> 人物表 + 创作资料「主要人物设定.md」「次要人物设定.md」）。命中 = 人物名或其别名（长度均 ≥ 2 字）出现在<strong>上一章正文或本章大纲方向行</strong>中。<code>compact</code> 取前 5 条，<code>full</code> 不截断；无人物卡或全部未命中时为空数组。<strong>恒为数组</strong>（契约必返）。</td></tr>
           <tr><th><code>openPlots</code></th><td>array</td><td>未回收伏笔（<code>status !== "done"</code>），每条附加 <code>distance</code>。<strong>排序：优先级升档 → distance 降序 → id 字典序</strong>（<code>high</code> &gt; <code>medium</code> &gt; <code>low</code>；<code>priority</code> 缺失或非枚举值一律归一为 <code>medium</code>）。无伏笔表时为空数组并计入 <code>degraded</code>。<strong>恒为数组</strong>。</td></tr>
-          <tr><th><code>worldview</code></th><td>object</td><td>世界观用语规范：<code>&#123; basis, bannedWords, recommended, speechStyle &#125;</code>。该键由设定表<strong>全部 worldview 条目合并</strong>而成：<code>basis</code> 拼入各条的 <code>basis</code> / <code>description</code> / <code>ritual</code> / <code>notes</code>（去重后以「；」连接），<code>bannedWords</code> / <code>recommended</code> / <code>speechStyle</code> 分别做并集与浅合并。四项全空时 <strong><code>worldview</code> 整键省略</strong>并计入 <code>degraded</code>。</td></tr>
+          <tr><th><code>worldview</code></th><td>object</td><td>世界观用语规范：<code>&#123; basis, bannedWords, recommended, speechStyle, culture, cultureName, cultureSource &#125;</code>。<code>basis</code> 由设定表<strong>全部 worldview 条目</strong>的 <code>basis</code> / <code>description</code> / <code>ritual</code> / <code>notes</code> 去重后以「；」连接；<code>bannedWords</code> / <code>recommended</code> / <code>speechStyle</code> 一律取自 <span class="src">lib/core.js</span> 的<strong>唯一裁决点 <code>resolveStyleRule(settings, 章节正文)</code></strong>——与 <a href="novel-continuity-check.html">novel_continuity_check</a> 的用语扫描<strong>同源</strong>（v6.4.0 前开写包只读用户登记表、没有默认表兜底，两处词源不一致是本轮缺陷的根因）。因此 <code>bannedWords</code> = 去重（用户登记 ∪ 文化基准默认表），显式登记 <code>bannedWords: []</code> 表示「不要默认表」；<code>culture</code> / <code>cultureName</code> / <code>cultureSource</code>（<code>worldview</code> / <code>detected</code> / <code>default</code>）说明这套规范的文化基准与来源。<strong>未登记任何 worldview 条目时 <code>worldview</code> 整键省略</strong>（此时不注入默认表）并计入 <code>degraded</code>。</td></tr>
           <tr><th><code>lexicon</code></th><td>object</td><td><strong>必用词硬清单</strong>（v6.2.0 新增）：<code>&#123; enabled, total, shown, truncated, groups, counts, files &#125;</code>，<code>groups</code> 为 <code>[&#123; kind, terms: [&#123; term, avoid[], scene?, note?, priority?, scope? &#125;] &#125;]</code>。数据源为 <a href="novel-lexicon.html">novel_lexicon</a> 的<strong>合并两层</strong>词表（同名以书级为准，层开关关闭者不参与），且<strong>仅当功能开关「必用词优先」（<code>lexiconFirst</code>）开启、词表非空时出现</strong>；其余情形<strong>整键省略</strong>（开关关闭、有层被关闭、读取失败都会在 <code>degraded</code> 里写明）。<code>compact</code> 注入 60 条、<code>full</code> 注入 200 条，每条保留 2 / 3 个 <code>avoid</code> 通用替身词。</td></tr>
           <tr><th><code>baseline</code></th><td>object</td><td>六维基线：每维 <code>&#123; mu, sigma, sigmaMeasured, sigmaUsed, sigmaClamped, low, high, recTol &#125;</code>（<code>recTol</code> = 作者自身波动的 1.5σ 换算成百分比，取整到 5、下限 10、上限 100）。语料为 <code>metricChaptersCached</code> 的逐章指标，<strong>目标章已存在时先把它排除出基线语料</strong>（与 <code>novel_style_check</code> 同口径）。语料为空时 <strong><code>baseline</code> 整键省略</strong>并计入 <code>degraded</code>。</td></tr>
           <tr><th><code>anchors</code></th><td>array</td><td>原著锚段，元素 <code>&#123; label, text &#125;</code>：<code>compact</code> 取前 2 条、<code>full</code> 取前 5 条。抽样与分类规则与 <a href="novel-style-check.html">novel_style_check</a> 的 <code>fixAnchors</code> 同源。语料<strong>排除目标章自身</strong>（改稿场景下不能把「正在改的那一段」当原著范本），与 <code>novel_fix_plan</code> 的锚段口径一致；<code>chapter="next"</code> 时目标章不存在，等价于全用。</td></tr>
           <tr><th><code>skeletons</code></th><td>array</td><td>句式骨架，元素 <code>&#123; type, text &#125;</code>：<code>compact</code> 取前 3 条、<code>full</code> 取 <code>slice(0, 8)</code>。注意 <code>buildStyleAnchorPackage</code> 自身最多只产出 <strong>4 条</strong>，因此 <code>full</code> 的 8 只是「不额外截断」，实际条数上限仍是 4。语料同 <code>anchors</code>（排除目标章）。</td></tr>
           <tr><th><code>lastVerdict</code></th><td>string</td><td>上一章的六维对照结论，形如「第 N 章六维对照：&lt;judge.summary&gt;（由逐章指标缓存现算）」。<strong>它不是 <code>novel_style_check</code> 的落盘结论</strong>（插件从不落盘该结论），而是由缓存的逐章指标现算：以「除上一章外的其余章」为基线，容差由 <code>core.buildTolerance</code> 构造——<strong>与 <a href="novel-fix-plan.html">novel_fix_plan</a> 同一实现</strong>（<code>recTol</code> 为主，基线不足 3 章时下限抬到 25%，可被用户的 <code>styleTolerance</code> 覆盖同名维度）。除上一章外不足 <strong>2 章</strong>可测时不给结论（单章基线估不出 σ）；取不到时为<strong>空串</strong>并计入 <code>degraded</code>。</td></tr>
-          <tr><th><code>avoid</code></th><td>array</td><td><strong>本章禁用清单</strong>，<strong>三类</strong>来源合并，元素 <code>&#123; kind, detail &#125;</code>，<code>kind</code> 取值为 <code>已回收伏笔</code> / <code>禁词</code> / <code>已退场角色</code>。三类都取不到时为空数组。<strong>恒为数组</strong>。</td></tr>
+          <tr><th><code>avoid</code></th><td>array</td><td><strong>本章禁用清单</strong>，元素 <code>&#123; kind, detail &#125;</code>，来源合并为同一数组：<code>已回收伏笔</code> / <code>禁词</code> / <code>已退场角色</code>，以及 v6.4.0 起的语用规范四类 <code>语用规范·称谓</code> / <code>语用规范·客套</code> / <code>语用规范·仪式</code> / <code>语用规范·语气</code>（<code>speechStyle</code> 里未覆盖的键回落为 <code>语用规范·&lt;键名&gt;</code>）。全部取不到时为空数组。<strong>恒为数组</strong>。</td></tr>
           <tr><th><code>plan</code></th><td>object</td><td>三段式行动框架：<code>&#123; previousState, goal, checklist &#125;</code>（<code>checklist</code> 为字符串数组），由上述材料生成，见下文「plan 的生成口径」。<strong>恒为对象</strong>。</td></tr>
           <tr><th><code>degraded</code></th><td>array</td><td>降级说明，元素是<strong>字符串</strong>（不是对象），已按 <code>Set</code> 去重。<strong>空数组表示材料完整</strong>。</td></tr>
         </tbody>
@@ -161,24 +161,32 @@ distance  = maxNumber − firstChapter                 ← maxNumber = 全书最
       <p><code>distance</code> 是「埋了多久没回收」的直接量化：它把静态的伏笔表变成<strong>带时间压力的清单</strong>，让调用方先处理埋得最久、优先级最高的线。已回收（<code>done</code>）的伏笔不进入 <code>openPlots</code>，而是从另一个方向进入 <code>avoid</code>（见下节）。</p>
 
       <h3>5 · 世界观 <code>worldview</code> 与禁用清单 <code>avoid</code></h3>
-      <div class="formula">worldview = 设定表 worldview 表<strong>全部条目合并</strong>后的
-            &#123; basis, bannedWords, recommended, speechStyle &#125;
-    basis       ← 各条的 basis / description / ritual / notes 去重后以「；」连接
-    bannedWords ← 各条并集（保序去重）
-    recommended ← 各条 Object.assign 浅合并
-    speechStyle ← 数组字段并集、对象字段浅合并、标量取最后一个非空值
-    四项全空 → worldview 整键省略
+      <div class="formula">worldview = &#123; basis, bannedWords, recommended, speechStyle, culture, cultureName, cultureSource &#125;
+    basis       ← 各条的 basis / description / ritual / notes 去重后以「；」连接（本地拼接）
+    rule        ← resolveStyleRule(settings, 本函数已读入的章节正文)     ← v6.4.0 唯一裁决点
+    bannedWords ← rule.bannedWords = 去重(用户登记 ∪ 文化基准默认表)
+                  （显式登记 bannedWords: [] ⇒ 不要默认表；未登记 worldview 条目 ⇒ worldview 整键省略）
+    recommended ← rule.recommended（用户登记优先覆盖默认表）
+    speechStyle ← rule.speechStyle（合并<strong>全部</strong> worldview 条目的语用规范）
+    culture / cultureName / cultureSource ← 文化基准与来源（worldview / detected / default）
 
 avoid = ① 与本章方向行关键词有交集的<strong>已回收</strong>伏笔（kind = "已回收伏笔"）
             关键词 = plotKeywords(content) ∪ plotKeywordsAll(content)
             长词（≥ 3 字）命中 1 个即算；2 字短词需命中 ≥ 2 个，
             且排除「是已登记人名/别名的子串」的短词（只共享人名不算重埋）
             最多 5 条
-        ② worldview.bannedWords 的前 10 条（kind = "禁词"，有替代词时一并给出）
-        ③ 标记为已退场的角色，最多 5 条（kind = "已退场角色"）
+        ② worldview.bannedWords 的<strong>全部</strong>词（kind = "禁词"）
+            每 12 条一组，detail 写明「第 i/n 组，共 N 条」，替代词内联为「词→替词」
+        ③ 语用规范 worldview.speechStyle（kind = "语用规范·称谓" / "·客套" / "·仪式" / "·语气"）
+            称谓 = title
+            客套 = honorBad（有 honorGood 时内联「词（改用：替词）」，每 12 条一组）
+            仪式 = ritualBadPatterns（按匹配式给出）+ ritualGoodNote
+            语气 = tone
+        ④ 标记为已退场的角色，最多 5 条（kind = "已退场角色"）
 
-三类合并为同一数组；都取不到时为空数组</div>
-      <p>第 ① 类的用意是防止「把已经用掉的线当作新钩子再埋一次」——这是长篇里最常见的自我重复。第 ② 类沿用设定表里已经登记好的禁用词，<strong>只取前 10 条</strong>是为了控制返回体体积：完整的禁用词表仍可用 <a href="novel-settings.html">novel_settings</a> 查。第 ③ 类把「已退场角色」前置到清单里，避免与人物卡里的出场提示互相打架。</p>
+四类合并为同一数组；都取不到时为空数组</div>
+      <p>第 ① 类的用意是防止「把已经用掉的线当作新钩子再埋一次」——这是长篇里最常见的自我重复。第 ② 类<strong>不再截断</strong>（v6.4.0 前只取前 10 条，而合并默认表后动辄 40+ 词，模型最多只看得到 10 个且看不到总数），改为按 12 条一组紧凑渲染，<strong>不静默丢词</strong>。</p>
+      <p><strong>v6.4.0 修复（P0-1）：语用规范此前从未到达模型。</strong><code>speechStyle</code>（称谓 / 禁客套语 / 仪式禁式 / 语气）一直被合并进返回体的 <code>worldview</code>，但<strong>全文件没有任何消费点</strong>——它既没进 <code>avoid</code> 也没进 <code>plan.checklist</code>，于是用户精心登记的「称谓用先生/阁下」「禁提点/承蒙」「仪式禁烧香磕头」「语气禁文言四字客套」一个字都没到模型。第 ③ 类就是补上的消费点：逐项渲染成模型可见的条目，<code>plan.checklist</code> 里再点名一次。这套规范正是<strong>为防中式语用渗透而设计</strong>的，缺了它，欧式设定下写出的「多谢提点」没有任何一道防线会提醒模型。</p>
 
       <h3>6 · 必用词 <code>lexicon</code>（硬清单）</h3>
       <div class="formula">lexiconOn = featureEnabled(featState, "lexiconFirst")     ← 功能开关，默认开
@@ -243,7 +251,7 @@ lastVerdict = "第 N 章六维对照：" + judge.summary + "（由逐章指标�
         <tbody>
           <tr><th><code>previousState</code></th><td><code>prevChapter</code> + <code>previousHook</code> / <code>anchor</code></td><td>「上一章停在哪里」的浓缩复述，三选一：有钩子 → 带上「结尾钩子：…」；无钩子但有正文 → 「正文已在 anchor（末 N 字），钩子未回填」；无正文 → 「正文为空」。全书开篇时为「无上一章（本章为全书开篇）」。</td></tr>
           <tr><th><code>goal</code></th><td><code>outlineDirection</code> → <code>previousHook</code> → 开篇</td><td>本章目标，四级退化：有方向行 → 「按大纲方向行写：…」；无方向行但有钩子 → 「大纲未给方向，承接上一章钩子推进：…」；都没有但有上一章 → 「从上一章结尾（anchor）自然接续」；开篇 → 「按创作设定开篇」。</td></tr>
-          <tr><th><code>checklist</code></th><td>上述各材料</td><td>字符串数组，按固定顺序追加：<strong>读一遍锚段校准语感——不要照 <code>skeletons</code> 造句</strong>（固定首条，v5.1.0 改口径）→ 承接钩子 / 承接上一章结尾（有钩子取前者，否则取后者；全书开篇时两条都不加）→ 按方向行推进 → <code>priority === "high"</code> 的未回收伏笔（最多 3 条，带 <code>distance</code>）→ 别重复埋已回收伏笔 → 避免使用的禁词（前 5 条）→ <strong>必用词优先（硬约束，完整表见上方【必用词·优先使用】；前 12 个词条列名，超出以「等 N 个」收尾）</strong>→ 已退场角色 → 本章相关人物（最多 5 个，退场者带标注）→ <strong>建议</strong>自检（<code>novel_style_check</code>；<strong>单一维度轻微出带属正常波动，不要为对齐数字改文</strong>）→ <strong>收尾按需</strong>，不必每章全套：确属新埋的伏笔才 <code>novel_plot add</code>；钩子与摘要在章节稳定后再回填（<code>novel_outline action=hook number=N</code>）。</td></tr>
+          <tr><th><code>checklist</code></th><td>上述各材料</td><td>字符串数组，按固定顺序追加：<strong>读一遍锚段校准语感——不要照 <code>skeletons</code> 造句</strong>（固定首条，v5.1.0 改口径）→ 承接钩子 / 承接上一章结尾（有钩子取前者，否则取后者；全书开篇时两条都不加）→ 按方向行推进 → <code>priority === "high"</code> 的未回收伏笔（最多 3 条，带 <code>distance</code>）→ 别重复埋已回收伏笔 → 避免使用世界观禁用词（前 8 个列名 + 「共 N 条，完整清单见 <code>avoid</code> 的「禁词」」）→ 称呼、客套、仪式与语气按语用规范写（仅当 <code>worldview.speechStyle</code> 存在时追加）→ <strong>必用词优先（硬约束，完整表见上方【必用词·优先使用】；前 12 个词条列名，超出以「等 N 个」收尾）</strong>→ 已退场角色 → 本章相关人物（最多 5 个，退场者带标注）→ <strong>建议</strong>自检（<code>novel_style_check</code>；<strong>单一维度轻微出带属正常波动，不要为对齐数字改文</strong>）→ <strong>收尾按需</strong>，不必每章全套：确属新埋的伏笔才 <code>novel_plot add</code>；钩子与摘要在章节稳定后再回填（<code>novel_outline action=hook number=N</code>）。</td></tr>
         </tbody>
       </table>
       <p><code>plan</code> 是<strong>材料的索引，不是新信息</strong>：它不引入任何未在其它字段出现过的判断，只把散落的材料组织成「动笔前看一眼」的三段式；<strong>不编造剧情</strong>，所有文本都从已有字段派生（超长片段统一按 <code>clip</code> 截断加省略号）。字段本身不随 <code>budget</code> 截断。</p>
@@ -268,8 +276,9 @@ lastVerdict = "第 N 章六维对照：" + judge.summary + "（由逐章指标�
         <thead><tr><th>情形</th><th>返回</th></tr></thead>
         <tbody>
           <tr><td>没有创作资料（未 <code>init</code>）</td><td><code>previousHook</code> / <code>outlineDirection</code> / <code>chapter.title</code> 为空，<code>plan.goal</code> 退化；<code>degraded</code> 分别给出「创作资料未初始化」与「无钩子记录」两条说明</td></tr>
-          <tr><td>没有伏笔表</td><td><code>openPlots = []</code>，<code>avoid</code> 只保留禁词与已退场角色，<code>degraded</code> 说明</td></tr>
-          <tr><td>没有设定表</td><td><code>worldview</code> 整键省略、<code>characters</code> 为空数组（除非创作资料里有人物设定），<code>avoid</code> 只保留已回收伏笔一类</td></tr>
+          <tr><td>没有伏笔表</td><td><code>openPlots = []</code>，<code>avoid</code> 只保留禁词 / 语用规范 / 已退场角色，<code>degraded</code> 说明</td></tr>
+          <tr><td>没有设定表</td><td><code>worldview</code> 整键省略（不注入默认词表）、<code>characters</code> 为空数组（除非创作资料里有人物设定），<code>avoid</code> 只保留已回收伏笔一类</td></tr>
+          <tr><td>登记了 worldview 但没填 basis / 禁词 / 语用规范</td><td>仍按文化基准（登记文本 → 正文检测 → 默认欧式）注入默认禁用词表，<code>worldview.bannedWords</code> 为合并结果；<code>degraded</code> 写「仅按文化基准「…」注入默认禁用词表（共 N 条）」，避免调用方误以为「没有规范」</td></tr>
           <tr><td>没有必用词表 / 开关关闭</td><td><code>lexicon</code> 整键省略并静默（<code>lexiconFirst</code> 关闭且词表已有条目时，<code>degraded</code> 明确写「已登记 N 条，但开关当前为关闭」）</td></tr>
           <tr><td>词表某一层被关闭</td><td>该层不参与合并；<code>degraded</code> 写「必用词表有层被关闭：本书层已关闭（N 条）」，并指路侧边栏「必用词表」页</td></tr>
           <tr><td>词表条目超出注入上限</td><td><code>lexicon.truncated = true</code>（<code>shown &lt; total</code>），<code>degraded</code> 写「共 N 条，本章只注入 M 条（场景命中与高优先者先占位）」</td></tr>
@@ -291,7 +300,7 @@ lastVerdict = "第 N 章六维对照：" + judge.summary + "（由逐章指标�
         <li><strong>唯一抛错路径是书名目录不存在</strong>；材料缺失、缓存不可用、锚包失败、书太短都走降级。调用方不应把空字段读成「这本书没有伏笔」——必须读 <code>degraded</code> 区分「确实没有」与「取不到」。</li>
         <li><strong><code>chapter</code> 与 <code>novel_read</code> 共用解析规则</strong>：精确文件名优先于章号；只给章号且命中多个同号文件时会报错并列出候选（本工具把它降级为「目标不确定」而不是中断）。纯数字参数不做子串兜底。</li>
         <li><strong><code>isNext</code> 不等于「参数是 next」</strong>：它表示目标章文件<strong>尚不存在</strong>，因此传入一个未来的章号同样为 <code>true</code>。此时返回的 <code>file</code> 是预期文件名而非磁盘事实（可用 <a href="novel-chapters.html">novel_chapters</a> 核对）。</li>
-        <li><strong><code>avoid</code> 只取禁用词前 10 条</strong>：这是返回体预算的取舍，不是「只禁这 10 个词」。完整词表在设定表里，语用规范（称谓 / 客套 / 仪式禁式）通过 <code>worldview.speechStyle</code> 整体给出。</li>
+        <li><strong><code>avoid</code> 的词表不截断（v6.4.0 起）</strong>：禁用词按 12 条一组紧凑渲染、每组写明「共 N 条」，语用规范（称谓 / 客套 / 仪式禁式 / 语气）也逐条给出，因此<strong>不存在「只禁前 10 个词」式的静默丢弃</strong>。词源是 <code>resolveStyleRule</code> 的合并结果（用户登记 ∪ 文化基准默认表），与 <code>novel_continuity_check</code> 的用语扫描一致。<strong>未登记任何 worldview 条目时本工具不注入默认表</strong>（<code>worldview</code> 整键省略）——需要默认基准时先用 <a href="novel-settings.html">novel_settings</a> 的 <code>detect</code> / <code>add</code> 登记一条 worldview。</li>
         <li><strong><code>distance</code> 依赖章号可解析</strong>：<code>chapter</code> / <code>mentionedIn</code> / <code>lastMentioned</code> <strong>三处</strong>都解析不出章号时，<code>firstChapter</code> 省略、<code>firstChapterKnown = false</code>，<code>distance</code> 退化为「全书最大章号」（相当于按全书起算），并在 <code>degraded</code> 里点名前 5 条。排序时这类条目按 <code>priority</code> 归一为 <code>medium</code>、再按已退化的 <code>distance</code> 参与比较——<strong>不会因此被排到最后</strong>，这是刻意的：距离未知不等于不重要。</li>
         <li><strong>人物命中判定是纯字符串包含</strong>，不做语义推理：别名登记不全时会漏命中，同名不同人（如「小周」既指人物又指地名）时会误命中；名字与别名短于 2 字的一律跳过。这是零 token 本地实现的必然边界，命中结果应视为<strong>候选</strong>。</li>
         <li><strong>首次调用可能较慢</strong>：长书且缓存未预热时需读全书算分章指标；这一点与 <code>budget</code> 无关（见上文）。</li>
@@ -313,7 +322,7 @@ lastVerdict = "第 N 章六维对照：" + judge.summary + "（由逐章指标�
 
       <h2>源码位置</h2>
       <ul>
-        <li><span class="src">lib/brief.js</span> —— 开写包主体：<code>buildChapterBrief</code>（唯一的对外导出）与其内部各步——<code>BRIEF_BUDGETS</code>（两档预算常量，含 <code>lexicon</code> / <code>avoidPerTerm</code>）、<code>readPlotsReadOnly</code>（只读伏笔读取）、<code>readCreationFile</code> / <code>parseNumberedLines</code>（创作资料读取与编号行解析）、<code>deriveChapterFileName</code>（预期文件名推导）、<code>plotFirstChapter</code>（最早提及章号）、<code>mergeWorldview</code>（worldview 多条目合并）、<code>parseCharacterLines</code> / <code>OFFSTAGE_RE</code> / <code>countMentions</code>（人物卡三源合并与命中统计）、<code>plotKeywordsAll</code>（不截断的关键词版本，供「已回收伏笔 ∩ 方向行」使用）、必用词注入（<code>readLexicon</code> → <code>selectLexiconForBrief</code> → <code>groupLexiconByKind</code>，含 <code>lexiconFirst</code> 门禁与三条 <code>degraded</code> 文案）、<code>clip</code> / <code>isAbort</code>。</li>
+        <li><span class="src">lib/brief.js</span> —— 开写包主体：<code>buildChapterBrief</code>（唯一的对外导出）与其内部各步——<code>BRIEF_BUDGETS</code>（两档预算常量，含 <code>lexicon</code> / <code>avoidPerTerm</code>）、<code>readPlotsReadOnly</code>（只读伏笔读取）、<code>readCreationFile</code> / <code>parseNumberedLines</code>（创作资料读取与编号行解析）、<code>deriveChapterFileName</code>（预期文件名推导）、<code>plotFirstChapter</code>（最早提及章号）、<code>mergeWorldviewBasis</code>（worldview 多条目的 basis 文本拼接，v6.4.0 起只管 basis——词源交给 <code>resolveStyleRule</code>）、<code>pushBannedWordAvoids</code> / <code>pushSpeechStyleAvoids</code>（禁用词与语用规范的分组渲染，v6.4.0 新增，后者修复「speechStyle 到不了模型」）、<code>parseCharacterLines</code> / <code>OFFSTAGE_RE</code> / <code>countMentions</code>（人物卡三源合并与命中统计）、<code>plotKeywordsAll</code>（不截断的关键词版本，供「已回收伏笔 ∩ 方向行」使用）、必用词注入（<code>readLexicon</code> → <code>selectLexiconForBrief</code> → <code>groupLexiconByKind</code>，含 <code>lexiconFirst</code> 门禁与三条 <code>degraded</code> 文案）、<code>clip</code> / <code>isAbort</code>。</li>
         <li><span class="src">lib/index.js</span> —— <code>registerNovelChapterBrief</code>：工具注册、参数校验（<code>budget</code> 归一）、输出 schema 与渲染文本（含 <code>【必用词·优先使用】</code> 分区——v6.3.0 起才真正渲染）。</li>
         <li><span class="src">lib/core.js</span> —— <code>metricChaptersCached</code>（六维分章测量缓存）、<code>buildStyleAnchorPackage</code>（锚段与骨架的抽样与上限）、<code>readSettings</code>（设定表）、<code>plotsFile</code> / <code>legacyPlotsFile</code> / <code>normalizePlotEntry</code> / <code>plotKeywords</code>（伏笔表路径与条目归一）、<code>creationDir</code> / <code>CREATION_FILES</code>（创作资料路径）、<code>scanChapters</code> / <code>findChapter</code> / <code>readTextFile</code> / <code>parseChapterNumber</code>（章节定位、读取与章号解析）。</li>
         <li><span class="src">lib/style-metrics.js</span> —— <code>computeBaselineFromPerChapter</code>（基线的 μ / σ / <code>recTol</code> 口径）/ <code>judgeAgainstBaseline</code>（上一章六维判定）/ <code>METRIC_ORDER</code> / <code>METRIC_LABELS</code>。</li>

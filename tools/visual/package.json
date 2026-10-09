@@ -1,0 +1,15 @@
+{
+  "name": "dnw-visual-harness",
+  "private": true,
+  "version": "0.1.0",
+  "description": "dsh-novel-writer 客户端 UI 的确定性视觉验收装置（dev-only，不参与插件发布，不影响插件 npm ci 依赖面）",
+  "type": "module",
+  "scripts": {
+    "prepare": "node prepare.mjs",
+    "capture": "node capture.mjs"
+  },
+  "dependencies": {
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  }
+}

@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_lexicon — 必用词表｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_lexicon 的实现细节：两层存储与同名覆盖、九个 action、开写包硬清单注入与 60/200 截断、audit 的覆盖率与通用词顶替行号、与 worldview bannedWords 的分工。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_lexicon","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-lexicon.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_lexicon — 必用词表｜dsh-novel-writer 技术文档","description":"novel_lexicon 的实现细节：两层存储与同名覆盖、条目字段归一、批量录入行格式、九个 action、开写包硬清单注入与 60/200 截断、成稿 audit 的覆盖率与通用词顶替行号归因、与 novel_settings worldview bannedWords 的分工。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-lexicon.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.3.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_lexicon, 必用词表, 优先用词, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_lexicon — 必用词表｜dsh-novel-writer 技术文档","description":"novel_lexicon 的实现细节：两层存储与同名覆盖、条目字段归一、批量录入行格式、九个 action、开写包硬清单注入与 60/200 截断、成稿 audit 的覆盖率与通用词顶替行号归因、与 novel_settings worldview bannedWords 的分工。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-lexicon.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.4.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_lexicon, 必用词表, 优先用词, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -76,7 +76,7 @@
           <tr><th><code>delete</code></th><td>删除指定词条；<code>all:true</code> 整层清空</td><td><code>book</code>（默认） / <code>global</code></td><td><code>action</code> + <code>terms</code>（或 <code>all:true</code>）</td></tr>
           <tr><th><code>import</code></th><td>文本批量导入（每行一条）；<code>replace:true</code> 整层覆盖</td><td><code>book</code>（默认） / <code>global</code></td><td><code>action</code> + <code>text</code></td></tr>
           <tr><th><code>scan</code></th><td>从<strong>本书正文</strong>高频词提取候选，供挑选后 <code>add</code></td><td>—（读全书，只读）</td><td><code>action</code> + <code>book</code></td></tr>
-          <tr><th><code>audit</code></th><td>成稿用词审计：覆盖率 + 未使用清单 + 通用词顶替的行号与原句（<strong>只读</strong>）</td><td>—（读合并两层词表）</td><td><code>action</code> + <code>book</code></td></tr>
+          <tr><th><code>audit</code></th><td>成稿用词审计：覆盖率 + 未使用清单 + 通用词顶替的行号与原句（<strong>只读</strong>）。<strong>只覆盖必用词表，不含世界观禁用词</strong>——禁词用 <a href="novel-continuity-check.html">novel_continuity_check</a></td><td>—（读合并两层词表）</td><td><code>action</code> + <code>book</code></td></tr>
           <tr><th><code>export</code></th><td>导出某一层的全部词条 JSON</td><td><code>book</code>（默认） / <code>global</code></td><td><code>action</code></td></tr>
           <tr><th><code>toggle</code></th><td>开 / 关某一层（<code>enabled</code> 必填布尔）</td><td><code>book</code>（默认） / <code>global</code></td><td><code>action</code> + <code>enabled</code></td></tr>
         </tbody>
@@ -101,7 +101,7 @@
           <tr><th><code>update</code></th><td><code>updated</code>（单个元素）+ <code>entries</code>（前 50 条）+ <code>counts</code> + <code>files</code> + <code>enabled</code></td><td>改名成功时 <code>updated[0]</code> 是新名；撞车覆盖时 <code>message</code> 追加「（原「X」已被覆盖）」</td></tr>
           <tr><th><code>delete</code></th><td><code>removed</code> + <code>counts</code> + <code>files</code> + <code>enabled</code></td><td>一条都没命中即报错，<strong>不返回空删除结果</strong></td></tr>
           <tr><th><code>scan</code></th><td><code>candidates</code> + <code>counts</code></td><td>候选为对象数组 <code>[{ term, count, exists }]</code>，<code>exists</code> 表示已登记</td></tr>
-          <tr><th><code>audit</code></th><td><code>audit</code> + <code>counts</code> + <code>files</code> + <code>lexiconFirst</code></td><td><code>lexiconFirst</code> 是<strong>插件级「必用词优先」开关</strong>的当前状态（旧版借用了 <code>enabled</code> 键，语义串味）</td></tr>
+          <tr><th><code>audit</code></th><td><code>audit</code> + <code>counts</code> + <code>files</code> + <code>lexiconFirst</code></td><td><code>lexiconFirst</code> 是<strong>插件级「必用词优先」开关</strong>的当前状态（旧版借用了 <code>enabled</code> 键，语义串味）。<code>message</code> 末尾固定追加<strong>职责边界</strong>说明（v6.4.0，见下文「审计口径」）</td></tr>
           <tr><th><code>export</code></th><td><code>entries</code>（该层<strong>全量</strong>）+ <code>counts</code> + <code>files</code> + <code>enabled</code></td><td>该层文件不存在时按空表导出，并在 <code>message</code> 里说明</td></tr>
           <tr><th><code>toggle</code></th><td><code>counts</code> + <code>files</code> + <code>enabled</code></td><td><code>message</code> 同时给出插件级 <code>lexiconFirst</code> 的当前取值，避免与层开关混淆</td></tr>
         </tbody>
@@ -116,7 +116,7 @@
           <tr><th><code>lexiconFirst</code></th><td>boolean</td><td><code>audit</code> 专用：插件级「必用词优先」总开关</td></tr>
           <tr><th><code>files</code></th><td>object</td><td><code>&#123; book?, global? &#125;</code> 词表文件的绝对路径，可直接给用户看</td></tr>
           <tr><th><code>candidates</code></th><td>object[]</td><td><code>scan</code> 的候选词 <code>[{ term, count, exists }]</code>，按正文词频降序</td></tr>
-          <tr><th><code>audit</code></th><td>object</td><td><code>&#123; scopeText, total, coveredCount, missingCount, coverage, covered[], missing[], avoidHits[] &#125;</code>，见下文「审计口径」</td></tr>
+          <tr><th><code>audit</code></th><td>object</td><td><code>&#123; scopeText, total, coveredCount, missingCount, coverage, covered[], missing[], avoidHits[] &#125;</code>，见下文「审计口径」。<strong>只覆盖必用词表</strong>——不含世界观禁用词</td></tr>
         </tbody>
       </table>
       <div class="warn">
@@ -208,12 +208,18 @@ enabled  = 仅 <code>false</code> 落盘（true 不写这个键，即「默认�
 coverage = round(covered.length / total × 1000) / 10   ← 单位为 %
 total = 0（词表为空）→ coverage 记 100，message 改为「先用 action=add 登记」</div>
       <p><code>chapter: "all"</code>（或 <code>全书</code>）时<strong>逐章审计再合并</strong>：<code>covered</code> 累加各章命中数并附 <code>firstChapter</code>（首次命中的章），<code>avoidHits</code> 附 <code>chapter</code>，<code>missing</code> 剔除已在别章命中的词条；因此<strong>行号是该章文件内的真实行号</strong>，渲染成 <code>第N章 Lx</code>。省略 <code>chapter</code> 时审计<strong>最后一章</strong>，渲染成 <code>第 N 章《标题》</code>。</p>
+      <div class="warn note">
+        <b>审计的职责边界（v6.4.0，方案甲：写清边界而非扩大范围）。</b><code>audit</code> <strong>只审必用词表</strong>——覆盖率与「通用替身词顶替」，回答的是「该用的词用上了没有」。它与世界观用语规范（<code>novel_settings category=worldview</code> 的 <code>bannedWords</code> / <code>speechStyle</code>）<strong>毫无关系</strong>：不读 worldview、不扫禁词、不报语用冲突。因此<strong>「覆盖率 100%」不等于「本章用词没问题」</strong>——「掌柜」「多谢提点」这类禁词命中<strong>不在本审计范围内</strong>，要查它们请用 <a href="novel-continuity-check.html">novel_continuity_check</a>（不带 <code>chapter</code> 审全书，带 <code>chapter</code> 只审该章）。这段边界文案由 <code>LEXICON_AUDIT_SCOPE_NOTE</code> 单一维护，同时写进 <code>message</code>、渲染文本的 <code>【用词审计】</code> 节尾与工具的 <code>description</code>；<code>novel_continuity_check</code> 的 <code>checklist</code> 里也有对应的反向一条（「必用词覆盖率不在本工具职责内」）。<strong>不选方案乙（让 audit 兼扫禁词）的理由</strong>：禁词扫描已由连续性审计承担（本轮起章节模式也会跑），两处实现同一判定必然出现口径分叉，且 audit 会被迫读 worldview 表、语义上从「用词审计」膨胀成「综合体检」，与它「只回答该用没用」的定位冲突。
+      </div>
       <p>渲染文本形如：</p>
       <pre><code>【用词审计】第 12 章《渡口》：必用词 24 条，命中 9 条（覆盖率 37.5%）
   已用：星轨×4(首见 L12)、青铜灯×1(首见 L31)
   **未使用**：阿砚、北境哨塔★
   **通用词顶替**（该处本该用必用词）：
-    - L44 「铜灯」→ 应写成「青铜灯」：他把铜灯搁在船头，火苗缩成一点。</code></pre>
+    - L44 「铜灯」→ 应写成「青铜灯」：他把铜灯搁在船头，火苗缩成一点。
+  注意：本审计只覆盖必用词表（覆盖率与通用替身词），不含世界观禁用词（novel_settings
+  category=worldview 的 bannedWords / speechStyle）——查禁用词请用 novel_continuity_check：
+  不带 chapter 审全书，带 chapter 只审该章。</code></pre>
 
       <h3>7 · 候选词提取 <code>scan</code></h3>
       <div class="formula">text = 全书正文（逐章读取、章间补换行）
@@ -224,7 +230,7 @@ exists = 该词已在合并两层词表中</div>
 
       <h3>8 · 与世界观禁用词的分工</h3>
       <div class="note">
-        <b><a href="novel-settings.html">novel_settings</a> <code>category=worldview</code> 的 <code>bannedWords</code> 管「<em>不要写什么</em>」（禁词），本工具管「<em>必须写什么</em>」（优先词）。</b>两者互补、不重复：禁词为<strong>文化基准一致</strong>服务（欧式背景不写「上香」，中式背景不写「神甫」），由 <code>novel_continuity_check</code> 的用语冲突扫描消费；必用词为<strong>模仿作者的用词习惯</strong>服务（该写「青铜灯」而不是「铜灯」），由开写包注入、由 <code>audit</code> 复核。<strong>同一个词完全可以同时出现在两处</strong>（例如把「铜灯」写进 <code>bannedWords</code>、把「青铜灯」写进词表的 <code>term</code>），但常规做法是：禁词表只放「读者一眼能看出时代/文化错位」的词，词表放「本书专名与作者惯用词」，并在 <code>avoid</code> 里点出 AI 容易退回的通用说法。
+        <b><a href="novel-settings.html">novel_settings</a> <code>category=worldview</code> 的 <code>bannedWords</code> 管「<em>不要写什么</em>」（禁词），本工具管「<em>必须写什么</em>」（优先词）。</b>两者互补、不重复：禁词为<strong>文化基准一致</strong>服务（欧式背景不写「上香」，中式背景不写「神甫」），由 <code>novel_continuity_check</code> 的用语冲突扫描消费；必用词为<strong>模仿作者的用词习惯</strong>服务（该写「青铜灯」而不是「铜灯」），由开写包注入、由 <code>audit</code> 复核。<strong>同一个词完全可以同时出现在两处</strong>（例如把「铜灯」写进 <code>bannedWords</code>、把「青铜灯」写进词表的 <code>term</code>），但常规做法是：禁词表只放「读者一眼能看出时代/文化错位」的词，词表放「本书专名与作者惯用词」，并在 <code>avoid</code> 里点出 AI 容易退回的通用说法。<strong>v6.4.0 起这条分工写进了返回体本身</strong>：<code>audit</code> 的 <code>message</code> / 渲染文本结尾固定追加边界说明，<code>novel_continuity_check</code> 的 <code>checklist</code> 则有「必用词覆盖率 / 通用词顶替——不在本工具职责内——用 novel_lexicon action=audit」一条，两个工具互相指路，单跑一个不会以为已经查全。
       </div>
 
       <h2>约束与边界</h2>
@@ -241,6 +247,7 @@ exists = 该词已在合并两层词表中</div>
         <li><strong>审计是子串匹配，没有词边界</strong>：<code>avoid</code> 词「轨道」会在「轨道车」里命中；条目「星」会命中「星期」。写词条时避免用过短或高频的通用字，必要时用 <code>aliases</code> 明确写法。</li>
         <li><strong>覆盖率的分母是词表条数，不是字数</strong>：<code>coverage = 命中词条数 / 词表条数</code>。词表越大，覆盖率天然越低——它是「本章涉及的概念里有多少用对了词」的粗略指示，不是写作质量分数。</li>
         <li><strong><code>audit</code> 只读、绝不改正文</strong>，也不生成替换后的句子：它只回答「哪一行、哪个通用说法、本该写成哪个表内词」。改写仍由作者或宿主模型完成。</li>
+        <li><strong><code>audit</code> 的覆盖面是「必用词表」，不是「用词规范」。</strong>它不读 <code>worldview</code>、不扫禁词与语用表达（v6.4.0 起把这条边界固定写进 <code>message</code> 与渲染文本）。「覆盖率 100% / 未发现通用词顶替 ✓」只说明<strong>表内词该用的都用上了</strong>；「这章有没有写出欧式背景不该出现的词」是 <a href="novel-continuity-check.html">novel_continuity_check</a> 的用语冲突扫描要回答的问题（该工具的 <code>checklist</code> 会明确列出这条分工）。</li>
         <li><strong>注入与开关的层次</strong>：<code>lexiconFirst</code>（插件级，默认开）关掉后<strong>只是不注入、audit 也提示未生效</strong>，词表自身的增删改查、导入导出、层开关<strong>照常可用</strong>；书级层与全局层各有独立开关，关掉某一层只影响该层是否参与合并视图与注入。</li>
         <li><strong><code>lexicon</code> 字段在开写包里「有就返回、没有就整键省略」</strong>：开关关闭、词表为空、或读取失败时该键<strong>不出现</strong>（读取失败会在 <code>degraded</code> 里写明原因）。调用方读它前必须先判存在性。</li>
         <li><strong>截断只影响注入，不影响词表</strong>：compact 60 / full 200 条与每条 2 / 3 个 <code>avoid</code> 都是返回体预算，词表本身与 <code>list</code> / <code>export</code> 的取数不受影响。</li>
@@ -262,7 +269,7 @@ exists = 该词已在合并两层词表中</div>
       <ul>
         <li><span class="src">lib/core.js</span> —— <strong>词表数据层</strong>：<code>LEXICON_KINDS</code> / <code>GLOBAL_LEXICON_BOOK</code> / <code>lexiconDir</code> / <code>lexiconFile</code> / <code>isGlobalLexiconScope</code> / <code>parseLexiconLine</code> / <code>classifyLexiconReadError</code> / <code>readLexiconFile</code> / <code>readLexicon</code> / <code>writeLexicon</code> / <code>normalizeLexiconEntry</code> / <code>normalizeLexiconList</code> / <code>lexiconEntryLine</code> / <code>mergeLexiconEntries</code> / <code>selectLexiconForBrief</code> / <code>groupLexiconByKind</code> / <code>auditLexicon</code>（约 2470–2760 行）。</li>
         <li><span class="src">lib/core.js</span> —— <strong>宿主 UI 路由</strong>：<code>lexiconHandler</code>（约 1398–1550 行，GET 读 / POST <code>save</code>·<code>import</code>·<code>toggle</code>，含损坏层的 <code>409</code> 拒写）；路由注册 <code>&#123; path: "/api/dsh-novel-writer/lexicon" &#125;</code>（约 1680 行）；数据目录占位 <code>lexicon-dir</code>（约 1590–1605 行）。</li>
-        <li><span class="src">lib/index.js</span> —— <strong>工具 action</strong>：<code>registerNovelLexicon</code>（九个动作的参数 schema、分支与返回体）、<code>formatLexicon</code>（文本渲染）、<code>mergeChapterAudits</code>（全书审计的逐章合并）、<code>withLexiconTx</code>（写路径文件事务）；开写包 render 的 <code>【必用词·优先使用】</code> 分区也在本文件（<code>novel_chapter_brief</code> 的 <code>render</code> 内）。</li>
+        <li><span class="src">lib/index.js</span> —— <strong>工具 action</strong>：<code>registerNovelLexicon</code>（九个动作的参数 schema、分支与返回体）、<code>formatLexicon</code>（文本渲染）、<code>LEXICON_AUDIT_SCOPE_NOTE</code>（v6.4.0：audit 职责边界文案的单一事实源，<code>message</code> 与渲染共用）、<code>mergeChapterAudits</code>（全书审计的逐章合并）、<code>withLexiconTx</code>（写路径文件事务）；开写包 render 的 <code>【必用词·优先使用】</code> 分区也在本文件（<code>novel_chapter_brief</code> 的 <code>render</code> 内）。</li>
         <li><span class="src">lib/brief.js</span> —— 开写包注入：<code>BRIEF_BUDGETS</code> 的 <code>lexicon</code> / <code>avoidPerTerm</code> 两档上限、<code>lexiconFirst</code> 开关判定、两层开关与截断的 <code>degraded</code> 文案、<code>plan.checklist</code> 的硬指令。</li>
         <li><span class="src">lib/prompts.js</span> —— 系统提示词里的「必用词优先」纪律（通用档与写作 / 审计 / 建资料三个场景各自的分工表述）。</li>
         <li><span class="src">lib/client.js</span> —— 侧边栏「必用词表」页（三层视图 / 表单 / 导入 / 搜索 / 逐条删除 / 层开关 / 目录入口）与两枚线图标 <code>navLexicon</code> / <code>lexiconFirst</code>（共 26 枚）。</li>

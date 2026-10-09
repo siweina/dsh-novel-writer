@@ -1,0 +1,67 @@
+<!doctype html>
+<!--
+  fixture.html — dsh-novel-writer 客户端 UI 的视觉验收页面（dev-only）
+
+  职责：在**真实浏览器 + 真实 React 18.3.1 + 真实 DOM** 里把插件渲染出来，供 capture.mjs 逐视图截图。
+  不职责：不引入任何网络请求（fetch 由 fixture-boot.js 全量桩掉），不修改插件源码（只读 snapshot/ 快照）。
+
+  加载顺序（顺序本身是契约，不可调换）：
+    1) window.__ModuleLoader__ 桩   —— 必须在 client.js 之前，否则插件模块无处注册
+    2) host/host-tokens.css         —— 宿主官方 --dsw-* 令牌层（由 extract-tokens.mjs 从 desktop asar 抽取）
+    3) vendor/react.js / react-dom.js（UMD，经典脚本；react-dom 版本与 react 严格同版 18.3.1）
+    4) snapshot/client.js           —— lib/client.js 的**快照**（另一个 agent 在并发重建原文件）
+    5) fixture-boot.js              —— 造 ctx → apply(ctx) → 用真 React 渲染官方 main 席位组件
+-->
+<html lang="zh-Hans">
+<head>
+  <meta charset="utf-8">
+  <meta name="color-scheme" content="light">
+  <title>dsh-novel-writer · visual fixture</title>
+  <link rel="stylesheet" href="./host/host-tokens.css">
+  <style>
+    html, body {
+      margin: 0; padding: 0; width: 100%; height: 100%;
+      background: var(--dsw-alias-bg-base, #ffffff);
+      color: var(--dsw-alias-label-primary, #0f1115);
+      font-family: var(--dsw-font-family, "Microsoft YaHei", system-ui, sans-serif);
+      overflow: hidden;
+    }
+    /* 面板舞台：视口尺寸 = 截图尺寸（capture.mjs 用 page.setViewportSize 控制 720/380 × 900） */
+    #stage {
+      width: 100%; height: 100%; box-sizing: border-box; overflow: hidden;
+      background: var(--dsw-alias-bg-base, #ffffff);
+    }
+    #panel-root { height: 100%; }
+
+    /* ---- 确定性收口（截图专用，不属于插件外观）----
+       ① 动画/过渡全部关闭：插件自身的 9 视图 push/pop 过渡已由 @media (prefers-reduced-motion)
+          在 Playwright 的 reducedMotion:"reduce" 下关闭，这里是第二道保险，防止其它 keyframes
+          在截图瞬间停在中间帧；
+       ② 关闭输入框光标闪烁；
+       ③ 隐藏滚动条由 launch 参数 --hide-scrollbars 负责（.nwPanelMain 自带 scrollbar-gutter:stable，
+          因此隐藏滚动条不会导致内容横移）。 */
+    #panel-root *, #panel-root *::before, #panel-root *::after {
+      animation: none !important;
+      transition: none !important;
+    }
+    #panel-root input, #panel-root textarea, #panel-root select { caret-color: transparent; }
+
+    /* ---- 全高模式：capture.mjs 置 html[data-nw-metric="full"] → 用页面级滚动替代面板内滚动，
+           用于拍"整页内容"（固定 720×900 只截可视区，长视图会被裁掉） ---- */
+    html[data-nw-metric="full"] body { overflow: visible; height: auto; }
+    html[data-nw-metric="full"] #stage { height: auto; overflow: visible; }
+    html[data-nw-metric="full"] #panel-root { height: auto; }
+  </style>
+  <script>
+    // 必须在 snapshot/client.js 之前：捕获插件模块（保持 __ModuleLoader__.load({id, factory}) 契约形状）
+    window.__ModuleLoader__ = { load: function (spec) { window.__NW_SPEC__ = spec; } };
+  </script>
+  <script src="./vendor/react.js"></script>
+  <script src="./vendor/react-dom.js"></script>
+</head>
+<body>
+  <div id="stage"><div id="panel-root"></div></div>
+  <script src="./snapshot/client.js"></script>
+  <script src="./fixture-boot.js"></script>
+</body>
+</html>

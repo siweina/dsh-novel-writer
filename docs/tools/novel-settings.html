@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_settings — 设定五张表｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_settings 的实现细节：五张设定表的 listKey 映射、category 与 action 的枚举回退、各动作返回体差异、worldview 语用规范自动推导、scan 候选提取正则与 detect 文化基准评分公式。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_settings","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-settings.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_settings — 设定五张表｜dsh-novel-writer 技术文档","description":"novel_settings 的实现细节：五张设定表的 listKey 映射、category 与 action 的枚举回退、各动作返回体差异、worldview 语用规范自动推导、scan 候选提取正则与 detect 文化基准评分公式。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-settings.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.3.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_settings, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_settings — 设定五张表｜dsh-novel-writer 技术文档","description":"novel_settings 的实现细节：五张设定表的 listKey 映射、category 与 action 的枚举回退、各动作返回体差异、worldview 语用规范自动推导、scan 候选提取正则与 detect 文化基准评分公式。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-settings.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.4.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_settings, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -197,6 +197,42 @@ modern &gt;= 5 且 modern &gt;= max(western, eastern, 1)
 返回前四舍五入到两位小数</div>
       <p><code>modern</code> 优先是为避免剧情里的西式道具词把现代都市题材误判为西式。<code>detect</code> 分支还会读取功能开关：<code>genreTheme</code> 开启时附带 <code>genre</code>（流派）与 <code>theme</code>（题材）检测结果；<code>webnovelVibe</code> 开启时把正文交给氛围光谱聚合，失败则降级为 <code>{ axes: [], top: [], conclusion: "气质聚合失败: …", confidence: 0, evidence: [] }</code>，不影响文化基准结论。</p>
 
+      <h3>默认用语规范（欧式基准）与中式标记词接线</h3>
+      <p>未登记 <code>worldview</code>、或登记文本判不出文化基准时，欧式基准使用 <code>DEFAULT_BANNED_WORDS</code>（<code>lib/lexicons/markers.js</code>）。v6.4.0 起该表改为「<strong>七类分组 + 派生的扁平并集</strong>」两级结构。起因：用户在<strong>欧式中世纪</strong>设定下仍被写出「掌柜」「多谢提点」这类中式市井/客套词，而旧表 42 词偏「仙侠/官制」（老夫、衙门、科举、俸禄、绣楼…），<strong>生活化桥段里的市井词（客官、店小二、跑堂、铜板、干粮…）一个都没有</strong>，且 42 词里只有 16 条配了替代词——命中后只能报「不符」却给不出改法。</p>
+      <table>
+        <thead><tr><th>字段</th><th>类型</th><th>含义</th></tr></thead>
+        <tbody>
+          <tr><th><code>groups</code></th><td><code>Record&lt;string, string[]&gt;</code></td><td>v6.4.0 新增：按「称谓 / 客套 / 仪式 / 器物 / 市井 / 计量 / 制度」分组，供后续按类成套启用/裁剪与渲染时的分组紧凑展示。<strong>分组口径是「成套裁剪」而非语言学分类</strong>——客官 / 小二 / 跑堂 / 打尖 / 店钱 / 赏钱 / 天字号同属客栈市井场景，一刀裁掉就把这一整片渗透词清空（那正是本 bug 的现场）。</td></tr>
+          <tr><th><code>groupNotes</code></th><td><code>Record&lt;string, string&gt;</code></td><td>v6.4.0 新增：每组一句话写清「为什么这一组在欧式背景下成套突兀」，供文档 / 渲染解释分类依据，<strong>不参与扫描</strong>。</td></tr>
+          <tr><th><code>bannedWords</code></th><td><code>string[]</code></td><td><strong>全部词条的扁平并集</strong>（v6.4.0 起由 <code>groups</code> 派生：<code>Object.values(groups).flat()</code>，单一事实源，从结构上排除「改了分组忘了改并集」的漂移）。<strong>字段名与类型未变</strong>——<code>resolveStyleRule</code> 仍直接读该字段。实测 <strong>69 词</strong>（旧表 42 + 新增 27，无重复）。</td></tr>
+          <tr><th><code>recommended</code></th><td><code>Record&lt;string, string&gt;</code></td><td>替代词。v6.4.0 补齐：实测 <strong>67 / 69 条</strong>有替代词（旧表仅 16 条）；「江湖」「武林」在欧式里没有对等词，<strong>刻意不给</strong>，避免编出误导性的替换建议。全部键都落在 <code>bannedWords</code> 内。</td></tr>
+          <tr><th><code>culture</code></th><td><code>string</code></td><td>默认表的文化名（渲染用），未改。</td></tr>
+        </tbody>
+      </table>
+      <div class="formula">groups（v6.4.0）：7 类 / 69 词
+  称谓 11：老夫 丫鬟 婶子 伙计 掌柜 郎中 家丁 门房 官差 账房 大侠
+  客套  5：奉茶 有劳 劳烦 失敬 见笑
+  仪式 10：上香 三炷香 香炉 烧香 磕头 祠堂 和尚 道士 菩萨 佛祖
+  器物 11：布鞋 糖人 菜篮 青石板 八仙桌 轿子 花轿 府邸 火折子 包袱 干粮
+  市井 14：客栈 厢房 幌子 油条 绣楼 江湖 武林 客官 小二 跑堂 打尖 店钱 赏钱 天字号
+  计量  6：时辰 银两 银子 碎银 铜板 铜钱
+  制度 12：衙门 科举 俸禄 里正 保长 捕快 皂隶 私塾 秀才 员外 更夫 钱庄
+
+bannedWords = Object.values(groups).flat()  →  69 词（= 各组词数之和，无遗漏无重复）</div>
+      <p><strong>加词纪律</strong>：只收「读者一眼能看出文化 / 时代错位」的中式词。不收通用词（先生 / 大人）；不收西式译法里同样常用的词（夫人 / 老爷）；不收歧义词（老板娘：兼指现代「老板」之妻；上房：兼指正房 / 上屋顶）；不收与既有词构成包含关系的词（店小二 含 小二、掌柜的 含 掌柜、跑江湖 含 江湖、两银子 含 银子——扫描是逐词 <code>text.includes()</code> 判定，收了只会让同一次命中报出两条候选）。</p>
+      <p>同时新增导出 <code>EASTERN_MARKER_BANLIST</code>（<strong>纯数据，不改 <code>lib/index.js</code></strong>）：把 <code>CULTURE_MARKERS.eastern.words</code> 里<strong>可作禁词用</strong>的子集标出来，供审计侧在欧式 / 现代基准下提示「这是中式标记词，应替换」。起因：<code>eastern.words</code> 本来就有「掌柜」（还有伙计 / 客栈 / 银两 / 衙门 / 郎中 / 幌子 / 青石板），但那条路只服务 <code>detectCulture</code>，与禁词扫描<strong>完全没有打通</strong>——两表其实同源（旧默认表恰是 eastern 词去掉 庙 / 老爷 / 夫人），却长期各自维护。</p>
+      <table>
+        <thead><tr><th>字段</th><th>类型</th><th>含义</th></tr></thead>
+        <tbody>
+          <tr><th><code>words</code></th><td><code>string[]</code></td><td>可直接当禁词用的子集，由原表派生（恒为 <code>eastern.words</code> 的子集，将来往 eastern 表加词会自动进入，除非同时登记进 <code>excluded</code>）。实测 <strong>42 词</strong>。</td></tr>
+          <tr><th><code>excluded</code></th><td><code>{ word, reason }[]</code></td><td>不宜直接当禁词用的词与理由：老爷 / 夫人（西式译法 my lord / my lady 的常见中译，作禁词会把合法译文也判成冲突）、庙（单字词，替换建议落不到实处）。实测 3 条：45 − 3 = 42。</td></tr>
+          <tr><th><code>label</code> / <code>source</code> / <code>note</code></th><td><code>string</code></td><td>渲染与溯源用的说明文本（<code>source</code> 恒为 <code>CULTURE_MARKERS.eastern.words</code>）。</td></tr>
+        </tbody>
+      </table>
+      <div class="note">
+        <b>为什么不把 eastern 词直接并进默认禁词表？</b>两个方向的禁词表语义相反：欧式基准禁的是「中式词」，中式基准禁的是「西式词」（<code>SPEECH_STYLE_RULES.eastern.honorBad</code>）。把中式标记词并进默认表，会让中式基准的书反过来被自己的标记词误伤；只在欧式 / 现代基准下按需读取这份子集才是安全接线。接线由协调方在审计侧完成——本版只加数据与分组。
+      </div>
+
       <h2>约束与边界</h2>
       <ul>
         <li><strong>book 是唯一必填项</strong>（<code>required: ["book"]</code>）。<code>category</code> 与 <code>action</code> 都有隐式默认值：分别是 <code>character</code> 与 <code>list</code>，且<strong>非枚举取值静默回退</strong>而不报错。传 <code>category:"person"</code> 不会失败，而是操作人物表。</li>
@@ -230,7 +266,7 @@ modern &gt;= 5 且 modern &gt;= max(western, eastern, 1)
         <li><span class="src">lib/index.js</span> —— 工具注册与 <code>execute</code>：<code>registerNovelSettings</code>（约 1449–1759 行），含六个动作分支、<code>speechStyle</code> 自动推导与三套 <code>scan</code> 正则。</li>
         <li><span class="src">lib/core.js</span> —— <code>settingsFile</code> / <code>readSettings</code> / <code>writeSettings</code> / <code>normalizeSettingEntry</code> / <code>normalizeSettingList</code>（约 1999–2054 行）。</li>
         <li><span class="src">lib/core.js</span> —— <code>detectCulture</code> / <code>detectGenre</code> / <code>detectTheme</code> / <code>scanWordHits</code> / <code>sortedMarkerWords</code>（约 669–774 行）。<strong>文化基准判定与词表不在 <code>lib/analysis.js</code></strong>：判定实现在 <code>core.js</code>，词表在 <code>lib/lexicons/markers.js</code>。</li>
-        <li><span class="src">lib/lexicons/markers.js</span> —— <code>CULTURE_MARKERS</code> / <code>SPEECH_STYLE_RULES</code> / <code>GENRE_MARKERS</code> / <code>THEME_MARKERS</code> / <code>DEFAULT_BANNED_WORDS</code>（全文件 130 行，末尾统一导出）。</li>
+        <li><span class="src">lib/lexicons/markers.js</span> —— <code>CULTURE_MARKERS</code> / <code>SPEECH_STYLE_RULES</code> / <code>GENRE_MARKERS</code> / <code>THEME_MARKERS</code> / <code>DEFAULT_BANNED_WORDS</code>（v6.4.0 起为分组 + 派生并集）/ <code>EASTERN_MARKER_BANLIST</code>（v6.4.0 新增，中式标记词的可作禁词子集，纯数据）（全文件 240 行，末尾统一导出）。</li>
         <li><span class="src">lib/core.js</span> —— <code>withFileTx</code>（约 969 行）与 <code>atomicWriteJson</code>（约 942 行）。</li>
         <li><span class="src">mcp/server.mjs</span> —— <code>buildArgs</code> / <code>isInsideRoot</code>（约 259–289 行）。</li>
       </ul>

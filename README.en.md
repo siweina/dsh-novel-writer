@@ -20,9 +20,7 @@ exposed as a **stdio MCP server** for Claude Desktop / Cursor.
 
 ---
 
-## v6.3.0 local test build
-
-This release works through the v6.1.0 / v6.2.0 defect lists (protocol layer, rendering, lexicon data safety, UI and metadata) and rebuilds the required-lexicon panel. See [CHANGELOG.md](./CHANGELOG.md). Development: `npm ci`, `npm run build:check`, and `npm test`. All client build sources are included in this repository.
+Full version history: see [CHANGELOG.md](./CHANGELOG.md).
 
 ## The writing loop (end to end)
 
@@ -174,7 +172,7 @@ fixAnchors：3 条原著锚段（对话 / 心理 / 描写各一条，供逐句�
 6. **Emotion purification & quantification**: strong/weak emotion-word grading, pollution detection, caveat warning + AI re-verification; Valence sliding window → variance V / delta Δ / conflict index C + implicit imagery carriers.
 7. **Worldview & pragmatics detection**: auto cultural-baseline detection with confidence; speechStyle title/honorifics/rituals/tone norms; genre & theme + webnovel signals.
 8. **Writing toolkit**: plot tracking / five settings tables (characters·locations·items·timeline·worldview) / chapter summaries / continuity audit / batch import / style check / continuation writing.
-9. **Per-tool UI toggles**: a 「写作助手功能」 ("Writing Assistant") entry in the left sidebar plus a main-column panel (**official DSH 0.2.0 seats** since v5.2.0; hosts older than 0.2.0 fall back automatically) — master switch + grouped tool toggles + feature toggles + prompt mode/scene/**lean workflow**, plain-language labels, data-dir usage & semantic-engine status. **The v5.5.0 UI is rebuilt on the official design system with a website-style overhaul**: all colors go through `--dsw-alias-*` semantic tokens (three themes in sync with the host), controls use the official UI primitives, DeepSeek-blue accents, a glow hero header with section kickers, and equal-width pages across every level.<br>**v6.1.0 goes further (Plan A)**: source split + build chain (assert-failed builds never write, `--check` verifies source==artifact), 6 unified components with a single row pattern (`PreferenceRow`), group cards across every switch page, 19+5 line icons, a slider as auxiliary input on the tolerance rows, and page-level push-pop transition animations (zero state / zero hook).
+9. **Per-tool UI toggles**: a 「写作助手功能」 ("Writing Assistant") entry in the left sidebar plus a main-column panel (**official DSH 0.2.0 seats**; hosts older than 0.2.0 fall back automatically) — master switch + grouped tool toggles + feature toggles + prompt mode/scene/**lean workflow**, plain-language labels, data-dir usage & semantic-engine status. All colors go through `--dsw-alias-*` semantic tokens (three themes in sync with the host), controls use the official UI primitives, DeepSeek-blue accents, a glow hero header with section kickers, and equal-width pages across every level.<br>**The UI goes further (Plan A)**: source split + build chain (assert-failed builds never write, `--check` verifies source==artifact), 6 unified components with a single row pattern (`PreferenceRow`), group cards across every switch page, 19+5 line icons, a slider as auxiliary input on the tolerance rows, and page-level push-pop transition animations (zero state / zero hook).
 10. **Style Baseline**: Six writing metrics (syntactic complexity / modifier density / abstraction / action density / hedging / gap index) + per-chapter μ±σ baseline band; `novel_style_report` outputs the band, `novel_style_check` compares new chapters (in-band ✓ / out-of-band ⚠); per-metric ±% tolerance configurable in the panel's **Six-metric baseline** view (**recommended = 1.5× σ of the book's chapter variance**, rounded, clamped to ±10%~100%; leave blank to use recommended) — free theme, writing style kept inside the band.
 11. **Writing sentinels**: `novel_continuity_check` extended — ①**bridge check** (`chapter`: time jumps / semantic distance / character continuity / hook handoff, with quoted evidence) ②**OOC check** (`ooc`: per-character emotion baseline deviation) ③**outline drift** (`outline`: direction vs body keyword overlap); **brief mode** for report tools.
 12. **Original mode & creation files**: fill in creation settings in the panel's **Original mode** view (worldview/characters/forbidden/main conflict/genre/extras, blank = model decides, per-book profile library); novel_outline maintains creation files (bible/characters/outline/hooks/status), enforcing the bible → outline → hook chain with dynamic batches (10→20→30 chapters) to prevent plot jumps and OOC.
@@ -276,14 +274,14 @@ Under `<library-root>/.novel-writer/`: `plots` / `settings` / `summaries` / `ana
   allowed to point anywhere (that is how you import an old manuscript from elsewhere), and `mode:"apply"` + `move:true`
   **deletes the source files** — the scope of the deletion is decided by the caller, so only point it at a directory whose
   contents you know.
-- Built-in skill: registers its own `novel-writing` skill through `ctx.skills` (since v4.3.0); it only reads the packaged
+- Built-in skill: registers its own `novel-writing` skill through `ctx.skills`; it only reads the packaged
   `skills/novel-writing/SKILL.md`, **writes to no skill directory** and needs no host configuration; hosts without a `skills`
   service are skipped silently.
 - Local HTTP: registers 5 routes inside the DSH Web GUI (state / reveal / reports / demo / update-check), loopback-only;
   `allowLanState` defaults to off, so LAN access is denied by default.
 - MCP server (`mcp/server.mjs`): the `root` argument of every tool must fall inside the library root given to `--root`
   (out-of-root values are rejected and fall back); `novel_import`'s `src` is likewise root-limited unless you explicitly
-  opt out with `--allow-external-src` (since v4.3.0).
+  opt out with `--allow-external-src`.
 - Network: the only outbound call is the GitHub Releases API (`api.github.com`) for update checks —
   3s timeout, 24h cache, silent fallback; no manuscript content is sent.
 - Subprocesses: none, except opening the OS file manager with a plain argv array (no shell).

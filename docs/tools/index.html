@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="技术文档总览｜dsh-novel-writer">
 <meta name="twitter:description" content="dsh-novel-writer 的 19 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","name":"技术文档总览｜dsh-novel-writer","description":"dsh-novel-writer 的 19 个工具实现细节：参数契约、计算原理、约束边界与源码位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/index.html","inLanguage":"zh-CN","isPartOf":{"@type":"WebSite","name":"dsh-novel-writer","url":"https://siweina.github.io/dsh-novel-writer/"}}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","name":"技术文档总览｜dsh-novel-writer","description":"dsh-novel-writer 的 19 个工具实现细节：参数契约、计算原理、约束边界与源码位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/index.html","inLanguage":"zh-CN","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.4.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer","url":"https://siweina.github.io/dsh-novel-writer/"}}</script>
 </head>
 <body class="docs">
 
@@ -33,8 +33,7 @@
   <main class="docs__main">
     <article class="doc">
       <h1>技术文档</h1>
-      <div class="note"><b>v6.3.0：</b>本地测试版。第 19 个工具 <a href="novel-lexicon.html">novel_lexicon</a>（必用词表，v6.2.0 新增）在本版修掉一批缺陷并对齐界面：<strong>开写包补上 <code>【必用词·优先使用】</code> 分区</strong>（此前 <code>plan.checklist</code> 的硬指令指向一个不存在的分区，<code>avoid</code> 勿用词一条都到不了模型）、<strong>词表文件损坏后按层开关会把整层条目静默清空</strong>（现改为拒写并明确报「词表文件损坏」，原条目不再丢失）、面板「合并 / 全局」两个视图加载失败，均已修复；词表面板三层视图改用官方分段控件，改名撞车改为明确报错。工具数与参数契约不变（19 个）。</div>
-      <div class="note"><b>v6.1.0：</b>修复章节查找、复测、文本统计、语义短段落与 MCP/界面问题；当前规则以下列页面为准。历史版本的报告数值可能因计分修正而变化。</div>
+      <p class="doc__version">当前版本 <code>6.4.0</code> · 更新记录见 <a href="https://github.com/siweina/dsh-novel-writer/blob/main/CHANGELOG.md">CHANGELOG</a>（下方「版本说明」）</p>
       <p class="doc__lead">
         <code>dsh-novel-writer</code> 的 19 个工具全部在本地运行，<strong>不使用在线大模型</strong>：所有指标由规则统计与本地 ONNX 推理得出。本组页面面向二次开发与集成方，逐工具说明参数契约、计算原理、约束边界与源码位置。
       </p>
@@ -51,16 +50,42 @@
       <div class="note">
         <b>关于数值。</b>从 v4.3.0 起，本插件做了一轮口径整修（统一句末符、清洗动作词表、抽象度改最长匹配、修饰密度增加停用词、六维基线 μ=0 改绝对尺度判定等）。<strong>同一本书在新旧版本下的报告数值不可直接比较</strong>，涉及具体差异的页面会单独标注。
       </div>
-      <div class="note">
-        <b>v5.0.0 新增两个工具。</b><a href="novel-chapter-brief.html">novel_chapter_brief</a>（开写包）把动笔前要读的材料装配成一次只读调用；<a href="novel-fix-plan.html">novel_fix_plan</a>（改稿台）把风格自检的测量数据翻译成按优先级排序的待办清单。工具数 16 → 18，另为 <a href="novel-plot.html">novel_plot</a> 增加 <code>action: "graph"</code> 结构视图（<strong>不新增工具</strong>，跨章计算并入既有伏笔工具）。两个新工具均不生成正文，也不调用在线模型。
-      </div>
-      <div class="note">
-        <b>v5.0.0 另有系统提示词的「档位 × 场景」两个正交维度。</b>档位（<code>systemPromptMode</code>：<code>off</code> / <code>brief</code> / <code>full</code>）决定<strong>注入多少</strong>，场景（<code>promptScene</code>：<code>general</code> / <code>writing</code> / <code>revising</code> / <code>auditing</code> / <code>setup</code>）决定<strong>注入什么</strong>；场景<strong>仅在 <code>full</code> 档下生效</strong>，且只改提示词内容、不改任何工具能力。老状态文件没有 <code>promptScene</code> 键时落到 <code>general</code>（即 4.x 的通用工作流，本版仅在其中补入 7 行新工具入口指引），既有工作流不变。两字段的读写入口与完整语义见 <a href="novel-sentence-config.html">novel_sentence_config</a>。
-      </div>
-      <div class="note">
-        <b>v6.0.0 界面全面重构（工具与状态文件零变化）。</b>本版把面板外观按 DSH 官方设计体系统一（<code>--dsw-alias-*</code> 语义 token / 0.5px 发丝线 / 官方圆角尺度 / 官方 UI primitives），随后又按「官网式重构」收敛：强调色统一为 DeepSeek 蓝（<code>state-business-primary</code>）、主面板改「品牌光晕头部 + 分区 kicker + 图标卡 + 状态 pill」、内容卡由描边改为软阴影与悬停抬升、二级页标题与按钮家族统一、各级页面宽度恒定一致。若你是从旧版升级，<b>工具数量、参数与返回结构均未变动</b>，无需改任何调用。详解见 <a href="novel-sentence-config.html">novel_sentence_config</a> 的「界面为什么『看起来像 DSH』（v5.5.0）」一节。
-      <br>v6.0.0 再进一层：源码分块 + 构建链装配、6 个实际使用的统一组件（单一行模式 PreferenceRow / 分组卡 GroupCard）、19+5 枚线图标、阈值 slider 辅助输入、页面级 push-pop 过渡动画；工具 / 参数 / 状态文件依旧零变化。
-        </div>
+      <h2>版本说明</h2>
+      <p>每条一行，展开可读完整说明；最新一版默认展开。完整历史见 <a href="https://github.com/siweina/dsh-novel-writer/blob/main/CHANGELOG.md">CHANGELOG</a>。</p>
+      <ul class="doc__releases">
+        <li>
+          <details open>
+            <summary><code>6.4.0</code> · 2026-10-09 <span class="doc__rel-sum">用语规范接线：欧式设定下的中式市井词拦截链全线接通</span></summary>
+            <p>开写包现在会渲染「语用规范」（称谓、客套、仪式、语气），禁用词表改为与用户登记合并而非整份替换，并取消了 10 条截断。连贯性审计的章节模式同时返回用语命中。工具数与参数不变（19 个）。</p>
+          </details>
+        </li>
+        <li>
+          <details>
+            <summary><code>6.3.0</code> · 2026-10-06 <span class="doc__rel-sum">审计修复版：必用词分区、词表损坏保护与面板修复</span></summary>
+            <div class="note"><b>v6.3.0：</b>本地测试版。第 19 个工具 <a href="novel-lexicon.html">novel_lexicon</a>（必用词表，v6.2.0 新增）在本版修掉一批缺陷并对齐界面：<strong>开写包补上 <code>【必用词·优先使用】</code> 分区</strong>（此前 <code>plan.checklist</code> 的硬指令指向一个不存在的分区，<code>avoid</code> 勿用词一条都到不了模型）、<strong>词表文件损坏后按层开关会把整层条目静默清空</strong>（现改为拒写并明确报「词表文件损坏」，原条目不再丢失）、面板「合并 / 全局」两个视图加载失败，均已修复；词表面板三层视图改用官方分段控件，改名撞车改为明确报错。工具数与参数契约不变（19 个）。</div>
+          </details>
+        </li>
+        <li>
+          <details>
+            <summary><code>6.1.0</code> <span class="doc__rel-sum">章节查找、复测、文本统计、语义短段落与 MCP/界面修复</span></summary>
+            <div class="note"><b>v6.1.0：</b>修复章节查找、复测、文本统计、语义短段落与 MCP/界面问题；当前规则以下列页面为准。历史版本的报告数值可能因计分修正而变化。</div>
+          </details>
+        </li>
+        <li>
+          <details>
+            <summary><code>6.0.0</code> <span class="doc__rel-sum">界面全面重构（工具与状态文件零变化）</span></summary>
+            <div class="note"><b>v6.0.0 界面全面重构（工具与状态文件零变化）。</b>本版把面板外观按 DSH 官方设计体系统一（<code>--dsw-alias-*</code> 语义 token / 0.5px 发丝线 / 官方圆角尺度 / 官方 UI primitives），随后又按「官网式重构」收敛：强调色统一为 DeepSeek 蓝（<code>state-business-primary</code>）、主面板改「品牌光晕头部 + 分区 kicker + 图标卡 + 状态 pill」、内容卡由描边改为软阴影与悬停抬升、二级页标题与按钮家族统一、各级页面宽度恒定一致。若你是从旧版升级，<b>工具数量、参数与返回结构均未变动</b>，无需改任何调用。详解见 <a href="novel-sentence-config.html">novel_sentence_config</a> 的「界面为什么『看起来像 DSH』（v5.5.0）」一节。
+            <br>v6.0.0 再进一层：源码分块 + 构建链装配、6 个实际使用的统一组件（单一行模式 PreferenceRow / 分组卡 GroupCard）、19+5 枚线图标、阈值 slider 辅助输入、页面级 push-pop 过渡动画；工具 / 参数 / 状态文件依旧零变化。</div>
+          </details>
+        </li>
+        <li>
+          <details>
+            <summary><code>5.0.0</code> <span class="doc__rel-sum">新增开写包与改稿台；系统提示词增加「档位 × 场景」</span></summary>
+            <div class="note"><b>v5.0.0 新增两个工具。</b><a href="novel-chapter-brief.html">novel_chapter_brief</a>（开写包）把动笔前要读的材料装配成一次只读调用；<a href="novel-fix-plan.html">novel_fix_plan</a>（改稿台）把风格自检的测量数据翻译成按优先级排序的待办清单。工具数 16 → 18，另为 <a href="novel-plot.html">novel_plot</a> 增加 <code>action: "graph"</code> 结构视图（<strong>不新增工具</strong>，跨章计算并入既有伏笔工具）。两个新工具均不生成正文，也不调用在线模型。</div>
+            <div class="note"><b>v5.0.0 另有系统提示词的「档位 × 场景」两个正交维度。</b>档位（<code>systemPromptMode</code>：<code>off</code> / <code>brief</code> / <code>full</code>）决定<strong>注入多少</strong>，场景（<code>promptScene</code>：<code>general</code> / <code>writing</code> / <code>revising</code> / <code>auditing</code> / <code>setup</code>）决定<strong>注入什么</strong>；场景<strong>仅在 <code>full</code> 档下生效</strong>，且只改提示词内容、不改任何工具能力。老状态文件没有 <code>promptScene</code> 键时落到 <code>general</code>（即 4.x 的通用工作流，本版仅在其中补入 7 行新工具入口指引），既有工作流不变。两字段的读写入口与完整语义见 <a href="novel-sentence-config.html">novel_sentence_config</a>。</div>
+          </details>
+        </li>
+      </ul>
 
       <h2>工具总览</h2>
 

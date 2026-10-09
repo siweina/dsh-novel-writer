@@ -1,3 +1,18 @@
-﻿node_modules/
+node_modules/
 *.tgz
 .npmrc
+
+# ---- 视觉工装（tools/visual）的**生成物**，不入库 ----
+# 工装本身（capture*.mjs / fixture* / host/ / README）入库；
+# 下面这些每次运行都会重新生成，入库只会带来「仓库里躺着一份过期副本」的困惑。
+tools/visual/snapshot/client.js
+tools/visual/snapshot/meta.json
+# 冻结的 v6.3.0 对照基线：全仓库无人引用（曾用于 before/after 对比），先不入库
+tools/visual/snapshot/client-v6.3.0-baseline.js
+# 拍摄产物（按宽度 × 视图几十张 PNG + manifest）
+tools/visual/shots*/
+# prepare.mjs 从 node_modules 复制的 UMD 产物
+tools/visual/vendor/
+
+# ---- 临时探针残留 ----
+_v2probe/

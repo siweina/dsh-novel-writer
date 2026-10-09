@@ -164,6 +164,36 @@ body.docs { background: var(--n-00); }
 .docs__toc a:hover { color: var(--brand-500); border-color: var(--brand-300); }
 .docs__toc a.is-active { color: var(--brand-500); border-color: var(--brand-500); font-weight: 600; }
 
+/* 顶部版本标识行 */
+.doc__version {
+  margin-top: 12px; font-size: 13px; color: var(--text-3);
+}
+.doc__version code { font-family: var(--mono); color: var(--brand-500); background: none; border: 0; padding: 0; }
+
+/* 版本说明列表（可折叠） */
+.doc__releases { list-style: none; padding-left: 0; margin-top: 14px; }
+.doc__releases > li { margin: 0; border-bottom: 1px solid var(--line-soft); }
+.doc__releases > li:last-child { border-bottom: none; }
+.doc__releases details { padding: 2px 0; }
+.doc__releases summary {
+  cursor: pointer; list-style: none; padding: 10px 0;
+  font-size: 14px; color: var(--n-1000); font-weight: 600;
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px;
+}
+.doc__releases summary::-webkit-details-marker { display: none; }
+.doc__releases summary::before {
+  content: "▸"; color: var(--text-3); font-size: 12px; width: 12px; transition: transform .16s;
+}
+.doc__releases details[open] > summary::before { transform: rotate(90deg); }
+.doc__releases summary:hover { color: var(--brand-500); }
+.doc__releases summary code {
+  font-family: var(--mono); font-size: .9em; background: none; border: 0; padding: 0; color: var(--brand-500);
+}
+.doc__rel-sum { font-weight: 400; font-size: 13.5px; color: var(--text-2); }
+.doc__releases details > p,
+.doc__releases details > .note { margin-top: 4px; padding-bottom: 12px; }
+.doc__releases details > p { font-size: 13.5px; }
+
 /* 总览页 */
 .tools__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 28px; }
 .tools__card {

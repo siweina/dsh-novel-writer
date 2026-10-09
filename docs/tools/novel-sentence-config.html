@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_sentence_config — 开关配置｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_sentence_config 的实现细节：get/set 参数白名单、状态文件字段与默认值、生效值优先级、工具开关与功能开关的语义、风格基线容差的钳制规则，以及 rawWriting 的写入位置。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_sentence_config","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-config.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_sentence_config — 开关配置｜dsh-novel-writer 技术文档","description":"novel_sentence_config 的实现细节：get/set 参数白名单、状态文件字段与默认值、生效值优先级、工具开关与功能开关的语义、风格基线容差的钳制规则，以及 rawWriting 的写入位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-config.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.3.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_sentence_config, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_sentence_config — 开关配置｜dsh-novel-writer 技术文档","description":"novel_sentence_config 的实现细节：get/set 参数白名单、状态文件字段与默认值、生效值优先级、工具开关与功能开关的语义、风格基线容差的钳制规则，以及 rawWriting 的写入位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-config.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.4.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_sentence_config, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -106,7 +106,54 @@ readSentenceState():
     creationProfiles      : 非对象 → {}
     lastRoot              : 非字符串 → undefined</div>
       <p><code>exists</code> 是读取侧由文件是否存在推导出的派生字段，<strong>不落盘</strong>（写盘前被显式剔除）。磁盘上真实的 <code>state.json</code> 字段为 <code>enabled</code>、<code>autoAnalyze</code>、<code>systemPromptMode</code>、<code>promptScene</code>、<code>leanWorkflow</code>、<code>tools</code>、<code>features</code>、<code>styleTolerance</code>、<code>creationProfile</code>、<code>creationProfiles</code>、<code>lastRoot</code>。<code>readSentenceStateSync</code>（系统提示词回调用的同步版）对这些字段做<strong>同样的回退</strong>，因此老状态文件在两条读取路径下都落到 <code>brief</code> + <code>general</code> + <code>leanWorkflow:false</code>。</p>
-      <p><strong>v6.3.0：<code>lastRoot</code> 只记「宿主配置 / 会话目录」这类根。</strong>调用方<strong>显式传入</strong>的 <code>root</code>（工具参数、CLI <code>--root</code>、探针的临时书库）只影响本次调用，写操作<strong>不会</strong>把它写进 <code>lastRoot</code>——否则用临时书库跑一次写操作，就会把宿主记住的书库位置指向一个随后被删掉的目录（表现为面板里书库为空、词表 0 条，且从界面上极难自查）。路由侧与工具侧共用 <code>noteRoot()</code>，守卫只在这一处。</p>
+      <p><strong>v6.3.0 / v6.4.0：<code>lastRoot</code> 只记「宿主配置里的根」和「确实像个书库根的工作目录」这两种。</strong>
+      以下来源<strong>不</strong>落盘：<br>
+      · <strong>调用方显式传入</strong>的 <code>root</code>（工具参数、CLI <code>--root</code>、探针的临时书库）只影响本次调用（v6.3.0 起）；<br>
+      · <strong>会话工作目录兜底中「不像书库根」的那些</strong>——即该目录下既没有 <code>novels/</code> 也没有 <code>.novel-writer/</code>（v6.4.0 起）。<br>
+      必须堵住的原因是：只要在<strong>非库根目录</strong>的会话里跑一次写操作（<code>novel_settings add/update</code>、<code>novel_plot add</code>、<code>novel_summary add</code>、<code>novel_new_chapter</code> 都会走到 <code>noteRoot()</code>），
+      宿主记住的书库位置就会被改写成那个目录——表现为<strong>面板里书库为空、词表 0 条、显示「(尚未选择书)」</strong>，且从界面上极难自查。
+      实测桌面端 <code>lastRoot</code> 曾被写成 <code>F:\doment\_cache\fix4\lib</code>（某次测试会话的 cwd，目录早已不存在），
+      而 UI 路由的根解析当时是 <code>config.root → lastRoot → cwd</code>、插件 bundle 里 <code>config.root</code> 又是空串，于是面板完全依赖 <code>lastRoot</code>，一污染就整片空白。
+      路由侧与工具侧共用 <code>noteRoot()</code>，守卫只在这一处。<br>
+      <strong>为什么不一律禁掉 cwd 兜底</strong>：普通用户没有「设置库根」的界面入口之前，「在库根目录下导入一次」是他们建立 <code>lastRoot</code> 的唯一途径；一律禁掉会把这条正常路径也堵死。所以判据用<strong>结构</strong>（像不像书库根），而不是一刀切。</p>
+      <p><strong>怎么改根</strong>（v6.4.0 起有两条路）：<br>
+      ① <strong>面板里改</strong>——「必用词表」面板的「书库根」行，填路径 + 保存即可（写 <code>lastRoot</code>，即时生效，无需重启）；<br>
+      ② <strong>配置文件里钉死</strong>——在 profile 的 <code>cordis.patch.yml</code> 里显式给插件配 <code>config.root</code>（值填<strong>库根</strong>，见下）。
+      它优先级最高、不随会话变动，适合多人共机或希望根完全固定的场景；代价是<strong>面板里的输入框会被禁用</strong>（配置即硬钉，避免"点了没反应又不知道为什么"）。</p>
+      <div class="note"><strong>⚠️ 填「库根」，不是 novels 目录。</strong>插件各处一律 <code>join(root, "novels")</code>，
+      所以 <code>root</code> 必须是 <strong>novels 的父目录</strong>（该目录下同时应有 <code>.novel-writer/</code> 数据目录）。
+      判据：<code>novelDataDir(root)</code> = <code>&lt;root&gt;\.novel-writer</code> <strong>必须真实存在</strong>。<br>
+      填成 <code>&lt;库根&gt;\novels</code>（看起来"更像小说目录"）会让 <code>listBookNames</code> 去找
+      <code>&lt;库根&gt;\novels\novels</code> → 目录不存在 → 内部 <code>catch</code> <strong>静默返回空数组</strong>
+      → 面板显示「(尚未选择书)」「本书 0 条 全局 0 条」，而<strong>整条链路上没有任何报错</strong>，极难自查。
+      该契约已由 <code>test/core-regression-test.mjs</code> 用断言钉住（含"误配现场复现"）。</div>
+
+      <h3>1a · 书库根诊断字段（<code>GET /api/dsh-novel-writer/state</code>）</h3>
+      <p>面板的状态接口在返回体中新增三个只读字段，用于回答「我现在读的是哪个书库根」以及「为什么面板列不出书」：</p>
+      <p><strong>解析顺序（v6.4.0）：<code>config.root → lastRoot → cwd → 插件内部目录</code></strong>，规则是：</p>
+      <ul>
+        <li><code>config.root</code> 非空即<strong>硬钉</strong>——显式配置就该被尊重；它不像书库根时<strong>仍然采用</strong>并给出警告，而不是悄悄换掉。</li>
+        <li><code>lastRoot</code> / <code>cwd</code> <strong>只在确实像个书库根时</strong>才被采用（判据：该目录下有 <code>novels/</code> 或 <code>.novel-writer/</code>）；不像则<strong>跳过</strong>并在警告里点名，绝不静默采用一个死路径。</li>
+        <li>全部落空时使用<strong>插件内部目录</strong> <code>&lt;用户目录&gt;\.dsh\dsh-novel-writer\library</code>（与 <code>state.json</code> 同级）。<br>
+        <strong>为什么需要这一级</strong>：旧链最后一跳是 <code>process.cwd()</code>，而<strong>工作区与书库没有任何必然关系</strong>——在随便哪个目录里开会话，面板就会把那个目录当成书库，然后静默列不出书。现在工作区只有在<strong>确实像个书库</strong>时才被采用（保留「在小说项目目录里开会话就能被认出来」的便利），否则落到一个<strong>确定的、属于插件的</strong>位置。</li>
+      </ul>
+      <ul>
+        <li><code>root</code>（string）：实际解析到的书库根（绝对路径）。</li>
+        <li><code>rootSource</code>（string）：该根的来源，取值含义如下：
+          <ul>
+            <li><code>"config"</code>：来自宿主配置 <code>config.root</code>（硬钉，最稳定）。</li>
+            <li><code>"lastRoot"</code>：来自状态文件中记录的 <code>lastRoot</code>，且该目录确实像个书库根。</li>
+            <li><code>"cwd"</code>：会话工作目录，且它确实像个书库根（即你就在小说项目目录里开的话）。</li>
+            <li><code>"internal"</code>：插件内部目录（最终兜底，<code>&lt;用户目录&gt;\.dsh\dsh-novel-writer\library</code>）。</li>
+            <li><code>"stale-lastRoot"</code>：<strong>v6.4.0 起不再作为 <code>rootSource</code> 出现</strong>——失效的 <code>lastRoot</code> 现在会被跳过（其诊断改为出现在 <code>rootWarning</code> 里）。该取值仅为兼容旧前端保留。</li>
+          </ul>
+        </li>
+        <li><code>rootWarning</code>（string | null）：有问题时为一段中文诊断（含修法），正常时为 <code>null</code>。它在以下情况非空：<code>config.root</code> 不像书库根（含被误填为 <code>novels</code> 目录本身，即上文 ⚠️ 所述的误配）；或 <code>lastRoot</code> 已不像书库根而被跳过。<br>
+        <strong>注意「工作区不像书库」不产生警告</strong>——那正是回退到插件内部目录的正常设计路径，为此报警告只会让每次在随便哪个目录开会话都弹一次，纯噪音。</li>
+      </ul>
+      <p><strong>面板如何显示 <code>rootWarning</code>：</strong>当 <code>rootWarning</code> 非空时，面板顶部出现一条警示横幅（与「保存失败」提示条同一样式），主文案为「书库根有问题，面板可能列不出书」，其下完整展示 <code>rootWarning</code> 原文。<code>rootWarning</code> 为 <code>null</code> 或空时<strong>不显示任何内容</strong>，正常使用无任何变化。横幅为纯提示，不会自动修改任何配置；修复请按诊断文字中的说明调整。</p>
+      <p><strong>面板里改根的位置（v6.4.0）：</strong>「<strong>必用词表</strong>」面板中「当前书」那一行下方有一行「书库根」——显示当前根与来源徽章，并提供输入框 + 保存（写 <code>lastRoot</code>，走后端既有的 <code>POST /api/dsh-novel-writer/state</code>）。<br>
+      放在这里而不是主页：书列不出来时用户人就在词表面板里，能就地改；<code>rootSource</code> 为 <code>config</code>（硬钉）时输入框与保存按钮<strong>禁用</strong>并说明原因——避免点了没反应又不知道为什么。</p>
 
       <h3>2 · 生效值的优先级</h3>
       <p>返回体里的 <code>enabled</code> / <code>autoAnalyze</code> 不是文件原值，而是 <code>effectiveSentenceAnalysis</code> 的结果：</p>

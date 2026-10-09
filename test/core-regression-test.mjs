@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { tmpdir, homedir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import {
@@ -9,16 +9,24 @@ import {
   detectChapterBridge,
   enrichSemanticImplicit,
   findChapter,
+  internalRoot,
   isAbort,
   lexiconFile,
   nextFreeChapterFile,
   normalizeChapterKey,
+  listBookNames,
+  looksLikeLibraryRoot,
   normalizeLexiconEntry,
+  novelsDir,
+  noteRoot,
   parseChapterNumber,
   parseLexiconLine,
   readLexiconFile,
   readSentenceState,
   readSettings,
+  resolveRoot,
+  resolveUiRoot,
+  resolveUiRootInfo,
   writeLexicon
 } from "../lib/core.js";
 import * as embedding from "../lib/embedding.js";
@@ -463,4 +471,108 @@ test("implicit 三比率之和恒 ≤ 1（与 analysis.js 同一派生口径）"
   const src = await readFile(new URL("../lib/core.js", import.meta.url), "utf8");
   assert.match(src, /ambiguousRatio = Math\.max\(0, Math\.round\(\(1 - negative - positive\)/);
   assert.match(src, /positive = Math\.max\(0, Math\.round\(\(1 - negative\)/);
+});
+
+// v6.4.0：lastRoot 的落盘守卫
+//
+// 现场：桌面端 `lastRoot` 被写成 `F:\doment\_cache\fix4\lib`（某次测试会话的 cwd，目录早已不存在），
+// 于是**词表面板一本书都列不出来**，显示「(尚未选择书)」「本书 0 条 全局 0 条」——
+// 而 UI 路由的根解析顺序是 `config.root → lastRoot → cwd`（lib/core.js 的 UI 路由段），
+// 插件的 bundle 里 config.root 又恰好是空串，于是完全依赖 lastRoot。
+//
+// 这个故障的形态是「面板静默变空、从界面上极难自查」，所以必须有回归断言钉住两条边界：
+//   ① 显式 root（工具参数/探针临时库）不落盘 —— v6.3.0 已堵
+//   ② cwd 兜底（会话工作目录）不落盘 —— v6.4.0 新堵，正是上面那次污染的来源
+// 同时必须断言「配置根仍然正常落盘」，否则就是把功能改死了（宁可漏记也不能不记）。
+test("v6.4.0：lastRoot 不记录显式 root 与 cwd 兜底，但配置根正常落盘", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "dsh-root-guard-"));
+  const prev = process.env.DSH_NOVEL_WRITER_STATE;
+  process.env.DSH_NOVEL_WRITER_STATE = join(dir, "state-guard.json"); // stateFilePath() 惰性读 env
+  const readState = async () => {
+    try { return JSON.parse(await readFile(join(dir, "state-guard.json"), "utf8")); } catch { return {}; }
+  };
+  try {
+    // ① 显式 root 不落盘
+    const explicit = join(dir, "explicit-lib");
+    assert.equal(resolveRoot({}, { root: explicit }, undefined), explicit);
+    await noteRoot(explicit);
+    assert.notEqual((await readState()).lastRoot, explicit, "显式 root 不得写进 lastRoot");
+
+    // ② cwd 兜底不落盘（本次修复的那一半）
+    const cwd = join(dir, "some-session-cwd");
+    assert.equal(resolveRoot({}, {}, { agent: { session: { header: { cwd } } } }), cwd);
+    await noteRoot(cwd);
+    assert.notEqual((await readState()).lastRoot, cwd, "cwd 兜底不得写进 lastRoot");
+
+    // ③ 无 config.root 时确实走 cwd 兜底（确认上一条测的是真路径，不是空转）
+    assert.equal(resolveRoot({ root: "" }, {}, { agent: { session: { header: { cwd } } } }), cwd,
+      "config.root 为空串时应回退 cwd（插件 bundle 里就是空串）");
+
+    // ④ 配置根**必须**正常落盘——否则是把功能改死了
+    const configured = join(dir, "configured-root");
+    assert.equal(resolveRoot({ root: configured }, {}, undefined), configured);
+    await noteRoot(configured);
+    assert.equal((await readState()).lastRoot, configured, "配置根应正常记入 lastRoot");
+
+    // ⑤ 库根的**语义契约**：root 的下一层才是 novels/ 与 .novel-writer/
+    //
+    // 这条是被一次真实误配打回来的：把 `config.root` 填成 `<库根>\novels`（看起来"更像小说目录"），
+    // 会让 listBookNames 去找 `<库根>\novels\novels` → 目录不存在 → catch 返空数组
+    // → **面板一本书都列不出来，且没有任何报错**。判据钉在函数关系上，不靠记忆：
+    assert.equal(novelsDir(join("X", "libroot")), join("X", "libroot", "novels"),
+      "novelsDir(root) 必须是 <root>/novels —— 即 root 是 novels 的**父目录**");
+    const goodRoot = join(dir, "good-root");
+    await mkdir(join(goodRoot, "novels", "测试书"), { recursive: true });
+    assert.deepEqual(await listBookNames(goodRoot), ["测试书"], "父目录作为 root 时应能列出 novels/ 下的书");
+    assert.deepEqual(await listBookNames(join(goodRoot, "novels")), [],
+      "把 novels 目录本身当 root 会列不出书（误配现场复现：静默返空、不报错）");
+
+    // ⑥ v6.4.0：根解析的**可发现性**——把"静默无书"变成"看一眼就知道怎么修"
+    //
+    // 起因：这两个故障（lastRoot 被污染 / config.root 填低一层）**症状完全相同、且都不报错**，
+    // 排查花了很久。现在解析结果会带 source 与 warning。
+    assert.equal(resolveUiRootInfo({ root: goodRoot }, {}).warning, null, "库根正确时不应有警告");
+    assert.equal(resolveUiRootInfo({ root: goodRoot }, {}).source, "config");
+    const badCfg = resolveUiRootInfo({ root: join(goodRoot, "novels") }, {});
+    assert.equal(badCfg.source, "config");
+    assert.ok(badCfg.warning && /库根/.test(badCfg.warning),
+      "config.root 填成 novels 目录本身时必须给出警告（本次真实误配的现场）");
+    const stale = resolveUiRootInfo({ root: "" }, { lastRoot: join(dir, "nonexistent-root") });
+    assert.notEqual(stale.source, "lastRoot", "失效的 lastRoot 不得被采用（不能再把死路径当根）");
+    assert.ok(stale.warning && /lastRoot/.test(stale.warning),
+      "失效 lastRoot 必须留下点名诊断——否则用户的书为什么消失就无从得知");
+    assert.ok(["internal", "cwd"].includes(stale.source), "应继续回退到工作区或插件内部目录");
+    // 候选被拒后**不能**回到那个被拒的根（旧版会把死路径原样返回，面板于是永远空白）
+    assert.notEqual(stale.root, join(dir, "nonexistent-root"), "被拒的候选不得出现在最终 root 里");
+    assert.equal(resolveUiRootInfo({ root: goodRoot }, { lastRoot: "X" }).source, "config",
+      "config.root 非空时优先级高于 lastRoot");
+    assert.equal(resolveUiRoot({ root: goodRoot }, {}), goodRoot, "resolveUiRoot 仍返回根字符串（兼容既有调用点）");
+
+    // ⑦ v6.4.0：最终兜底是**插件内部目录**，不是「随便一个工作区」
+    //
+    // 起因（用户质询）：旧链最后一跳是 process.cwd()，而**工作区与书库没有任何必然关系**——
+    // 在随便哪个目录里开会话，面板就把那个目录当书库，然后静默列不出书。
+    // 现在工作区**只有在它确实像个书库时**才被采用，否则落到插件自己的目录。
+    assert.equal(internalRoot(), join(homedir(), ".dsh", "dsh-novel-writer", "library"),
+      "插件内部根应与其数据目录同级（state.json 就在那儿）");
+    assert.ok(internalRoot().startsWith(homedir()), "内部根必须在用户目录下，不能落在工作区");
+    if (!looksLikeLibraryRoot(process.cwd())) {
+      const r = resolveUiRootInfo({ root: "" }, {});
+      assert.equal(r.source, "internal", "无任何候选时应回退插件内部目录，而不是把工作区当书库");
+      assert.equal(r.root, internalRoot());
+      assert.equal(r.warning, null,
+        "「工作区不像书库」属**正常设计路径**，不该报警告——否则每次在随便哪个目录开会话都弹一次，纯噪音");
+    }
+    // looksLikeLibraryRoot 的判据：novels/ 或 .novel-writer/ 任一存在
+    assert.equal(looksLikeLibraryRoot(goodRoot), true);
+    assert.equal(looksLikeLibraryRoot(join(goodRoot, "novels")), false, "novels 目录本身不算库根");
+    assert.equal(looksLikeLibraryRoot(""), false);
+    const dotRoot = join(dir, "dot-root");
+    await mkdir(join(dotRoot, ".novel-writer"), { recursive: true });
+    assert.equal(looksLikeLibraryRoot(dotRoot), true, "只有 .novel-writer/ 而无 novels/ 也算（新库尚未建书）");
+  } finally {
+    if (prev === undefined) delete process.env.DSH_NOVEL_WRITER_STATE;
+    else process.env.DSH_NOVEL_WRITER_STATE = prev;
+    await rm(dir, { recursive: true, force: true });
+  }
 });
