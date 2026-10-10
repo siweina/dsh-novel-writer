@@ -83,4 +83,25 @@ if (existsSync(new URL('docs/', root))) {
 } else assert.ok(!process.env.GITHUB_ACTIONS, 'CI requires docs directory');
 const tag = process.env.GITHUB_REF_TYPE === 'tag' ? process.env.GITHUB_REF_NAME : process.argv[2];
 if (tag) assert.equal(tag, `v${pkg.version}`, 'release tag must match package.json');
-console.log(`Version ${pkg.version}: package, lockfile, MCP, changelog and ${pages.length} pages agree; ALL_TOOLS = ${ALL_TOOLS.length}；JSON 顶层键无重复。`);
+
+// 容器构建守卫（v6.5.0 新增）：Dockerfile 里**不得写死版本号**。
+//
+// 起因是一次真实的构建失败：Dockerfile 曾有 `ARG DSH_NOVEL_WRITER_VERSION=6.3.0`，
+// 靠注释提醒「每次发版请同步」。6.4.0 / 6.5.0 两次都忘了改（bump-version 也没覆盖它），
+// 于是 Glama 按该 Dockerfile 构出来的容器里装的仍是 6.3.0 —— 请求 6.5.0 却得到 6.3.0，
+// 构建判定失败（Glama 恰好从 6.4.0 起报 build failed）。
+// 现在版本从 package.json 读，这里再钉一道：任何写死的 dsh-novel-writer@x.y.z / ARG= x.y.z
+// 只要与当前版本不一致就失败，防止旧写法复活。
+const dockerfile = read('Dockerfile');
+// ⚠️ **只看非注释行**：本文件头部的说明注释里就写着旧版本号（"此前这里是 …=6.3.x"），
+// 第一版守卫没排除注释，于是被自己的说明误伤（check-release 恒红）——这里按行过滤掉 `#` 开头。
+const dockerCode = dockerfile.split('\n').filter(line => !/^\s*#/.test(line)).join('\n');
+const pinned = [...dockerCode.matchAll(/(?:dsh-novel-writer@|DSH_NOVEL_WRITER_VERSION=)(\d+\.\d+\.\d+)/g)].map(m => m[1]);
+for (const v of pinned) {
+  assert.equal(v, pkg.version,
+    `Dockerfile 写死了 dsh-novel-writer@${v}，而当前版本是 ${pkg.version} —— ` +
+    `容器会装成旧版本，MCP 目录（Glama）会因版本不符判定构建失败。` +
+    `请改为从 package.json 读取（默认写法即是），不要手写版本号。`);
+}
+
+console.log(`Version ${pkg.version}: package, lockfile, MCP, changelog and ${pages.length} pages agree; ALL_TOOLS = ${ALL_TOOLS.length}；Dockerfile 无写死版本；JSON 顶层键无重复。`);

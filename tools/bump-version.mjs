@@ -72,7 +72,36 @@ if (existsSync(srvPath)) {
   }
 }
 
-// 4) docs 页面 softwareVersion（index.html + tools/novel-*.html + tools/index.html 若已有）
+// 4) Dockerfile（MCP 目录如 Glama 按它构建容器）
+//
+// v6.5.0 新增。此前 Dockerfile 里写死 `ARG DSH_NOVEL_WRITER_VERSION=6.3.0`，
+// 而这个脚本不管它 → 6.4.0 / 6.5.0 两次发版都漂移，Glama 构出来的容器装的还是 6.3.0，
+// 版本不符使构建判定失败。现在 Dockerfile 默认从 package.json 读版本（不会漂移），
+// 但**若有人又写死了版本号**，这里负责改掉并明确提示，而不是让它悄悄错下去。
+const dockerPath = join(REPO, 'Dockerfile');
+if (existsSync(dockerPath)) {
+  const dText = readFileSync(dockerPath, 'utf8');
+  // 只看非注释行：文件头说明里会提到旧版本号，按整文件扫会被自己的注释误伤（本次踩过）
+  const dCode = dText.split('\n').filter((line) => !/^\s*#/.test(line)).join('\n');
+  const stale = [...dCode.matchAll(/(?:dsh-novel-writer@|DSH_NOVEL_WRITER_VERSION=)(\d+\.\d+\.\d+)/g)].map((m) => m[1]);
+  const need = stale.filter((v) => v !== NEW);
+  if (need.length) {
+    changes.push(`Dockerfile: 写死的版本 ${need.join(', ')} → ${NEW}（建议改成从 package.json 读取，见文件头注释）`);
+    if (APPLY) {
+      const out = dText
+        .replace(/(dsh-novel-writer@)\d+\.\d+\.\d+/g, (_m, a) => a + NEW)
+        .replace(/(DSH_NOVEL_WRITER_VERSION=)\d+\.\d+\.\d+/g, (_m, a) => a + NEW);
+      const before = dText.replace(/\d+\.\d+\.\d+/g, '<V>');
+      const after = out.replace(/\d+\.\d+\.\d+/g, '<V>');
+      if (before !== after) { console.error('✗ Dockerfile 除版本号外还有改动，已中止（请人工检查）'); process.exit(1); }
+      writeFileSync(dockerPath, out, 'utf8');
+    }
+  } else {
+    changes.push('Dockerfile: 无写死版本（从 package.json 读取）✓');
+  }
+}
+
+// 5) docs 页面 softwareVersion（index.html + tools/novel-*.html + tools/index.html 若已有）
 const docsDir = join(REPO, 'docs');
 const pages = [];
 if (existsSync(docsDir)) {
