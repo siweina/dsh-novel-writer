@@ -4,21 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>novel_settings — 设定五张表｜dsh-novel-writer 技术文档</title>
-<meta name="description" content="novel_settings 的实现细节：五张设定表的 listKey 映射、category 与 action 的枚举回退、各动作返回体差异、worldview 语用规范自动推导、scan 候选提取正则与 detect 文化基准评分公式。">
+<meta name="description" content="novel_settings 的实现细节：五张设定表的 listKey 映射、category 与 action 的枚举回退、各动作返回体差异、worldview 语用规范自动推导、worldview 逐词静音 allowWords（v6.5.0：仅本书生效的静音，及其登记通道现状）、scan 候选提取正则与 detect 文化基准评分公式。">
 <link rel="stylesheet" href="../styles.css">
 <link rel="stylesheet" href="docs.css">
 <link rel="canonical" href="https://siweina.github.io/dsh-novel-writer/tools/novel-settings.html">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="dsh-novel-writer">
 <meta property="og:title" content="novel_settings — 设定五张表｜dsh-novel-writer 技术文档">
-<meta property="og:description" content="novel_settings 的实现细节：五张设定表的 listKey 映射、category 与 action 的枚举回退、各动作返回体差异、worldview 语用规范自动推导、scan 候选提取正则与 detect 文化基准评分公式。">
+<meta property="og:description" content="novel_settings 的实现细节：五张设定表的 listKey 映射、category 与 action 的枚举回退、各动作返回体差异、worldview 语用规范自动推导、worldview 逐词静音 allowWords（v6.5.0：仅本书生效的静音，及其登记通道现状）、scan 候选提取正则与 detect 文化基准评分公式。">
 <meta property="og:url" content="https://siweina.github.io/dsh-novel-writer/tools/novel-settings.html">
 <meta property="og:locale" content="zh_CN">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="novel_settings — 设定五张表｜dsh-novel-writer 技术文档">
-<meta name="twitter:description" content="novel_settings 的实现细节：五张设定表的 listKey 映射、category 与 action 的枚举回退、各动作返回体差异、worldview 语用规范自动推导、scan 候选提取正则与 detect 文化基准评分公式。">
+<meta name="twitter:description" content="novel_settings 的实现细节：五张设定表的 listKey 映射、category 与 action 的枚举回退、各动作返回体差异、worldview 语用规范自动推导、worldview 逐词静音 allowWords（v6.5.0：仅本书生效的静音，及其登记通道现状）、scan 候选提取正则与 detect 文化基准评分公式。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_settings","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-settings.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_settings — 设定五张表｜dsh-novel-writer 技术文档","description":"novel_settings 的实现细节：五张设定表的 listKey 映射、category 与 action 的枚举回退、各动作返回体差异、worldview 语用规范自动推导、scan 候选提取正则与 detect 文化基准评分公式。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-settings.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.4.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_settings, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_settings — 设定五张表｜dsh-novel-writer 技术文档","description":"novel_settings 的实现细节：五张设定表的 listKey 映射、category 与 action 的枚举回退、各动作返回体差异、worldview 语用规范自动推导、worldview 逐词静音 allowWords（v6.5.0：仅本书生效的静音，及其登记通道现状）、scan 候选提取正则与 detect 文化基准评分公式。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-settings.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.5.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_settings, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -34,7 +34,7 @@
     <article class="doc">
       <h1>novel_settings</h1>
       <p class="doc__lead">
-        设定管理。用 <code>category</code> 选定五张设定表之一（人物 / 地点 / 道具 / 时间线 / 世界观用语规范），以 <code>action</code> 执行增删改查；<code>scan</code> 从全书正文里按类别正则提取候选条目名，<code>detect</code> 用词表统计自动判定作品的文化基准（西方欧式 / 东方中式 / 现代都市 / 混合）。<strong>全部为本地规则统计与字符串写入</strong>，单部作品一份 JSON，五张表同文件存放。
+        设定管理。用 <code>category</code> 选定五张设定表之一（人物 / 地点 / 道具 / 时间线 / 世界观用语规范），以 <code>action</code> 执行增删改查；<code>scan</code> 从全书正文里按类别正则提取候选条目名，<code>detect</code> 用词表统计自动判定作品的文化基准（西方欧式 / 东方中式 / 现代都市 / 混合）。<strong>全部为本地规则统计与字符串写入</strong>，单部作品一份 JSON，五张表同文件存放。v6.5.0 起 <code>worldview</code> 条目还可用 <code>allowWords</code> 做<strong>本书范围内的逐词静音</strong>（「这个词在本书里是对的」）。
       </p>
 
       <h2>参数</h2>
@@ -58,6 +58,7 @@
           <tr><th><code>ritual</code></th><td>string</td><td>否</td><td><code>worldview</code> 专用：仪式规范（如「点烛不烧香」）。</td></tr>
           <tr><th><code>speechStyle</code></th><td>object</td><td>否</td><td><code>worldview</code> 专用：说话方式规范。可含 <code>title</code> / <code>tone</code> / <code>honorBad</code> / <code>honorGood</code> / <code>ritualBadPatterns</code> / <code>ritualGoodNote</code>。</td></tr>
           <tr><th><code>bannedWords</code></th><td>string[]</td><td>否</td><td><code>worldview</code> 专用：禁用词表。</td></tr>
+          <tr><th><code>allowWords</code></th><td>string[]</td><td>否</td><td><code>worldview</code> 专用（v6.5.0）：<strong>本书用词豁免</strong>（逐词静音）——登记后这些词在<strong>本书</strong>不再报用语冲突，词仍留在词表里，别的书照常检查。值会净化：去首尾空白、丢弃空串、按词去重、单条截 40 字、最多 200 条。示例与语义见下文「逐词静音：<code>worldview.allowWords</code>」。</td></tr>
           <tr><th><code>recommended</code></th><td>object</td><td>否</td><td><code>worldview</code> 专用：替代词映射，如 <code>{ "上香": "点烛" }</code>。</td></tr>
           <tr><th><code>root</code></th><td>string</td><td>否</td><td>章节库根目录。</td></tr>
         </tbody>
@@ -138,7 +139,7 @@
           <tr><th><code>location</code></th><td><code>locations</code></td><td>地点卡</td><td><code>description</code> <code>firstSeen</code></td></tr>
           <tr><th><code>item</code></th><td><code>items</code></td><td>道具清单</td><td><code>owner</code> <code>status</code> <code>lastSeen</code></td></tr>
           <tr><th><code>timeline</code></th><td><code>timeline</code></td><td>时间线</td><td><code>day</code> <code>event</code> <code>chapter</code>（<code>day</code> 与 <code>name</code> 同值）</td></tr>
-          <tr><th><code>worldview</code></th><td><code>worldview</code></td><td>世界观/用语规范</td><td><code>basis</code> <code>ritual</code> <code>speechStyle</code> <code>bannedWords</code> <code>recommended</code></td></tr>
+          <tr><th><code>worldview</code></th><td><code>worldview</code></td><td>世界观/用语规范</td><td><code>basis</code> <code>ritual</code> <code>speechStyle</code> <code>bannedWords</code> <code>allowWords</code>（v6.5.0）<code>recommended</code></td></tr>
         </tbody>
       </table>
       <p>字段白名单不按类别强制：<code>normalizeSettingEntry</code> 对任意类别都保留全部已知字段，跨类别传字段不会被拒绝，只会原样落盘。字段值统一经 <code>String()</code> 强转（<code>name</code> 缺省写成空串）。</p>
@@ -156,7 +157,7 @@
 
       <h3>update 的合并语义</h3>
       <ul>
-        <li><strong>可改字段</strong>：<code>description</code> <code>traits</code> <code>relationships</code> <code>firstSeen</code> <code>owner</code> <code>status</code> <code>lastSeen</code> <code>event</code> <code>chapter</code> <code>notes</code> <code>basis</code> <code>ritual</code> <code>day</code>（以及下方的数组 / 对象字段）。</li>
+        <li><strong>可改字段</strong>：<code>description</code> <code>traits</code> <code>relationships</code> <code>firstSeen</code> <code>owner</code> <code>status</code> <code>lastSeen</code> <code>event</code> <code>chapter</code> <code>notes</code> <code>basis</code> <code>ritual</code> <code>day</code>（以及下方的数组 / 对象字段）。<strong><code>allowWords</code> 不在其中</strong>：豁免表只在 <code>add</code> 时收下，要改请 <code>delete</code> 后重新 <code>add</code>，或直接改设定文件。</li>
         <li><strong><code>name</code> 不是可改字段</strong>，只用于定位。改名只能走 <code>timeline</code> 的 <code>day</code> 通道。</li>
         <li><code>alias</code> / <code>bannedWords</code> 整体替换；<code>recommended</code> 整体替换；<code>speechStyle</code> 与已有对象<strong>浅合并</strong>（<code>{ ...old, ...new }</code>），未提及的子键保留。</li>
         <li><code>timeline</code> 的 <code>day</code> 变更时同步 <code>name</code>：原 <code>name</code> 等于旧 <code>day</code> 则跟随新值；<code>name</code> 为空则填新值；其余情况保持不动，避免身份字段分裂成 <code>{ name:"第1天", day:"第2天" }</code>。</li>
@@ -233,13 +234,35 @@ bannedWords = Object.values(groups).flat()  →  69 词（= 各组词数之和�
         <b>为什么不把 eastern 词直接并进默认禁词表？</b>两个方向的禁词表语义相反：欧式基准禁的是「中式词」，中式基准禁的是「西式词」（<code>SPEECH_STYLE_RULES.eastern.honorBad</code>）。把中式标记词并进默认表，会让中式基准的书反过来被自己的标记词误伤；只在欧式 / 现代基准下按需读取这份子集才是安全接线。接线由协调方在审计侧完成——本版只加数据与分组。
       </div>
 
+      <h3>逐词静音：<code>worldview.allowWords</code>（v6.5.0，仅本书生效）</h3>
+      <p>词表是「猜」这本书的。有些词在<strong>这一本书里就是对的</strong>：修仙小说里的「修士」＝修行者、中文历史小说里真有一座「教堂」。此前作者<strong>没有任何办法</strong>告诉插件「这个我知道」——只能每次手动忽略（下次还报）、或关掉整个用语检查（别的词也不查了）、或把词从表里删掉（<strong>所有书</strong>都不查了，影响面过大）。<code>allowWords</code> 就是补上这条路的：把词登记成<strong>本书豁免</strong>，插件的用语/语用扫描不再报它。</p>
+      <div class="formula">allowWords: string[]        // worldview 条目字段；多个条目的值取并集
+解析端：resolveStyleRule(settings, chapterTexts, opts)
+        allow = 并集(opts.allowWords, 全部 worldview 条目的 allowWords)
+        bannedWords        ← 过滤掉 allow 里的词
+        speechStyle.honorBad ← 同样过滤
+回传：  allowedWords: string[]              // 实际生效的静音词
+        sources.muted: number             // 被静音掉的词数（= 合并总数 − 生效总数）</div>
+      <p><strong>为什么只做「按书」、不做全局静音。</strong>全局静音会<strong>静默削弱所有书的覆盖</strong>：一个词的豁免被记到全局后，另一本书里它本该报出来也不再报，而人很难记得自己什么时候加过什么、加过几本书。按书静音的最坏结果只是「这本书里漏」，看得见、摸得着，换本书立刻恢复默认覆盖。同理，静音按<strong>词</strong>做等值匹配，因此它<strong>不覆盖</strong> <code>speechStyle.ritualBadPatterns</code>——那是正则而不是词，要改模式或删条目。</p>
+      <p><strong>登记示例</strong>（<code>name</code> 只是条目名，可自取；该条目不含文化标记词，因此不会影响 <code>hintCulture</code> 的基准判定。只想静音、不想改文化基准的书，加这一条即可——没有登记过 <code>worldview</code> 的书同样可用）：</p>
+      <div class="formula">novel_settings add category=worldview name="用词豁免" allowWords=["修士"]
+
+等价地，也可直接写设定文件 &lt;root&gt;/.novel-writer/settings/&lt;book&gt;.json：
+  "worldview": [ { "name": "用词豁免", "allowWords": ["修士"] } ]</div>
+      <div class="warn">
+        <b>登记与核对（两处边界）。</b>登记走 <code>add</code>，字段值会被净化：去掉首尾空白、丢弃空串与非字符串项、<strong>按词去重</strong>、单条截到 40 字、最多 200 条（豁免表是给人看的，不该无限长）。① <code>update</code> 通道<strong>不支持</strong>该字段——要改豁免表，请 <code>delete</code> 后重新 <code>add</code>，或直接改设定文件里的对应条目。② 工具<strong>返回体里看不到</strong> <code>allowWords</code>：<code>list</code> / <code>scan</code> / <code>detect</code> / <code>add</code> 的条目都经 <code>normalizeSettingEntry</code> 归一，而它的白名单还没有这个字段（写盘是完整的，<code>resolveStyleRule</code> 读的是文件里的原始字段，静音照常生效）。核对豁免表请直接看设定文件，或看<a href="novel-fix-plan.html">改稿台</a> <code>summary.notes</code> 里的「已按本书用词豁免…静音 N 个词；豁免表：…」。
+      </div>
+      <div class="note">
+        <b>静音为什么放在 <code>resolveStyleRule</code> 这一处。</b>开写包（<code>lib/brief.js</code>）/ 连贯性审计（<code>lib/index.js</code>）/ 改稿台（<code>lib/fixplan.js</code>）三个消费方都从这里取词表，过滤放在单一裁决点，结构上不会出现「审计静音了、开写包还在警告」的分裂。
+      </div>
+
       <h2>约束与边界</h2>
       <ul>
         <li><strong>book 是唯一必填项</strong>（<code>required: ["book"]</code>）。<code>category</code> 与 <code>action</code> 都有隐式默认值：分别是 <code>character</code> 与 <code>list</code>，且<strong>非枚举取值静默回退</strong>而不报错。传 <code>category:"person"</code> 不会失败，而是操作人物表。</li>
         <li><strong><code>detect</code> 覆盖 <code>category</code></strong>：返回体的 <code>category</code> 恒为 <code>worldview</code>，与传入值无关。</li>
         <li><strong>同名条目不查重</strong>：<code>add</code> 只做 <code>list.push</code>，没有名字去重；重复登记会产生两条同 <code>name</code> 的记录，后续 <code>update</code> / <code>delete</code> 只命中第一条（<code>findIndex</code> 取首次匹配）。</li>
         <li><strong><code>add</code> / <code>update</code> / <code>delete</code> 的定位串是精确全等</strong>，不做去空格以外的归一：手写「沈 砚」与「沈砚」是两个条目。</li>
-        <li><strong>非数组的数组字段被静默忽略</strong>：<code>alias:"阿砚"</code>（字符串）不会写入，也不会报错。同理 <code>recommended</code> / <code>speechStyle</code> 传字符串时按「未提供」处理，<code>worldview</code> 的自动推导分支照常执行；显式传 <code>null</code> 也被视为未提供。</li>
+        <li><strong>非数组的数组字段被静默忽略</strong>：<code>alias:"阿砚"</code>（字符串）不会写入，也不会报错。同理 <code>recommended</code> / <code>speechStyle</code> 传字符串时按「未提供」处理，<code>worldview</code> 的自动推导分支照常执行；显式传 <code>null</code> 也被视为未提供。<code>allowWords:"修士"</code>（字符串）同样不写入——它先过数组判定再净化，净化后为空就不产生该字段。</li>
         <li><strong><code>scan</code> 有硬阈值与硬上限</strong>：命中少于 2 次的名字不出现；最多返回 15 条；<code>candidates</code> 只是候选，插件<strong>不会</strong>自动登记，必须由调用方逐条 <code>add</code>。</li>
         <li><strong><code>scan</code> 读取的是全书正文</strong>：章节数多时 I/O 与内存开销随全书字数线性增长；<code>scanChapters</code> 在作品目录缺失时抛错，空目录则返回空候选列表。</li>
         <li><strong><code>detect</code> 无章节时不报错</strong>：作品目录存在但没有章节文件时，正文为空串，判定结果为 <code>culture:"unknown"</code> / <code>confidence:0</code>，<code>message</code> 为「自动判断：无法判断（词表未命中）（置信度 0%）」。目录不存在则会抛错。</li>
@@ -249,6 +272,7 @@ bannedWords = Object.values(groups).flat()  →  69 词（= 各组词数之和�
         <li><strong>列表动作渲染口径</strong>：<code>list</code> / <code>delete</code> / <code>scan</code> 的返回体都带五张表，但渲染层只打印 <code>category</code> 对应的那一张（见上文警示块）。</li>
         <li><strong>跨版本字段口径</strong>：v4.0.0 起 <code>list</code> 的渲染按 <code>category</code> 取表（旧版 <code>??</code> 链在 <code>list</code> / <code>scan</code> 恒返回全部五张表时永不前进，永远只显示人物卡）；同版起 <code>null</code> 的 <code>speechStyle</code> 不再被当作对象写入空壳，且「按 <code>basis</code> 自动推导语用规范」改为单一判定；脏条目（<code>null</code> / 标量）在 <code>normalizeSettingEntry</code> 里被过滤，旧版会在坏数据上抛 <code>TypeError</code> 打挂整个工具。</li>
         <li><strong>MCP 形态下的 root 限制</strong>：参数 <code>root</code> 必须落在服务器启动参数 <code>--root</code> 的书库根之内，越界会被静默回退，同时记 stderr。</li>
+        <li><strong>逐词静音的覆盖范围有限，且只作用于本书</strong>：<code>allowWords</code> 按<strong>词</strong>过滤 <code>bannedWords</code> 与 <code>speechStyle.honorBad</code> 两处，<strong>不覆盖</strong> <code>ritualBadPatterns</code>（正则）与 <code>title</code> 称谓规范；也<strong>不提供全局静音</strong>（全局静音会静默削弱所有书的覆盖，而人很难记得自己加过什么）。生效结果在解析端的 <code>allowedWords</code> 与 <code>sources.muted</code> 里，供调用方说明「为什么少报了几条」。</li>
         <li><strong>参数表禁止额外字段</strong>：<code>parameters.additionalProperties = false</code>。</li>
       </ul>
 

@@ -4,21 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>novel_fix_plan — 改稿台｜dsh-novel-writer 技术文档</title>
-<meta name="description" content="novel_fix_plan 的实现细节：plan / verify / mark 三个动作、mark 的 itemId + state 双必填与其不受引擎门禁约束的边界、待办项的稳定 id 与八类 type、severity 与 effort 的排序口径、locate 的段落级行号归因（宁可粗也不给错的行号）、hint 只给改写方向不生成正文的边界、fix-plan JSON 的原子写落盘，以及「正常文本不产出待办」的误报约束。">
+<meta name="description" content="novel_fix_plan 的实现细节：plan / verify / mark 三个动作、mark 的 itemId + state 双必填与其不受引擎门禁约束的边界、待办项的稳定 id 与八类 type、severity 与 effort 的排序口径、locate 的段落级行号归因与字面类的行号区间 / 子串守卫（宁可粗也不给错的行号）、2 字词待判档与本书用词豁免、hint 只给改写方向不生成正文的边界、fix-plan JSON 的原子写落盘，以及「正常文本不产出待办」的误报约束。">
 <link rel="stylesheet" href="../styles.css">
 <link rel="stylesheet" href="docs.css">
 <link rel="canonical" href="https://siweina.github.io/dsh-novel-writer/tools/novel-fix-plan.html">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="dsh-novel-writer">
 <meta property="og:title" content="novel_fix_plan — 改稿台｜dsh-novel-writer 技术文档">
-<meta property="og:description" content="novel_fix_plan 的实现细节：plan / verify / mark 三个动作、mark 的 itemId + state 双必填与其不受引擎门禁约束的边界、待办项的稳定 id 与八类 type、severity 与 effort 的排序口径、locate 的段落级行号归因（宁可粗也不给错的行号）、hint 只给改写方向不生成正文的边界、fix-plan JSON 的原子写落盘，以及「正常文本不产出待办」的误报约束。">
+<meta property="og:description" content="novel_fix_plan 的实现细节：plan / verify / mark 三个动作、mark 的 itemId + state 双必填与其不受引擎门禁约束的边界、待办项的稳定 id 与八类 type、severity 与 effort 的排序口径、locate 的段落级行号归因与字面类的行号区间 / 子串守卫（宁可粗也不给错的行号）、2 字词待判档与本书用词豁免、hint 只给改写方向不生成正文的边界、fix-plan JSON 的原子写落盘，以及「正常文本不产出待办」的误报约束。">
 <meta property="og:url" content="https://siweina.github.io/dsh-novel-writer/tools/novel-fix-plan.html">
 <meta property="og:locale" content="zh_CN">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="novel_fix_plan — 改稿台｜dsh-novel-writer 技术文档">
-<meta name="twitter:description" content="novel_fix_plan 的实现细节：plan / verify / mark 三个动作、mark 的 itemId + state 双必填与其不受引擎门禁约束的边界、待办项的稳定 id 与八类 type、severity 与 effort 的排序口径、locate 的段落级行号归因（宁可粗也不给错的行号）、hint 只给改写方向不生成正文的边界、fix-plan JSON 的原子写落盘，以及「正常文本不产出待办」的误报约束。">
+<meta name="twitter:description" content="novel_fix_plan 的实现细节：plan / verify / mark 三个动作、mark 的 itemId + state 双必填与其不受引擎门禁约束的边界、待办项的稳定 id 与八类 type、severity 与 effort 的排序口径、locate 的段落级行号归因与字面类的行号区间 / 子串守卫（宁可粗也不给错的行号）、2 字词待判档与本书用词豁免、hint 只给改写方向不生成正文的边界、fix-plan JSON 的原子写落盘，以及「正常文本不产出待办」的误报约束。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_fix_plan","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-fix-plan.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_fix_plan — 改稿台｜dsh-novel-writer 技术文档","description":"novel_fix_plan 的实现细节：plan / verify / mark 三个动作、mark 的 itemId + state 双必填与其不受引擎门禁约束的边界、待办项的稳定 id 与八类 type、severity 与 effort 的排序口径、locate 的段落级行号归因（宁可粗也不给错的行号）、hint 只给改写方向不生成正文的边界、fix-plan JSON 的原子写落盘，以及「正常文本不产出待办」的误报约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-fix-plan.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.4.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_fix_plan, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_fix_plan — 改稿台｜dsh-novel-writer 技术文档","description":"novel_fix_plan 的实现细节：plan / verify / mark 三个动作、mark 的 itemId + state 双必填与其不受引擎门禁约束的边界、待办项的稳定 id 与八类 type、severity 与 effort 的排序口径、locate 的段落级行号归因与字面类的行号区间 / 子串守卫（宁可粗也不给错的行号）、2 字词待判档与本书用词豁免、hint 只给改写方向不生成正文的边界、fix-plan JSON 的原子写落盘，以及「正常文本不产出待办」的误报约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-fix-plan.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.5.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_fix_plan, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -35,6 +35,7 @@
       <h1>novel_fix_plan</h1>
       <div class="note"><b>v6.1.0：</b><code>plan</code> 仍最多展示并保存 12 项；<code>verify</code> 使用未按该上限截断的检测全集比较，不把被高优先级问题挤出的旧项误判已解决。</div>
       <div class="note"><b>v6.1.0：</b>章节参数先精确匹配完整文件名，再匹配省略扩展名的文件名；同名多扩展名时必须提供完整文件名，明确指定却不存在的扩展名不会改读另一格式。</div>
+      <div class="note"><b>v6.5.0：</b>字面类待办（禁用词 / 语用不符）改为<strong>行号区间</strong>定位，并<strong>跳过子串巧合</strong>（与 <a href="novel-continuity-check.html">novel_continuity_check</a> 的用语审计同一套邻接守卫）；2 字词标为<strong>待判档</strong>，读原文后判定只是相邻巧合即可 <code>mark state: "skip"</code>。</div>
       <p class="doc__lead">
         改稿台。把某一章的测量偏差翻译成<strong>按优先级排好序的待办清单</strong>：每项带稳定 <code>id</code>、类型、原文定位（<code>lineStart</code> / <code>lineEnd</code> / <code>excerpt</code>）、现值与目标区间、可照改的原著锚段、严重度与改写代价，以及一句<strong>改写方向</strong>。<code>action: "plan"</code> 出清单，<code>"verify"</code> 复测，<code>"mark"</code> 标记单项。<strong>工具本身从不生成改写后的正文句子</strong>。
       </p>
@@ -94,12 +95,12 @@
           <tr><th><code>id</code></th><td>string</td><td>稳定 id，形如 <code>fix-&lt;类型 slug&gt;-&lt;lineStart&gt;-&lt;sha1 前 8 位&gt;</code>。sha1 由 <code>类型 | key | lineStart | lineEnd</code> 派生（<code>key</code> 是指标名、<code>word:词</code>、<code>honor:词</code>、<code>ritual:模式</code>、<code>title:sister</code>、<code>bridge:候选类型</code>、<code>plot:伏笔 id</code> 等内部键）。<strong>同一章同一位置重新 <code>plan</code> 必得同一个 id</strong>，因此 <code>mark</code> 与跨次 <code>verify</code> 都能对齐同一项；正文改动导致行号变化时 id 随之变化。</td></tr>
           <tr><th><code>type</code></th><td>string</td><td>八类之一（中文，取自 <code>METRIC_TYPE</code> 与各 <code>collect*Items</code>）：句式偏离 / 抽象度过高 / 留白异常 / 禁用词 / 语用不符 / 衔接缺失 / 伏笔未回收 / 情感过直。</td></tr>
           <tr><th><code>locate</code></th><td>object</td><td><code>&#123; lineStart, lineEnd, excerpt &#125;</code>：段落的绝对行号区间（1 起，含空行计数）与<strong>该段原文节选</strong>（截 80 字）。<code>lineStart = lineEnd = 0</code> 表示该问题属全章 / 跨章层面、定位不到具体行。</td></tr>
-          <tr><th><code>current</code></th><td>string</td><td>当前实测值或命中描述。指标类为「维度名 + 实测值」（如 <code>complexity 0.61</code>）；禁用词为「命中「词」N 处（首个在第 N 行）」；语用项为「客套禁词「词」（第 N 行）」/「仪式禁式「样本」（第 N 行）」/「称谓「XX小姐」（第 N 行）」；情感过直为「情绪直陈 N 处（全章 M 处）」；衔接缺失为候选类型名；伏笔未回收为「未回收 N 章（最近提及：…）」。</td></tr>
+          <tr><th><code>current</code></th><td>string</td><td>当前实测值或命中描述。指标类为「维度名 + 实测值」（如 <code>complexity 0.61</code>）；禁用词为「命中「词」N 处（位置：第2-10行，第52行）」；语用项为「客套禁词「词」N 处（位置：…）」/「仪式禁式「样本」N 处（位置：…）」/「称谓「XX小姐」（位置：第N行）」；情感过直为「情绪直陈 N 处（全章 M 处）」；衔接缺失为候选类型名；伏笔未回收为「未回收 N 章（最近提及：…）」。<strong>字面类的位置是可能不连续的多个区间</strong>（<code>第2-10行，第52行</code>）；<code>locate.lineStart / lineEnd</code> 取首段起点与末段终点，是这些区间的<strong>超集</strong>——精确处看本字段。</td></tr>
           <tr><th><code>target</code></th><td>string</td><td>目标区间或目标状态。指标类为基线带 <code>low~high</code>（如 <code>0.38~0.52</code>；基线 <code>μ = 0</code> 时为空串）；禁用词为「改用「替代词」」或「避免使用该词」；衔接缺失为「补过渡/承接句（1 句即可）」；其余类别可能为空串。</td></tr>
           <tr><th><code>anchor</code></th><td>string</td><td>可照改的原著锚段（源自 <code>buildStyleAnchorPackage</code> 的抽样结果，与 <a href="novel-style-check.html">novel_style_check</a> 的 <code>fixAnchors</code> 同源）。<strong>只有指标类待办会带锚段</strong>，其余类别为空串。</td></tr>
           <tr><th><code>severity</code></th><td>integer</td><td>严重度 <strong>1–5</strong>（超出范围会被钳到边界）。指标类按 |σ| 分档：≥ 3σ → 5、≥ 2σ → 4、其余出带 → 3；<strong>退化成「全章层面」的指标项再降一档</strong>（<code>max(1, sev-1)</code>）。其余类别为固定值：禁用词 4、客套禁词 4、仪式禁式 4、称谓 3、情感过直 3、衔接缺失 2–4（时间硬跳 4 / 检查跳过 2 / 其余 3）、伏笔未回收 3–4（距离 ≥ 40 章或 <code>priority: "high"</code> → 4）。</td></tr>
           <tr><th><code>effort</code></th><td>integer</td><td>改写代价 <strong>1–3</strong>（超出范围会被钳到边界）：1 = 局部替换即可（有登记替代词的禁用词 / 客套词；衔接缺失里的<code>时间跳跃</code> / <code>时间过渡</code> / <code>钩子未接</code>），2 = 需要重写该句或该段（指标类段落项、情感过直、仪式禁式、称谓；衔接缺失里的<code>语义距离</code> / <code>人物断线</code>），3 = 需要通读全章或跨章处理（指标类的全章层面项、伏笔未回收；衔接缺失里的<code>检查跳过</code>）。同严重度时先做省事的项。</td></tr>
-          <tr><th><code>hint</code></th><td>string</td><td><strong>规则拼接的改写方向</strong>（一句话，含实测值与基线的对照，指标类还会带上「本段 X」与方向建议），例如「抽象度偏离：全章 41（基线 22，偏差 +86%），本段 48。这句抽象词过密，改成具体动作或物件。只改这一段的写法，不要整章重写。」<strong>不含改写后的正文句子。</strong><br><strong>软化后缀（v5.1.0 新增，只有三类带）</strong>：<code>abstractDensity</code> 抽象度 / <code>gapIndex</code> 留白指数 / <code>hedgeDensity</code> 不确定性三类指标的 <code>hint</code>，在原有前缀之后追加一句「（仅当这里读起来确实别扭才改；抒情、心理、留白段落属正常写法，可标记 skip 保留。）」。<strong>hint 前缀格式未变</strong>，只是句尾多这一句——它把这三维的默认处置从「改了」改成「先判断再决定」，抒情 / 心理 / 留白段落本来就该在这三维上偏离全书均值。</td></tr>
+          <tr><th><code>hint</code></th><td>string</td><td><strong>规则拼接的改写方向</strong>（一句话，含实测值与基线的对照，指标类还会带上「本段 X」与方向建议），例如「抽象度偏离：全章 41（基线 22，偏差 +86%），本段 48。这句抽象词过密，改成具体动作或物件。只改这一段的写法，不要整章重写。」<strong>不含改写后的正文句子。</strong><br><strong>软化后缀（v5.1.0 新增，只有三类带）</strong>：<code>abstractDensity</code> 抽象度 / <code>gapIndex</code> 留白指数 / <code>hedgeDensity</code> 不确定性三类指标的 <code>hint</code>，在原有前缀之后追加一句「（仅当这里读起来确实别扭才改；抒情、心理、留白段落属正常写法，可标记 skip 保留。）」。<strong>hint 前缀格式未变</strong>，只是句尾多这一句——它把这三维的默认处置从「改了」改成「先判断再决定」，抒情 / 心理 / 留白段落本来就该在这三维上偏离全书均值。<br><strong>档位前缀（v6.5.0 新增，只有字面类带）</strong>：禁用词 / 客套禁词的 <code>hint</code> 以 <code>【硬命中·3字以上】</code> 或 <code>【待判·2字词】</code> 开头。档位只在这一句里表达——<code>type</code> 字符串按契约不变（见「八类待办的判定来源」）。<strong>待判档必须给出「可以不改」的出口</strong>：句尾追加「…请读第2-10行自行判断：若确为该词就改；若读该行发现只是相邻巧合，可跳过本项（mark state=&quot;skip&quot;），并说明判断依据。」，否则会退化成一律照改。</td></tr>
         </tbody>
       </table>
 
@@ -117,8 +118,8 @@
           <tr><th>句式偏离</th><td>六维中<strong>四个「写法维度」</strong>的出带判定（<code>METRIC_TYPE</code> 把 <code>complexity</code> / <code>modifierDensity</code> / <code>actionDensity</code> / <code>hedgeDensity</code> 统一映射到本类）</td><td>该维相对偏差越出容差带，<strong>且绝对差值越过量级门槛</strong>：<code>complexity</code> 0.3（每句小句数）、<code>modifierDensity</code> 8、<code>actionDensity</code> 8、<code>hedgeDensity</code> 4（每千字点数）。低于门槛按「无量级差异」忽略</td></tr>
           <tr><th>抽象度过高</th><td>六维「抽象度」<code>abstractDensity</code> 出带</td><td>同上，量级门槛 <strong>8</strong>（每千字点数）</td></tr>
           <tr><th>留白异常</th><td>六维「留白指数」<code>gapIndex</code> 出带</td><td>同上，量级门槛 <strong>12</strong>（每千字留白点数）</td></tr>
-          <tr><th>禁用词</th><td>词源由 <code>core.resolveStyleRule</code> 单点裁决（见下文「词表与语用来源」）：<code>去重(用户登记 ∪ 文化基准默认表)</code> 后的正文逐行包含命中；显式登记的 <code>bannedWords: []</code> 表示「不要默认表」，此时只用用户表（可为空）</td><td>欧式背景作品出现「上香」一类用语冲突。每章每词最多一项，空串与重复词跳过</td></tr>
-          <tr><th>语用不符</th><td>设定表 <code>worldview.speechStyle</code>（<strong>合并全部 worldview 条目</strong>后的结果，与 <code>novel_continuity_check</code> 同口径）的<strong>三路</strong>：<code>honorBad</code>（客套禁词，逐行精确包含）、<code>ritualBadPatterns</code>（仪式禁式，按正则匹配，模式长度须 ≤ 200 字符）、<code>title</code>（<strong>仅当规范明确禁用「小姐」</strong>时才扫 <code>XX小姐</code>，每章只报第一处）</td><td>客套表达与已登记的文化基准不符（如中式背景用「提点」）。<code>speechStyle.tone</code> <strong>不参与</strong>本类判定</td></tr>
+          <tr><th>禁用词</th><td>词源由 <code>core.resolveStyleRule</code> 单点裁决（见下文「词表与语用来源」）：<code>去重(用户登记 ∪ 文化基准默认表)</code> 后的正文逐行包含命中，<strong>再经邻接守卫过滤</strong>（命中处紧邻的前/后一个字落在实证碰撞表里即判为子串巧合，不产出待办）；显式登记的 <code>bannedWords: []</code> 表示「不要默认表」，此时只用用户表（可为空）。<strong>本书用词豁免</strong>（<code>worldview.allowWords</code>）里的词已在裁决点被静音，不会走到这里</td><td>欧式背景作品出现「上香」一类用语冲突。每章每词最多一项，空串与重复词跳过。<strong>档位</strong>：3 字以上 = 硬命中（语料实测 0 误报）；2 字词 = 待判（可能是「这[里正]是」这类相邻巧合，读原文可判无问题）</td></tr>
+          <tr><th>语用不符</th><td>设定表 <code>worldview.speechStyle</code>（<strong>合并全部 worldview 条目</strong>后的结果，与 <code>novel_continuity_check</code> 同口径）的<strong>三路</strong>：<code>honorBad</code>（客套禁词，逐行精确包含 + 邻接守卫过滤，与禁用词同一套定位）、<code>ritualBadPatterns</code>（仪式禁式，按正则匹配，模式长度须 ≤ 200 字符，<strong>报全部命中行的区间</strong>，上限 200 处）、<code>title</code>（<strong>仅当规范明确禁用「小姐」</strong>时才扫 <code>XX小姐</code>，每章只报第一处）</td><td>客套表达与已登记的文化基准不符（如中式背景用「提点」）。<code>speechStyle.tone</code> <strong>不参与</strong>本类判定。客套禁词的档位口径与禁用词一致（2 字词 = 待判）</td></tr>
           <tr><th>衔接缺失</th><td><code>detectChapterBridge(上一章 → 本章)</code> 的候选<strong>逐条</strong>转成待办（<code>current</code> 就是候选类型名）；<strong>第一章没有上一章，整类跳过</strong>。检查本身抛错时也会产出一条 <code>衔接·检查跳过</code> 候选，不会静默等于「衔接正常」</td><td>候选类型共 6 种：<code>衔接·时间跳跃</code>（硬跳词直接报）、<code>衔接·时间过渡</code>（软跳且上一章结尾无时间锚）、<code>衔接·语义距离</code>（本地 embedding 相似度 &lt; 0.45，受语义开关与引擎可用性双重门控）、<code>衔接·人物断线</code>（上一章结尾出场人物在本章开头 800 字内全未出现）、<code>衔接·钩子未接</code>（上章钩子与本章开头字符命中率 &lt; 25%）、<code>衔接·检查跳过</code></td></tr>
           <tr><th>伏笔未回收</th><td><code>readPlots</code> 中 <code>status !== "done"</code> 的条目：<code>distance = 本章章号 − 最近提及章号</code>，<code>distance ≥ 20</code> 的<strong>每条</strong>产出一项</td><td>埋设已超过 <strong>20 章</strong>仍未回收；章号解析不出的条目跳过（宁可漏报），本章章号也解析不出时整类跳过</td></tr>
           <tr><th>情感过直</th><td>纯文本判定，<strong>不依赖设定表</strong>：全章「程度副词 + 情绪词」紧邻命中（中间只允许 0–2 字，可带一个「的/地/得」）<strong>总数 ≥ 3 次</strong>才报，只取命中数最多的<strong>前 2 个段落</strong>定位</td><td>词表示例：「非常 / 十分 / 极其 / 极为 / 无比 / 格外 …」×「难过 / 悲伤 / 愤怒 / 高兴 / 恐惧 …」。单次出现视为正常行文（如「她非常高兴地答应了」）不报</td></tr>
@@ -131,7 +132,7 @@
         <b>指标类（前三类）的容差口径与 <code>novel_style_check</code> 不同。</b>本工具用<strong>排除本章后的基线</strong>自身的推荐容差（<code>recTol</code> = 作者自身章节波动的 1.5σ），而不是「含本章的全书基线」——含本章时，一个故意写坏的章节会把 σ 抬到 90%+，导致它自己反而不出带，改稿台就哑了。基线章节数 &lt; 3 时容差下限抬到 <strong>25%</strong>（小样本），基线章节数 &lt; 2 时<strong>整类跳过</strong>。
       </div>
 
-      <h2><code>locate</code>：段落级行号归因</h2>
+      <h2><code>locate</code>：段落级 / 行号区间归因</h2>
       <p>现有分析引擎是<strong>段落级 / 句式级统计</strong>，没有行级归因。做法是先把正文切成段落并记下行号区间，逐段算指标，再把偏离最严重的若干段回映射成行号。三类问题的归因口径<strong>并不相同</strong>：</p>
       <div class="formula">// ① 行号索引：换行先归一到 \n，1 起编号（与 novel_read 同口径）
 lines = text.replace(/\r\n?/g, "\n").split("\n")
@@ -149,9 +150,20 @@ for 每个章级出带的维度 v：
     一段都没有 → 退化成一条「全章层面」项：lineStart = lineEnd = 0，severity 降一档、effort = 3
     有段落项 → lineStart/lineEnd = 该段行区间，excerpt = 该段原文截 80 字，effort = 2
 
-// ③ 字面类（禁用词 / 语用不符）—— 逐行精确包含，行号给到「首处命中行」
-lineNo = 第一处包含该词的行的行号（firstLineContaining / 正则命中偏移 → lineOfOffset）
-excerpt = 该行原文 trim 后截 80 字；lineStart = lineEnd = lineNo
+// ③ 字面类（禁用词 / 语用不符）—— 逐行扫描全部命中，行号给到「区间列表」（v6.5.0）
++ locateWord(rawLines, word)：
++     linesContaining(rawLines, word)          ← core.js：全部命中行（文件内真实行号）
++     for 每一处命中： if isGuardedArtifact(word, line, at) → 记 guarded（丢弃该处）
++                     else → 记 kept（该行进结果）
++     全部命中都被守卫挡掉 → 该词不产生待办（挡掉的词在 summary 里披露）
++     ranges = mergeLineRanges(keptLines)      ← core.js
++     rangesText = formatLineRanges(ranges)    ← 「第2-10行，第52行」
++ locate.lineStart = 首个区间起点，lineEnd = 末个区间终点（全部命中的超集）
++ locate.excerpt = 首个命中行的原文 trim 后截 80 字
++ current = 「命中「词」K 处（位置：第2-10行，第52行）」；guarded &gt; 0 时追加「另有 G 处疑似相邻巧合（邻接守卫忽略）」
++ 档位：词长 ≥ 3 → hint 前缀【硬命中·3字以上】；词长 = 2 → 【待判·2字词】+「若读该行发现只是相邻巧合，可跳过本项」
++ 仪式禁式（正则）→ 扫出全部命中，按 mergeLineRanges 汇总区间（上限 200 处），sample 取首个命中文本
++ 称谓（XX小姐）→ 仍只报第一处（与 novel_continuity_check 同口径，prompt 全章统一）
 
 // ④ 情感过直 —— 段级命中计数；⑤ 衔接缺失 —— 用候选详情里「…」引号内的词做精确行定位；
 //    引号内取不到词 → 0/0 并在 hint 里说明「没有可精确定位的行」
@@ -159,7 +171,10 @@ excerpt = 该行原文 trim 后截 80 字；lineStart = lineEnd = lineNo
 
 定位不到时：lineStart = lineEnd = 0，并在 hint 里说明这是全章 / 跨章层面的问题</div>
       <div class="warn note">
-        <b>宁可粗，也不给错的行号。</b>指标类给的是段落区间（约 40 字起）而不是某一行，且段落必须<strong>自身也出带</strong>才被归因——否则会出现「全章留白偏高，却指向一段根本不带省略号的文字」这种自相矛盾的定位。做出这个取舍是因为<strong>错误的行号比宽泛的区间更有害</strong>：模型会照着一个错位置去改，改坏的是本来没问题的句子。凡归因置信不足，一律退到整段区间；连段都定不到时给 0 并在 <code>hint</code> 里说明。调用方应对 <code>lineStart = lineEnd = 0</code> 做显式分支，不要把它当作「第 1 行」。
+        <b>宁可粗，也不给错的行号。</b>指标类给的是段落区间（约 40 字起）而不是某一行，且段落必须<strong>自身也出带</strong>才被归因——否则会出现「全章留白偏高，却指向一段根本不带省略号的文字」这种自相矛盾的定位。做出这个取舍是因为<strong>错误的行号比宽泛的区间更有害</strong>：模型会照着一个错位置去改，改坏的是本来没问题的句子。凡归因置信不足，一律退到整段区间；连段都定不到时给 0 并在 <code>hint</code> 里说明。调用方应对 <code>lineStart = lineEnd = 0</code> 做显式分支，不要把它当作「第 1 行」。字面类同此口径：<code>locate</code> 的两端是全部命中区间的<strong>超集</strong>（首段起点 → 末段终点），<strong>精确到每一段的位置在 <code>current</code> / <code>hint</code> 的「位置：」里</strong>——要逐段核对请读那里，不要把 <code>lineStart</code>-<code>lineEnd</code> 当成一段连续文本。
+      </div>
+      <div class="note">
+        <b>字面类的定位与审计共用同一套判据（v6.5.0）。</b>禁用词 / 客套禁词走 <code>core.linesContaining</code> + <code>mergeLineRanges</code> + <code>formatLineRanges</code> + <code>isGuardedArtifact</code>，与 <a href="novel-continuity-check.html">novel_continuity_check</a> 的用语审计<strong>逐字同口径</strong>——审计说「这[里正]是」不是问题，改稿台就不许再报一条待办（否则用户得在两个工具之间对着猜）。守卫判的是命中处<strong>紧邻的前/后一个字</strong>是否落在实证碰撞表（<span class="src">lib/lexicons/guards.js</span>）里，<strong>只收有实证的字</strong>：错填会吃掉真命中（静默漏报），所以宁可少填。某个词的全部命中都被守卫挡掉时，该词<strong>不产生待办</strong>，并在 <code>summary</code> 的备注里如实披露「N 个词的全部命中经邻接守卫判为相邻巧合」。
       </div>
       <p>行号的坐标系是<strong>绝对行号</strong>（1 起，含空行与标题行），与 <a href="novel-read.html">novel_read</a> 的 <code>formatRead</code> 一致，可直接把 <code>lineStart</code> 交给 <code>novel_read</code> 的 <code>offset</code> 读回上下文。换行先归一为 <code>\n</code>（<code>\r\n</code> / <code>\r</code> 都算一个换行），因此「字符偏移 → 行号」与「行数组下标」永远在同一个坐标系里。</p>
 
@@ -194,7 +209,7 @@ mark   → 读-改-写该文件，只把 itemId 指定项的 state / stateAt 更
       </div>
 
       <h2>不误报</h2>
-      <p><strong>正常文本不产出待办项</strong>：各类型只在指标实际出带、命中禁用词 / 语用禁式或钩子确实未承接时才生成条目；全部合格时 <code>items</code> 为空数组，这是一次<strong>成功</strong>调用而不是失败。为了不误报，实现里设了四道闸：<strong>①</strong> 指标须同时越过相对容差带与<strong>绝对量级门槛</strong>；<strong>②</strong> 段落必须与全章<strong>同向</strong>偏离且自己也出带才被归因（同维最多 <strong>1</strong> 段，v5.1.0 起由 3 收紧到 1——同一维度只报最严重的那一段，其余同类段落由 <code>summary</code> 的计数体现，清单不再被同一维度的多段刷屏）；<strong>③</strong> 无基线、无伏笔、无法判定章号时<strong>整类跳过</strong>；禁用词表为空（当前文化基准下无可扫的词）时同样跳过该类并说明原因，不另行兜底；<strong>④</strong> 章节正文短于 40 字时跳过全部指标类检查（空文本的六维全是 0，与基线一比必然「处处出带」）。</p>
+      <p><strong>正常文本不产出待办项</strong>：各类型只在指标实际出带、命中禁用词 / 语用禁式或钩子确实未承接时才生成条目；全部合格时 <code>items</code> 为空数组，这是一次<strong>成功</strong>调用而不是失败。为了不误报，实现里设了<strong>五道闸</strong>：<strong>①</strong> 指标须同时越过相对容差带与<strong>绝对量级门槛</strong>；<strong>②</strong> 段落必须与全章<strong>同向</strong>偏离且自己也出带才被归因（同维最多 <strong>1</strong> 段，v5.1.0 起由 3 收紧到 1——同一维度只报最严重的那一段，其余同类段落由 <code>summary</code> 的计数体现，清单不再被同一维度的多段刷屏）；<strong>③</strong> 无基线、无伏笔、无法判定章号时<strong>整类跳过</strong>；禁用词表为空（当前文化基准下无可扫的词）时同样跳过该类并说明原因，不另行兜底；<strong>④</strong> 章节正文短于 40 字时跳过全部指标类检查（空文本的六维全是 0，与基线一比必然「处处出带」）；<strong>⑤（v6.5.0）</strong> 字面类命中先过<strong>邻接守卫</strong>（子串巧合不计），被守卫整词挡掉的词不产出待办并在 <code>summary</code> 里披露；已被本书用词豁免（<code>allowWords</code>）静音的词同样不产出。</p>
       <p>清单长度有上限：单次最多 <strong>12 条</strong>（<code>DEFAULT_MAX_ITEMS</code>，v5.1.0 起由 40 收紧到 12），超出部分按排序<strong>截断</strong>，并在 <code>summary</code> 的备注里披露「待办超过 12 条，已按严重度从高到低截断 N 条（清单上限固定，<strong>先处理保留下来的高优先级项</strong>）」。上限收紧的用意是让清单<strong>可执行</strong>：一次抛出四十条，模型只会从上往下挑几条做，其余全部沦为空转；只留 12 条则每一条都是排序意义上最值得先动的，<strong>被截断的部分不是「漏掉了」，而是「这一轮先不管」</strong>——先按清单顺序处理保留下来的项，改完再跑一次 <code>plan</code>，原先被截断的项若仍成立会重新排进来（同一维度现在只报最严重的 1 段，因此回访时的清单也不会重新膨胀）。若清单接近或撞到这个上限，说明这一章的偏离是系统性的（通常该整段重写，而不是逐项修）。注意上限<strong>不</strong>由调用方传参放宽：<code>buildFixPlan</code> 内部虽有 <code>opts.maxItems</code>，但工具层固定传 <code>{}</code>，提示里不会再出现「可传 opts.maxItems」这类做不到的建议。</p>
 
       <h2>词表与语用来源（与开写包 / 审计同源）</h2>
@@ -204,6 +219,11 @@ mark   → 读-改-写该文件，只把 itemId 指定项的 state / stateAt 更
         <li><strong>语用规范取合并结果</strong>：<code>speechStyle</code> 不再只取「单个条目」，而是<strong>合并全部 worldview 条目</strong>（数组去重、对象浅合并），与 <code>novel_continuity_check</code> 同口径。</li>
         <li><strong>空词表的提示文案跟随实际基准</strong>：不再一律写「未登记 worldview 禁用词表」，改为「当前文化基准「X」的禁用词表为空，禁用词检查已跳过」。空表可能来自两种情况：显式登记 <code>bannedWords: []</code>，或「现代都市」基准本身没有文化禁用词——两者都会如实写明基准名称，便于判断。</li>
         <li><strong>显式 <code>bannedWords: []</code> 的语义</strong>：表示「我不要默认表」，此时确实不扫禁词（沿用既有语义），只用用户自己登记的表（为空则该类跳过）。</li>
+        <li><strong>逐词静音（v6.5.0）：<code>worldview.allowWords</code> = 本书用词豁免</strong>。登记后这些词在<strong>本书</strong>的禁用词与 <code>speechStyle.honorBad</code> 两路都不再报（过滤发生在同一个裁决点，所以改稿台 / 开写包 / 审计三处自动一致）。<strong>只作用于本书</strong>——不提供全局静音：全局静音会静默削弱所有书的覆盖，而人很难记得自己什么时候加过。用途是那些「在这本书里本来就是对」的词：修仙小说里的「修士」、中文历史小说里的「教堂」。登记方式（走真实工具入口，<code>action: "add"</code> 即可，不必先有别的 worldview 条目）：
+          <div class="formula">novel_settings add category=worldview name="用词豁免" allowWords=["修士"]
+  → 写入 worldview 条目的 allowWords（净化：数组、去空、去重、每项 String、单项限长 40 字、最多 200 条）
+  → core.resolveStyleRule 把这些词从 bannedWords 与 speechStyle.honorBad 里滤掉，并在 sources.muted 计数</div>
+          被静音的词<strong>不是被删掉</strong>：它仍留在词表里，别的书照常检查；本次清单的 <code>summary</code> 备注会写明「已按本书用词豁免静音 N 个词」——<strong>少报必须留痕</strong>，否则与漏报无法区分。</li>
       </ul>
 
       <h2>约束与边界</h2>
@@ -211,7 +231,8 @@ mark   → 读-改-写该文件，只把 itemId 指定项的 state / stateAt 更
         <li><strong>不生成正文</strong>：<code>hint</code> 只给改写方向，<code>anchor</code> 只给可参照的原著样例；返回体里没有任何「改写后的句子」。插件不调用在线模型，也从不代替作者写字。</li>
         <li><strong>只读正文，只写自己的清单文件</strong>：<code>plan</code> 不修改章节正文，落盘只发生在 <code>&lt;root&gt;/.novel-writer/audits/</code> 下的 <code>fix-plan-*.json</code>；<code>verify</code> 连清单都不写，也不写指标缓存或旧版伏笔迁移文件；<code>mark</code> 只改该文件里的处置状态。</li>
         <li><strong>取消会抛错，不会伪装成空结果</strong>：调用被中止时（<code>AbortError</code>）三个动作一律向上抛，<strong>不落进任何降级分支</strong>——否则一次取消会返回「成功但清单为空」，被误读成「这一章没有问题」。</li>
-        <li><strong>行号可以被整段，但不会给错</strong>：指标类 <code>locate</code> 的最小粒度是段落；字面类（禁用词 / 语用）才精确到行；<code>lineStart = lineEnd = 0</code> 表示全章 / 跨章层面，需按分支处理。行号是<strong>绝对行号</strong>（与 <a href="novel-read.html">novel_read</a> 同口径），不随任何 <code>offset</code> 重编号。</li>
+        <li><strong>行号可以被整段，但不会给错</strong>：指标类 <code>locate</code> 的最小粒度是段落；字面类（禁用词 / 语用）给的是<strong>命中行的区间列表</strong>（<code>current</code> / <code>hint</code> 里的「位置：第2-10行，第52行」逐段精确，<code>locate</code> 两端是这些区间的超集）；<code>lineStart = lineEnd = 0</code> 表示全章 / 跨章层面，需按分支处理。行号是<strong>绝对行号</strong>（与 <a href="novel-read.html">novel_read</a> 同口径），不随任何 <code>offset</code> 重编号。<strong>字面类还有一个前置过滤</strong>：命中处紧邻前/后一个字落在实证碰撞表里（如「这[里正]是」「[在下]面」）时该处<strong>不计入</strong>，全被挡掉的词不产出待办。</li>
+        <li><strong>档位只在 <code>hint</code> 前缀里，不改 <code>type</code></strong>：<code>type</code> 是八类固定中文词（e2e 契约），档位由 <code>hint</code> 的 <code>【硬命中·3字以上】</code> / <code>【待判·2字词】</code> 表达。<strong>待判档必须留「可以不改」的出口</strong>——2 字中文词当子串的概率天然很高（实测无辜句子里 14/15 条是误报），一律照改会把作者的正常用词改掉。</li>
         <li><strong>id 与正文位置绑定</strong>：先按 id 精确配对；位置变化后，仅按可确认的问题身份（禁用词、语用命中词、指标方向与摘录等）配对。只同类型不能确认是同一项时分别报告 <code>resolved</code> 与 <code>new</code>。</li>
         <li><strong><code>mark</code> 的校验只有三条</strong>：<code>itemId</code> 非空、<code>state</code> ∈ {<code>done</code>, <code>skip</code>}、该章已落盘清单里存在该 id。任一不满足即报错；<strong>它不重新测量、不校验正文是否真的改了</strong>，标记纯粹是给下一次 <code>plan</code> / <code>verify</code> 看的处置台账。</li>
         <li><strong>依赖已有材料，质量随材料走</strong>：禁用词 / 语用项依赖 <a href="novel-settings.html">novel_settings</a> 的设定表，衔接项依赖上一章可读，伏笔项依赖 <a href="novel-plot.html">novel_plot</a> 的登记质量。材料缺失时相应类别不产出待办（而不是产出猜测），原因写进 <code>notes</code> 与 <code>summary</code>，并随清单一起落盘。</li>
@@ -232,9 +253,10 @@ mark   → 读-改-写该文件，只把 itemId 指定项的 state / stateAt 更
 
       <h2>源码位置</h2>
       <ul>
-        <li><span class="src">lib/fixplan.js</span> —— 改稿台主体：<code>buildFixPlan</code> / <code>verifyFixPlan</code> / <code>markFixItem</code> 三个导出，以及内部的 <code>computeFixPlan</code>（测量 → 六类收集 → 排序截断 → 落盘）、<code>makeItem</code> / <code>makeItemId</code>（9 字段与稳定 id）、<code>buildParagraphIndex</code> / <code>lineOfOffset</code> / <code>firstLineContaining</code> / <code>lineExcerpt</code>（段落索引与行号归因）、<code>sortItems</code>（四级排序）、<code>METRIC_TYPE</code> / <code>TYPE_SLUG</code> / <code>METRIC_DIRECTION</code> / <code>METRIC_MIN_DELTA</code>（类型映射与阈值常量）、<code>collectMetricItems</code> / <code>collectBannedItems</code> / <code>collectPragmaticItems</code> / <code>collectEmotionItems</code> / <code>collectBridgeItems</code> / <code>collectPlotItems</code>（六类判定）。</li>
+        <li><span class="src">lib/fixplan.js</span> —— 改稿台主体：<code>buildFixPlan</code> / <code>verifyFixPlan</code> / <code>markFixItem</code> 三个导出，以及内部的 <code>computeFixPlan</code>（测量 → 六类收集 → 排序截断 → 落盘）、<code>makeItem</code> / <code>makeItemId</code>（9 字段与稳定 id）、<code>buildParagraphIndex</code> / <code>lineOfOffset</code> / <code>firstLineContaining</code> / <code>lineExcerpt</code>（段落索引与行号归因）、<code>locateWord</code> / <code>locateOfRanges</code> / <code>hitClause</code> / <code>TIER_TAG</code> / <code>reviewTierTail</code>（v6.5.0：字面类的守卫过滤 + 行号区间 + 档位话术）、<code>sortItems</code>（四级排序）、<code>METRIC_TYPE</code> / <code>TYPE_SLUG</code> / <code>METRIC_DIRECTION</code> / <code>METRIC_MIN_DELTA</code>（类型映射与阈值常量）、<code>collectMetricItems</code> / <code>collectBannedItems</code> / <code>collectPragmaticItems</code> / <code>collectEmotionItems</code> / <code>collectBridgeItems</code> / <code>collectPlotItems</code>（六类判定）。</li>
+        <li><span class="src">lib/lexicons/guards.js</span> —— 子串碰撞守卫表（<code>COLLISION_GUARDS</code> 的 <code>notBefore</code> / <code>notAfter</code> / <code>notAfterSeq</code> / <code>notBeforeSeq</code> + 实证 <code>evidence</code>）；改稿台与审计共用 <code>core.isGuardedArtifact</code> 判定，口径不可能分叉。</li>
         <li><span class="src">lib/index.js</span> —— <code>registerNovelFixPlan</code>：工具注册、参数与输出 schema、三个动作分支、<code>mark</code> 的 <code>itemId</code> + <code>state</code> 校验（在引擎门禁之前分支）、<code>plan</code> / <code>verify</code> 的「写作助手功能」门禁、渲染文本。</li>
-        <li><span class="src">lib/core.js</span> —— <code>resolveStyleRule</code>（禁用词 / 语用词源的单点裁决，开写包 / 审计 / 改稿台共用）、<code>withFileTx</code> / <code>atomicWriteJson</code>（清单文件的原子写与串行事务）、<code>normalizeChapterKey</code> / <code>sanitizeSegment</code>（落盘文件名的章号归一与清洗）、<code>readSettings</code>（禁用词与语用规范）、<code>readPlots</code>（伏笔表）、<code>detectChapterBridge</code>（衔接检测）、<code>metricChaptersCached</code> / <code>buildStyleAnchorPackage</code>（分章测量缓存与锚包）、<code>readSentenceState</code>（引擎开关）。</li>
+        <li><span class="src">lib/core.js</span> —— <code>resolveStyleRule</code>（禁用词 / 语用词源的单点裁决，开写包 / 审计 / 改稿台共用；<code>allowWords</code> 逐词静音也在这里生效）、<code>linesContaining</code> / <code>mergeLineRanges</code> / <code>formatLineRanges</code> / <code>isGuardedArtifact</code>（v6.5.0：字面类定位与子串守卫，本页与审计共用）、<code>withFileTx</code> / <code>atomicWriteJson</code>（清单文件的原子写与串行事务）、<code>normalizeChapterKey</code> / <code>sanitizeSegment</code>（落盘文件名的章号归一与清洗）、<code>readSettings</code>（禁用词与语用规范）、<code>readPlots</code>（伏笔表）、<code>detectChapterBridge</code>（衔接检测）、<code>metricChaptersCached</code> / <code>buildStyleAnchorPackage</code>（分章测量缓存与锚包）、<code>readSentenceState</code>（引擎开关）。</li>
         <li><span class="src">lib/style-metrics.js</span> —— <code>measureStyleMetrics</code> / <code>computeBaselineFromPerChapter</code> / <code>judgeAgainstBaseline</code> / <code>METRIC_ORDER</code> / <code>METRIC_LABELS</code>（六维测量、基线与出带判定）。</li>
         <li><span class="src">lib/core.js</span> —— <code>ALL_TOOLS</code> / <code>TOOL_LABELS</code> 注册表条目（开关面板与关闭报错文案）。</li>
       </ul>

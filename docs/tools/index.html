@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="技术文档总览｜dsh-novel-writer">
 <meta name="twitter:description" content="dsh-novel-writer 的 19 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","name":"技术文档总览｜dsh-novel-writer","description":"dsh-novel-writer 的 19 个工具实现细节：参数契约、计算原理、约束边界与源码位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/index.html","inLanguage":"zh-CN","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.4.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer","url":"https://siweina.github.io/dsh-novel-writer/"}}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","name":"技术文档总览｜dsh-novel-writer","description":"dsh-novel-writer 的 19 个工具实现细节：参数契约、计算原理、约束边界与源码位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/index.html","inLanguage":"zh-CN","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.5.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer","url":"https://siweina.github.io/dsh-novel-writer/"}}</script>
 </head>
 <body class="docs">
 
@@ -55,6 +55,12 @@
       <ul class="doc__releases">
         <li>
           <details open>
+            <summary><code>6.5.0</code> · 2026-10-09 <span class="doc__rel-sum">用语审计误报修复：子串守卫、行号定位与分档，并堵住正则回溯</span></summary>
+            <p>用语审计此前是纯子串匹配，而禁用词 93% 是 2 字词，于是「里正」会在「这<b>里正</b>是」上误报（实测 19 句无辜句子报出 15 条，其中 14 条是误报）。本版：新增<b>子串碰撞守卫表</b>（紧邻字/序列有实证才挡）、候选改为<b>行号区间定位</b>（不再贴原文，按需回读）、按词长分<b>硬命中 / 待判 / 提示</b>三档（2 字词交给模型读那一行自行判断，明确允许判"不是问题"）、中式基准下禁词与客套词<b>去重</b>（旧版每词报两遍）。安全侧：登记的正则新增<b>静态校验</b>（拒绝嵌套量词与无界通配——实测同类模式在 29 字符上要跑 40 秒）并改为<b>逐句扫描</b>，被拒绝的模式会显式报出而不是静默跳过。新增<b>逐词静音</b>（<code>worldview.allowWords</code>，仅本书生效）。工具数与参数契约不变（19 个）。</p>
+          </details>
+        </li>
+        <li>
+          <details>
             <summary><code>6.4.0</code> · 2026-10-09 <span class="doc__rel-sum">用语规范接线：欧式设定下的中式市井词拦截链全线接通</span></summary>
             <p>开写包现在会渲染「语用规范」（称谓、客套、仪式、语气），禁用词表改为与用户登记合并而非整份替换，并取消了 10 条截断。连贯性审计的章节模式同时返回用语命中。工具数与参数不变（19 个）。</p>
           </details>

@@ -4,21 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>novel_continuity_check — 连贯性审计｜dsh-novel-writer 技术文档</title>
-<meta name="description" content="novel_continuity_check 的实现细节：四种互斥模式（衔接检查/OOC 哨兵/大纲对照/全书设定表扫描）的参数、输出契约、判定阈值与证据取得方式、同章号多文件检测、章节模式并行的用语/语用扫描（<code>styleCandidates</code>）与「必查项清单」（<code>checklist</code>），以及被静默跳过的路径。">
+<meta name="description" content="novel_continuity_check 的实现细节：四种互斥模式（衔接检查/OOC 哨兵/大纲对照/全书设定表扫描）的参数、输出契约、判定阈值与证据取得方式、同章号多文件检测、章节模式并行的用语/语用扫描（<code>styleCandidates</code>）与「必查项清单」（<code>checklist</code>），以及被静默跳过的路径；v6.5.0 起用语/语用候选分三档（<code>tier</code>）并随附行号区间（<code>locations</code>），2 字词交由模型按行复核，用户登记的仪式正则在登记与执行两处做静态安全校验。">
 <link rel="stylesheet" href="../styles.css">
 <link rel="stylesheet" href="docs.css">
 <link rel="canonical" href="https://siweina.github.io/dsh-novel-writer/tools/novel-continuity-check.html">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="dsh-novel-writer">
 <meta property="og:title" content="novel_continuity_check — 连贯性审计｜dsh-novel-writer 技术文档">
-<meta property="og:description" content="novel_continuity_check 的实现细节：四种互斥模式（衔接检查/OOC 哨兵/大纲对照/全书设定表扫描）的参数、输出契约、判定阈值与证据取得方式、同章号多文件检测、章节模式并行的用语/语用扫描（<code>styleCandidates</code>）与「必查项清单」（<code>checklist</code>），以及被静默跳过的路径。">
+<meta property="og:description" content="novel_continuity_check 的实现细节：四种互斥模式（衔接检查/OOC 哨兵/大纲对照/全书设定表扫描）的参数、输出契约、判定阈值与证据取得方式、同章号多文件检测、章节模式并行的用语/语用扫描（<code>styleCandidates</code>）与「必查项清单」（<code>checklist</code>），以及被静默跳过的路径；v6.5.0 起用语/语用候选分三档（<code>tier</code>）并随附行号区间（<code>locations</code>），2 字词交由模型按行复核，用户登记的仪式正则在登记与执行两处做静态安全校验。">
 <meta property="og:url" content="https://siweina.github.io/dsh-novel-writer/tools/novel-continuity-check.html">
 <meta property="og:locale" content="zh_CN">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="novel_continuity_check — 连贯性审计｜dsh-novel-writer 技术文档">
-<meta name="twitter:description" content="novel_continuity_check 的实现细节：四种互斥模式（衔接检查/OOC 哨兵/大纲对照/全书设定表扫描）的参数、输出契约、判定阈值与证据取得方式、同章号多文件检测、章节模式并行的用语/语用扫描（<code>styleCandidates</code>）与「必查项清单」（<code>checklist</code>），以及被静默跳过的路径。">
+<meta name="twitter:description" content="novel_continuity_check 的实现细节：四种互斥模式（衔接检查/OOC 哨兵/大纲对照/全书设定表扫描）的参数、输出契约、判定阈值与证据取得方式、同章号多文件检测、章节模式并行的用语/语用扫描（<code>styleCandidates</code>）与「必查项清单」（<code>checklist</code>），以及被静默跳过的路径；v6.5.0 起用语/语用候选分三档（<code>tier</code>）并随附行号区间（<code>locations</code>），2 字词交由模型按行复核，用户登记的仪式正则在登记与执行两处做静态安全校验。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_continuity_check","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-continuity-check.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_continuity_check — 连贯性审计｜dsh-novel-writer 技术文档","description":"novel_continuity_check 的实现细节：四种互斥模式（衔接检查/OOC 哨兵/大纲对照/全书设定表扫描）的参数、输出契约、判定阈值与证据取得方式、同章号多文件检测、章节模式并行的用语/语用扫描（<code>styleCandidates</code>）与「必查项清单」（<code>checklist</code>），以及被静默跳过的路径。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-continuity-check.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.4.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_continuity_check, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_continuity_check — 连贯性审计｜dsh-novel-writer 技术文档","description":"novel_continuity_check 的实现细节：四种互斥模式（衔接检查/OOC 哨兵/大纲对照/全书设定表扫描）的参数、输出契约、判定阈值与证据取得方式、同章号多文件检测、章节模式并行的用语/语用扫描（<code>styleCandidates</code>）与「必查项清单」（<code>checklist</code>），以及被静默跳过的路径；v6.5.0 起用语/语用候选分三档（<code>tier</code>）并随附行号区间（<code>locations</code>），2 字词交由模型按行复核，用户登记的仪式正则在登记与执行两处做静态安全校验。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-continuity-check.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.5.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_continuity_check, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -34,8 +34,12 @@
     <article class="doc">
       <h1>novel_continuity_check</h1>
       <p class="doc__lead">
-        连贯性审计。四种模式由参数选择且<strong>互斥</strong>：<code>chapter</code> 做单章衔接检查（时间跳变 / 语义距离 / 人物延续 / 钩子承接），<code>outline</code> 做创作资料大纲方向行与正文开头的关键词重合度对照，<code>ooc</code> 做登记角色的情绪基线偏离哨兵；三者都不传时对照设定表扫描全书，输出矛盾候选（同章号多文件 / 数字口径 / 人物缺场 / 别名 / 设定重复 / 用语与语用冲突）。<strong><code>chapter</code> 模式除衔接候选外，还会对<em>本章</em>独立跑同一套用语/语用扫描，结果放在 <code>styleCandidates</code></strong>（v6.4.0 起）。全部判定由本地规则与本地向量引擎完成，不调用在线模型；返回值是<strong>候选</strong>而非结论，逐条需人工确认；<code>checklist</code> 字段列出本次<strong>覆盖与未覆盖</strong>的维度。
+        连贯性审计。四种模式由参数选择且<strong>互斥</strong>：<code>chapter</code> 做单章衔接检查（时间跳变 / 语义距离 / 人物延续 / 钩子承接），<code>outline</code> 做创作资料大纲方向行与正文开头的关键词重合度对照，<code>ooc</code> 做登记角色的情绪基线偏离哨兵；三者都不传时对照设定表扫描全书，输出矛盾候选（同章号多文件 / 数字口径 / 人物缺场 / 别名 / 设定重复 / 用语与语用冲突）。<strong><code>chapter</code> 模式除衔接候选外，还会对<em>本章</em>独立跑同一套用语/语用扫描，结果放在 <code>styleCandidates</code></strong>（v6.4.0 起）。全部判定由本地规则与本地向量引擎完成，不调用在线模型；返回值是<strong>候选</strong>而非结论，逐条需人工确认；<code>checklist</code> 字段列出本次<strong>覆盖与未覆盖</strong>的维度。v6.5.0 起，用语/语用的每条候选带 <code>tier</code>（<code>"hard"</code> / <code>"review"</code> / <code>"info"</code>）、<code>word</code> 与 <code>locations</code>（<strong>该文件内真实行号</strong>区间），2 字词进「待判」档交由模型按行复核。
       </p>
+
+      <div class="warn note">
+        <b>v6.5.0：用语/语用候选改为「三档 + 行号定位」，并挡住会让宿主卡死的正则。</b>旧实现是 <code>text.includes(word)</code> 裸子串匹配，而禁用词 <strong>93% 是 2 字词</strong>（默认表 69 条中 64 条）——中文没有词边界，2 字词当子串的概率天然很高。实测：19 句无害句子报出 15 条候选，其中 14 条是误报（「这<em>里正</em>是」「<em>在下</em>面」「大<em>大人</em>物」）；同一批语料现在只剩 <strong>1 条</strong>（那 1 条是真命中）。做法是四条：① 逐条候选新增 <code>tier</code> / <code>word</code> / <code>locations</code> 三个字段（<code>type</code> 字符串<strong>保持不变</strong>，档位只由 <code>tier</code> 表达）；② 2 字词降到「复核级」，给行号区间让模型自己读那一行判断；③ 有实证的子串碰撞守卫（<code>lib/lexicons/guards.js</code>）；④ 用户登记的仪式正则先过静态安全校验，扫描改为<strong>逐句</strong>，被拒绝的模式<strong>显式报出</strong>而不是静默跳过。细节见下文「5 · 用语/语用扫描的定位、分档与安全」。
+      </div>
 
       <div class="warn note">
         <b>v6.4.0：章节模式不再漏掉用语/语用扫描，并新增「必查项清单」。</b>旧实现在传入 <code>chapter</code> 时只做「与上一章的衔接审计」就返回，函数尾部的世界观禁词与语用规范扫描<strong>根本执行不到</strong>——用户写完一章自检看到的「候选 0 条」只代表衔接没问题，与「有没有写出禁词」毫无关系。现在两种模式共用同一套四路扫描（禁词 / 客套 / 仪式 / 称谓）。同时，全书模式新增 <code>checklist</code>：未登记 <code>speechStyle</code>、未登记人物、本次未启用大纲对照等<strong>盲区</strong>都会以「跳过 / 未启用」显式列出，避免把「没查」读成「没事」。
@@ -66,11 +70,11 @@
         <thead><tr><th>字段</th><th>类型</th><th>内容</th></tr></thead>
         <tbody>
           <tr><th><code>book</code></th><td>string</td><td>净化后的书名</td></tr>
-          <tr><th><code>candidates</code></th><td>array</td><td>候选列表。每项为 <code>{ type, detail, chapters? }</code>，<code>type</code> 与 <code>detail</code> 必返；<code>chapters</code> 为章节文件名数组</td></tr>
+          <tr><th><code>candidates</code></th><td>array</td><td>候选列表。每项为 <code>{ type, detail, chapters? }</code>，<code>type</code> 与 <code>detail</code> 必返；<code>chapters</code> 为章节文件名数组。<strong>v6.5.0 起，用语/语用扫描产出的一切候选（含「文化基准存疑」与被拒绝的模式）还带 <code>tier</code> / <code>word</code> / <code>locations</code></strong>；衔接 / OOC / 大纲三路<strong>不带</strong>这三个字段（它们的定位口径是 <code>chapters</code> 与 <code>detail</code> 内的原文引用）</td></tr>
           <tr><th><code>advice</code></th><td>string</td><td>按模式与候选条数生成的处理建议</td></tr>
           <tr><th><code>action</code></th><td>string</td><td>哨兵模式返回 <code>"衔接"</code> / <code>"大纲对照"</code> / <code>"OOC"</code>；无参数扫描模式不返回该字段</td></tr>
           <tr><th><code>chapter</code></th><td>string</td><td>衔接模式返回目标章的文件名（含「第一章无上一章可比」的提前返回）</td></tr>
-          <tr><th><code>styleCandidates</code></th><td>array</td><td><strong>仅 <code>chapter</code> 模式返回</strong>（v6.4.0）：本章的用语/语用命中，元素形状与 <code>candidates</code> 相同（<code>{ type, detail, chapters? }</code>，<code>type</code> 取 <code>用语冲突</code> / <code>语用冲突·客套</code> / <code>语用冲突·仪式</code> / <code>语用冲突·称谓</code>，<code>chapters</code> 恒为本章文件名）。<strong>不与衔接候选合并</strong>——两类问题的判定依据与修法不同，混在一个数组里会让「衔接 0 条」掩盖「禁词命中 3 条」。</td></tr>
+          <tr><th><code>styleCandidates</code></th><td>array</td><td><strong>仅 <code>chapter</code> 模式返回</strong>（v6.4.0）：本章的用语/语用命中。v6.5.0 起元素为 <code>{ type, tier, word, detail, locations, chapters? }</code>——<code>tier</code> 取 <code>"hard"</code> / <code>"review"</code> / <code>"info"</code>；<code>word</code> 为命中的词（仪式一路为模式串，称谓一路的 <code>type</code> 没有 <code>word</code>）；<code>locations</code> 为 <code>[{ chapter, ranges: [{ from, to }] }]</code>，<code>ranges</code> 是该章文件内的真实行号区间。<code>type</code> 仍是 <code>用语冲突</code> / <code>语用冲突·客套</code> / <code>语用冲突·仪式</code> / <code>语用冲突·称谓</code> / <code>文化基准存疑</code>，被拒绝执行的仪式模式另有两个诚实命名 <code>语用冲突·仪式（模式被拒绝执行）</code> 与 <code>语用冲突·仪式（模式无法编译）</code>（均 <code>tier: "info"</code>、<code>locations: []</code>）。<code>chapters</code> 恒为本章文件名。<strong>不与衔接候选合并</strong>——两类问题的判定依据与修法不同，混在一个数组里会让「衔接 0 条」掩盖「禁词命中 3 条」。</td></tr>
           <tr><th><code>checklist</code></th><td>array</td><td>v6.4.0：本次审计的<strong>必查项清单</strong>，元素为 <code>{ item, state, note }</code>。<code>state</code> 取 <code>checked</code>（本次已扫）/ <code>skipped</code>（本次应扫但缺登记或数据）/ <code>off</code>（本模式不含，需另调参数）。全书模式列 11 项，章节模式列 5 项。</td></tr>
           <tr><th><code>reportFile</code></th><td>string</td><td>仅无参数扫描模式返回审计报告路径；三种哨兵模式不落盘、不返回该字段</td></tr>
         </tbody>
@@ -149,8 +153,76 @@ thr = n ≤ 4 ? 0.30 : 2σ
       <p><strong>数字口径。</strong>扫描 <code>\d+\s*(?:万亿|千万|百万|十万|[万亿千百])</code> 或 <code>[零一二两三四五六七八九十]{1,2}(?:万亿|千万|百万|十万|[万亿千百])</code>，去掉空白后要求写法以数量单位字（万亿 / 千万 / 百万 / 十万 / 万 / 亿 / 千 / 百 / 十）结尾，并剔除「十」「百」「千」「万」「亿」这类纯单位字写法。把写法解析回数值（<code>万亿</code>=1e12、<code>千万</code>=1e7、<code>百万</code>=1e6、<code>十万</code>=1e5、<code>亿</code>=1e8、<code>万</code>=1e4、<code>千</code>=1e3、<code>百</code>=1e2、<code>十</code>=1e1），<strong>只对数值相同而写法不同的成对条目</strong>生成候选，总数上限 20 条。</p>
       <p><strong>人物与别名。</strong>对每个登记人物统计「全文不含其 name 的章节」：全部章节都不含 → 「人物缺失」；部分不含且全书章节数 &gt; 1 → 「人物缺场」；两者 <code>chapters</code> 都只取前 5 章。若登记了 <code>alias</code> 却全书无任何别名出现 → 「别名未用」（<code>chapters</code> 为空数组）。</p>
       <p><strong>设定重复。</strong>对 characters / locations / items 三张表，取 <code>normalizeSettingList</code> 后的 name 序列，出现次数大于 1 的名字 → 「设定重复」。</p>
-      <p><strong>用语与语用。</strong>词源由 <code>lib/core.js</code> 的 <code>resolveStyleRule(settings, chapterTexts)</code> <strong>单点裁决</strong>（v6.4.0 P0-4；开写包与本工具共用同一处，结构上不可能再分叉）：文化基准取 <code>worldview</code> 登记（<code>cultureSource: "worldview"</code>），未登记时对传入正文跑 <code>hintCulture</code> 检测（<code>"detected"</code>，判不出则 <code>"default"</code> 落欧式）；<code>bannedWords</code> = <strong>去重（用户登记 ∪ 该文化基准对应的默认表）</strong>——<code>western → DEFAULT_BANNED_WORDS</code>（欧式默认表：老夫 / 上香 / 掌柜 / 客栈 / 银两 / 衙门 / 郎中…）、<code>eastern → SPEECH_STYLE_RULES.eastern.honorBad</code>（禁<em>西式</em>词：Miss / 先生 / 教堂 / 神甫…）、<code>modern → 空</code>；显式登记 <code>bannedWords: []</code> 会使 <code>defaultEnabled: false</code>（只用用户表 = 「我不要默认表」），此前的实现是「用户登记非空就整份丢弃默认表」——<strong>越精心配置、防护越弱</strong>。语用三路扫的是 <code>styleRule.speechStyle</code>（<strong>合并全部 worldview 条目</strong>的结果）：<code>honorBad</code>（客套，建议词取 <code>honorGood</code>）、<code>ritualBadPatterns</code>（逐条 <code>RegExp</code> 全局匹配，编译失败或 &gt; 200 字符的模式跳过）与称谓规范——称谓仅在 <code>speechStyle.title</code> 文本中含「不用…小姐 / 小姐…禁用 / 禁用…小姐 / 不称…小姐」这类<strong>否定式</strong>时才扫描 <code>XX小姐</code>。四路的 <code>chapters</code> 一律经 <code>capCandidateChapters</code> 截断到 5 章；<code>type</code> 取 <code>用语冲突</code> / <code>语用冲突·客套</code> / <code>语用冲突·仪式</code> / <code>语用冲突·称谓</code>，章节模式复用同一实现产出（仅措辞改「本章」）。</p>
+      <p><strong>用语与语用。</strong>词源由 <code>lib/core.js</code> 的 <code>resolveStyleRule(settings, chapterTexts)</code> <strong>单点裁决</strong>（v6.4.0 P0-4；开写包与本工具共用同一处，结构上不可能再分叉）：文化基准取 <code>worldview</code> 登记（<code>cultureSource: "worldview"</code>），未登记时对传入正文跑 <code>hintCulture</code> 检测（<code>"detected"</code>，判不出则 <code>"default"</code> 落欧式）；<code>bannedWords</code> = <strong>去重（用户登记 ∪ 该文化基准对应的默认表）</strong>——<code>western → DEFAULT_BANNED_WORDS</code>（欧式默认表：老夫 / 上香 / 掌柜 / 客栈 / 银两 / 衙门 / 郎中…）、<code>eastern → SPEECH_STYLE_RULES.eastern.honorBad</code>（禁<em>西式</em>词：Miss / 先生 / 教堂 / 神甫…）、<code>modern → 空</code>；显式登记 <code>bannedWords: []</code> 会使 <code>defaultEnabled: false</code>（只用用户表 = 「我不要默认表」），此前的实现是「用户登记非空就整份丢弃默认表」——<strong>越精心配置、防护越弱</strong>。语用三路扫的是 <code>styleRule.speechStyle</code>（<strong>合并全部 worldview 条目</strong>的结果）：<code>honorBad</code>（客套，建议词取 <code>honorGood</code>）、<code>ritualBadPatterns</code>（逐条 <code>RegExp</code>，v6.5.0 起先过 <code>validatePattern</code> 静态校验、再<strong>按句</strong>匹配；被拒绝的模式显式报出而非跳过，见下节）与称谓规范——称谓仅在 <code>speechStyle.title</code> 文本中含「不用…小姐 / 小姐…禁用 / 禁用…小姐 / 不称…小姐」这类<strong>否定式</strong>时才扫描 <code>XX小姐</code>。四路的 <code>chapters</code> 一律经 <code>capCandidateChapters</code> 截断到 5 章；<code>type</code> 取 <code>用语冲突</code> / <code>语用冲突·客套</code> / <code>语用冲突·仪式</code> / <code>语用冲突·称谓</code>，章节模式复用同一实现产出（仅措辞改「本章」）。</p>
       <p><strong>审计报告落盘。</strong>扫描模式把候选写入 <code>&lt;root&gt;/.novel-writer/audits/&lt;book&gt;-&lt;sha1(book|章节文件名逗号串)[:16]&gt;.json</code>，内容为 <code>{ book, generatedAt, checklist, candidates }</code>（v6.4.0 起含 <code>checklist</code>，报告自身也说明本次覆盖了哪些维度）；文件名中的哈希只由书名与章节文件名列表决定，正文改动不换文件，增删章节才换。</p>
+
+      <h3>5 · 用语/语用扫描的定位、分档与安全（v6.5.0）</h3>
+      <p>用语/语用四路（禁词 / 客套 / 仪式 / 称谓）由 <code>collectStyleCandidates(styleRule, chapterTexts, singleChapter)</code> 一处实现，全书模式与章节模式共用。本节回答四个口径问题：<strong>报成什么档</strong>、<strong>报在哪里</strong>、<strong>什么不算命中</strong>、<strong>什么样的模式不许跑</strong>。</p>
+
+      <p><strong>① 三档（<code>tier</code>）。</strong>档位的由来是词长：中文没有词边界，<code>text.includes(word)</code> 无法区分「里正＝官名」与「这里＋正是」——而这恰恰与词长强相关。</p>
+      <table>
+        <thead><tr><th><code>tier</code></th><th>判据</th><th>含义与由来</th><th>调用方该怎么办</th></tr></thead>
+        <tbody>
+          <tr><th><code>hard</code></th><td>命中词 <strong>≥ 3 字</strong>；仪式正则命中；称谓命中</td><td>语料实测 <strong>0 误报</strong>——3 字以上的中文词当子串撞车的概率可以忽略</td><td>直接按 <code>detail</code> 的定位改</td></tr>
+          <tr><th><code>review</code></th><td>命中词<strong>恰好 2 字</strong></td><td>插件在字面上<strong>无法判断</strong>这是不是那个词，只能确定「这两个字在这里相邻出现」。<code>detail</code> 会写明这一点并举反例（<code>这[里正]是</code> / <code>[在下]面</code> / <code>大[大人]物</code>）</td><td><strong>读 <code>locations</code> 指的那几行自行判断</strong>：确为该词则改；只是巧合则<strong>不要改</strong>，并说明判断依据。<code>detail</code> 里已显式允许判「不是问题」</td></tr>
+          <tr><th><code>info</code></th><td>纯提示：<code>文化基准存疑</code>、被拒绝执行的仪式模式</td><td>不指向正文里的「错词」，而是告诉调用方<strong>本轮有什么没被保护到</strong>（例如某个模式根本没生效）</td><td>不需要改正文；按提示处置（显式登记 <code>basis</code> / 按建议改写模式后重新登记）</td></tr>
+        </tbody>
+      </table>
+      <div class="note">
+        <b>为什么 <code>review</code> 档必须把判断权交出去。</b>这与插件里既有的「情感净化预警」是<strong>同一套做法</strong>：检测到污染时不替作者删句子，而是提示「这里可能不自然，请抽查原文复核」——判据在字面上不成立时，插件给证据与位置，判断留给读得懂上下文的一方。反过来，若 <code>review</code> 档也写成肯定句，模型会退化成「一律照改」，把本来正确的官名、地名、人名改坏。
+      </div>
+
+      <p><strong>② 行号定位（<code>locations</code>）。</strong>候选不再贴原文片段，而是给<strong>该文件内的真实行号区间</strong>：</p>
+      <div class="formula">rawLines  = 章节正文.split(/\r?\n/)              ← 逐章切行
+lineNos   = linesContaining(rawLines, word)        ← 该文件内真实行号（升序去重）
+ranges    = mergeLineRanges(lineNos)               ← [2,3,5,6] → [{from:2,to:3},{from:5,to:6}]
+detail 内 = formatLineRanges(ranges)               ← 「第2-10行，第52行」（超 8 段截断）
+locations = [{ chapter: 章节文件名, ranges }]      ← 逐章取号，再带章名合并</div>
+      <p>为什么是行号而不是原文：<strong>省 token</strong>（不复制正文）、<strong>可扩展</strong>（一条区间覆盖几十处命中，贴原文只能贴首处）、<strong>可回读</strong>（模型需要上下文时用 <a href="novel-read.html">novel_read</a> 按 <code>offset</code> 读回，行号就是它要的那个坐标系）。这也与词表审计已有的「带行号定位」口径一致——同一本书里，两套审计给出的位置说法不再有两套坐标系。</p>
+      <div class="warn note">
+        <b>历史教训：行号必须是「某个文件的真实行号」。</b>旧实现把各章首尾拼成一份文本再取偏移，报出的 <code>Lx</code> 既<strong>不是任何文件的真实行号</strong>、也<strong>不带章名</strong>——模型拿着它读不回原文，等于给了一个无法使用的位置。因此现在的口径固定为「<strong>先逐章取号、再带章名合并</strong>」，绝不在拼接文本上取偏移。
+      </div>
+
+      <p><strong>③ 子串守卫：什么不算命中。</strong><code>lib/lexicons/guards.js</code> 的 <code>COLLISION_GUARDS</code> 是一张<strong>有实证的子串碰撞表</strong>。判据极简且可审计：词<strong>紧邻的前一个字</strong>（<code>notBefore</code>）或<strong>紧邻的后一个字</strong>（<code>notAfter</code>）落在表里，即判为巧合。</p>
+      <div class="formula">「这[里正]是」   前一字「这」 ∈ 里正.notBefore  → 巧合（这里 + 正是）
+「[在下]面」     后一字「面」 ∈ 在下.notAfter   → 巧合（在 + 下面）
+「大[大人]物」   后一字「物」 ∈ 大人.notAfter   → 巧合（大 + 人物）
+「[老夫]老妻」   后随序列「老妻」 ∈ 老夫.notAfterSeq → 巧合（多字序列：单字判不到）</div>
+      <p><code>notAfterSeq</code> / <code>notBeforeSeq</code> 是多字序列通道，用于单字判不到的场合：<code>老夫</code> 的匹配后紧跟的字<strong>恒为「老」</strong>，而「老夫老矣」是真用法，所以不能把「老」放进 <code>notAfter</code>，只能判完整的「老妻」序列。</p>
+      <div class="note">
+        <b>填写纪律（可执行，不是口号；详见该文件头部）。</b>收一个字必须同时满足两条：<br>
+        ① <strong>构词</strong>——<code>notBefore</code> 收 X ⟺ <strong>X + 词首字</strong>是常用词（这+里=「这里」，于是「这[里正]是」）；<code>notAfter</code> 收 Y ⟺ <strong>词尾字 + Y</strong> 是常用词（下+面=「下面」，于是「[在下]面」）。<br>
+        ② <strong>实证</strong>——该碰撞要有真实原句写进 <code>evidenceBy</code>；举不出实证就<strong>删掉</strong>。<br>
+        ③ <strong>两侧都成立就不填</strong>——多报一条走 <code>review</code> 档交给模型判断，比<strong>静默漏报</strong>好。<br>
+        ④ 每条守卫另带 <code>trueUse</code>（「该词作真词用、且紧邻字恰好就是该字」的反例句），测试据此断言<strong>真用法不被吃掉</strong>。<br>
+        <strong>不要凭「看起来像」推断</strong>：「秀才 ← 优秀人才」「和尚 ← 和平尚且」这类推断经实测并不成立（字不相邻）。
+      </div>
+      <div class="note">
+        <b>这张表被独立验证推翻过一次，值得记下来。</b>初版按「该字<em>能否跟在词后面</em>」来填，而不是按上面的<strong>构词</strong>规则，于是 <code>在下前</code>（下前不是词）、<code>大人会</code>（人会不是词）这类<strong>零收益的纯损失</strong>大量存在：验证代理构造 49 句真用法，<strong>31 句完全静默</strong>（连「被守卫忽略」的痕迹都没有）。重建后边界字/序列由 235 收到 <strong>120</strong>，同一套件复测<strong>静默 31 → 1</strong>（余 1 条是套件夹具假象）。<strong>教训</strong>：一个"宁可少填"的纪律如果不可执行，就等于没有——现在每个边界字都必须有实证、且必须给出不被吃掉的 <code>trueUse</code>，两者都成了测试断言。
+      </div>
+      <p><strong>实测对比。</strong>同一批 19 句无害句子（欧式基准、正文全部是合法中文）：旧实现报出 <strong>15 条</strong>候选（<code>老夫</code> / <code>伙计</code> / <code>门房</code> / <code>有劳</code> / <code>道士</code> / <code>油条</code> / <code>江湖</code> / <code>小二</code> / <code>里正</code> / <code>保长</code> / <code>见教</code> / <code>大人</code> / <code>官人</code> / <code>在下</code> …），其中 14 条是误报；现在只剩 <strong>1 条</strong>——<code>用语冲突</code>「铜板」，那是真命中（正文确实用了这个词）。</p>
+      <p><strong>已知残留（如实记录）。</strong><code>在下</code> 的 <code>着</code> 两侧都成立（「还[在下]着」是巧合、「[在下]着人送信」是真用法），按频次不对称保留，代价是后者仍静默；<code>圣器</code> / <code>科举</code> 因整条碰撞与真用法冲突而<strong>整条不填</strong>，其碰撞（「神圣器皿」「各科举行」）退化为 <code>review</code> 档候选，交给模型读那一行判断。</p>
+
+      <p><strong>④ 去重：中式基准下两路扫的是同一份表。</strong>中式基准的 <code>bannedWords</code> 与 <code>speechStyle.honorBad</code> <strong>是同一份表</strong>：登记时 <code>lib/index.js</code> 把 <code>SPEECH_STYLE_RULES.eastern.honorBad</code> 写进 <code>speechStyle.honorBad</code>，解析时 <code>lib/core.js</code> 又把同一批词当默认禁词表取出。旧版于是把每个词报两遍（一遍 <code>用语冲突</code>、一遍 <code>语用冲突·客套</code>）。现在客套一路<strong>跳过 ① 已报过的词</strong>，并在 ① 的 <code>detail</code> 末尾注明「（该词同属语用规范·客套，此处合并为一条）」。实测：同一批语料里 9 个命中词，旧版报 18 条、现在报 9 条。</p>
+
+      <p><strong>⑤ 正则安全：不让一条登记把宿主卡死。</strong>用户登记的 <code>ritualBadPatterns</code> 会被 <code>new RegExp(p, "g")</code> 原样编译并执行，而 <strong>Node 的同步正则无法中断</strong>——不能在运行期「跑 50 毫秒就掐掉」。实测（29 字符输入）：</p>
+      <div class="formula">/(上+)+香/      18.4 秒      ← 嵌套量词，指数级回溯
+/(上*)*香/      40.8 秒      ← 同上（外层 * 套内层 *）
+/上{0,20}香/     0.05 毫秒    ← 有界量词，线性</div>
+      <p>也就是说，一条写法有毒的模式能让宿主长时间无响应，而它在配置里只是「世界观里的一条仪式禁式」。因此 <code>validatePattern</code> 在<strong>入口</strong>做静态校验，三档处置：</p>
+      <table>
+        <thead><tr><th>档位</th><th>拒绝 / 提示的对象</th><th>给的建议</th></tr></thead>
+        <tbody>
+          <tr><th><code>reject</code></th><td><strong>嵌套量词</strong>：<code>(x+)+</code> / <code>(x*)*</code> / <code>(x+)*</code> / <code>(x{1,})*</code> 一类写法（指数回溯）</td><td>把内层重复改成有界量词，例如 <code>(上+)+</code> → <code>上{0,20}</code>；或去掉外层的重复</td></tr>
+          <tr><th><code>reject</code></th><td><strong>无界通配</strong>：<code>.*</code> / <code>[\s\S]*</code> / <code>[\s\S]+</code> / <code>.{n,}</code>（会跨越句号与换行，把不相干的上下文连起来误报）</td><td>改成句内且有界的间隔，例如 <code>.*</code> → <code>[^。！？\n]{0,20}</code></td></tr>
+          <tr><th><code>reject</code></th><td><strong>模式为空</strong>、<strong>超过 200 字符</strong>、<strong>正则语法错误</strong></td><td>拆分 / 检查括号与转义是否配对</td></tr>
+          <tr><th><code>warn</code></th><td><strong>无上界的重复次数</strong> <code>{n,}</code>（线性，但长文本上代价不可控）、<strong>整串锚定</strong> <code>^</code> / <code>$</code>（本审计是「在正文里找可疑片段」，锚定整串的模式通常匹配不到）</td><td>给出上界（<code>{1,}</code> → <code>{1,20}</code>）；去掉 <code>^</code> / <code>$</code></td></tr>
+        </tbody>
+      </table>
+      <p>三道防线叠在一起：<strong>① 登记时静态拒绝</strong>（<code>validatePattern</code> 给出可执行改法）+ <strong>② 执行时再校验一次</strong>（历史配置、导入的配置不经过登记路径，但它们照样会让扫描卡死）+ <strong>③ 逐句扫描</strong>。逐句（<code>splitSentences</code> 按 <code>。！？!?；;</code> 与换行切句，无标点的超长段落按 1000 字硬切）把单次匹配的输入规模限住，也让<strong>跨句匹配在结构上不可能</strong>——实测 <code>/上.*香/</code> 曾在 121 字文本上<strong>跨 3 句命中 115 字</strong>（它把「托盘上摆放…油墨香味」连成了一处并不存在的「仪式表达」）。</p>
+      <p><strong>被拒绝的模式会显式报出</strong>（<code>tier: "info"</code>，<code>type</code> 为 <code>语用冲突·仪式（模式被拒绝执行）</code> 或 <code>（模式无法编译）</code>，<code>locations: []</code>），<code>detail</code> 写明未生效的原因与改法，并明说<strong>「该模式目前不提供任何保护作用」</strong>。为什么不静默跳过：静默跳过会让用户以为自己在被保护，而实际上一条都没在查——报出来才有修的机会。</p>
+
+      <p><strong>⑥ 逐词静音（本书豁免）。</strong><code>resolveStyleRule</code> 支持按书静音：<code>worldview</code> 条目上的 <code>allowWords</code>（与调用方传入的 <code>opts.allowWords</code> 取并集）。被静音的词从 <code>bannedWords</code> 与 <code>speechStyle.honorBad</code> 里过滤掉，因此 <code>用语冲突</code> 与 <code>语用冲突·客套</code> 两路不再报它；静音结果在返回体的 <code>allowedWords</code> 与 <code>sources.muted</code> 中（改稿台已据此在 <code>summary.notes</code> 里披露「静音了几个词、豁免表是什么」）。边界两处：静音<strong>只作用于本书</strong>（不提供全局静音）；它按<strong>词</strong>匹配，因此<strong>不覆盖仪式禁式</strong>——那是正则，需要改模式或删条目。<code>review</code> 档候选的 <code>detail</code> 末尾也附了一行可执行的静音指引（同一本书里本来就该这么用的词，登记一次即可，不必每次重新判断）。字段语义与登记方式见 <a href="novel-settings.html">novel_settings</a> 的 <code>allowWords</code> 一节。</p>
 
       <h2>约束与边界</h2>
       <ul>
@@ -158,6 +230,11 @@ thr = n ≤ 4 ? 0.30 : 2σ
         <li><strong>「0 条候选」不等于「没问题」。</strong><code>checklist</code> 是专门为此存在的字段：每项带 <code>checked</code> / <code>skipped</code> / <code>off</code> 与原因（如「未登记 speechStyle，客套/仪式/称谓三路全部跳过」「大纲对照本次未启用」「必用词覆盖率不在本工具职责内」）。渲染成 <code>【本次审计覆盖范围】</code>；其中「跳过」只说明<strong>本次没扫</strong>，既不是通过也不是失败。</li>
         <li><strong>第一章的衔接检查是空结果，但用语/语用扫描照跑。</strong>目标章在排序后位于第 0 位时 <code>candidates: []</code>、<code>advice</code> 写明「第一章无上一章可比对」；<code>chapter</code>（v6.4.0 起补上）、<code>styleCandidates</code>、<code>checklist</code> 三个字段仍然返回。</li>
         <li><strong>候选条数与章节列表都有硬上限。</strong>每个候选的 <code>chapters</code> 最多 5 个文件名（<code>CANDIDATE_CHAPTER_LIMIT</code>），超出时 <code>detail</code> 追加「（共 N 章，仅列前 5）」。数字口径候选总数上限 20。例外：人物缺失 / 人物缺场两路同样是前 5 章，但<strong>不</strong>追加该提示文案——不能靠有没有该文案判断是否被截断。</li>
+        <li><strong>档位只在 <code>tier</code>，不在 <code>type</code>。</strong><code>type</code> 的取值集合是既有契约（<code>用语冲突</code> / <code>语用冲突·客套</code> / <code>语用冲突·仪式</code> / <code>语用冲突·称谓</code> / <code>文化基准存疑</code>），v6.5.0 <strong>没有</strong>把档位拼进 <code>type</code>；调用方按 <code>tier</code> 分支即可。衔接 / OOC / 大纲三路的候选<strong>没有</strong> <code>tier</code>（它们不是按词长分档的判定），读取时要用默认值兜底。</li>
+        <li><strong><code>review</code> 档是「请你判断」，不是「请你改」。</strong>它的存在前提是插件在字面上判不出来；调用方若把 <code>review</code> 当 <code>hard</code> 处理（一律照改），会把本来正确的官名 / 地名 / 人名改坏。正确用法是读 <code>locations</code> 指的那几行后再决定，并<strong>允许给出「不是问题」的结论</strong>——这与「情感净化预警：污染时提示 AI 抽查原文复核」是同一套做法。</li>
+        <li><strong><code>detail</code> 里的位置是摘要，<code>locations</code> 是完整数据。</strong>渲染进 <code>detail</code> 的位置有<strong>两级截断</strong>：每章最多 8 段行号区间（超出写「等 N 段」）、最多列 4 章（超出写「等 N 章」）。<code>locations</code> 字段本身<strong>不截断</strong>——它是给调用方按需回读用的原数据；只有 <code>chapters</code> 仍按 <code>CANDIDATE_CHAPTER_LIMIT</code> 截到 5 个文件名。要穷举全部位置请读 <code>locations</code>，不要从 <code>detail</code> 文案反推。</li>
+        <li><strong>子串守卫的错填代价不对称。</strong>漏填只是多报一条（走 <code>review</code> 档，模型能自己否掉）；<strong>错填会静默吃掉真命中</strong>——候选少一条通常没人察觉。因此守卫表只收有实证的边界字（每条带 <code>evidence</code> 原句），并明确拒绝「看起来像」的推断。</li>
+        <li><strong>逐词静音只覆盖词，不覆盖模式；且只作用于本书。</strong><code>allowWords</code> 过滤的是 <code>bannedWords</code> 与 <code>speechStyle.honorBad</code>；仪式禁式是正则，逐词静音对它无效（需改模式或删条目）。静音也<strong>不提供全局范围</strong>：全局静音会静默削弱所有书的覆盖，而人很难记得自己什么时候加过什么。</li>
         <li><strong>三路衔接检查会被静默跳过。</strong>语义距离一路需要 <code>semanticStyle</code> 功能开启且本地模型文件在位（加载失败有 30 秒冷却后重试）；人物延续一路需要设定表登记了长度 ≥ 2 的角色名；钩子承接一路需要 <code>novels/创作资料/&lt;书&gt;/钩子记录.md</code> 里有与上一章章号相同的方向行。任一前提不成立时该路<strong>不产生任何候选</strong>——「没报语义距离」不等于「语义衔接良好」。</li>
         <li><strong>唯一不静默的降级是整章读不出来。</strong>章节文本读取抛错时反向透出「衔接·检查跳过」候选，并在 <code>detail</code> 内附原因前 120 字，说明时间 / 人物 / 钩子三路本次全部跳过。</li>
         <li><strong>OOC 是统计哨兵而非判定。</strong>采样窗口固定为角色名前后各 120 字、每章最多 5 处，短场景与对白密集章的代表性有限；出现章数 ≤ 4 时改用固定阈值 0.3（小样本的 σ 会被离群值撑大）。<code>detail</code> 会写明本次用的是固定阈值还是 2σ，并在文案中提示「若有重大剧情触发情绪变化可忽略」。</li>
@@ -166,13 +243,13 @@ thr = n ≤ 4 ? 0.30 : 2σ
         <li><strong>章号对齐用解析结果，不取文件名首段数字。</strong>大纲与钩子两处都走 <code>parseChapterNumber</code>，因此 <code>第1卷03章.md</code> 按章号 3 匹配；全角章号（<code>第０１章</code>）先做宽度归一。</li>
         <li><strong>扫描模式只读正文与设定表，唯一写入是审计报告。</strong>报告写盘失败不阻塞执行；但 <code>reportFile</code> 字段在写盘前就已算出，<strong>写入失败时返回值里仍会出现这个路径</strong>，该文件此时并不存在。</li>
         <li><strong>未登记 worldview 的影响是双向的。</strong>「查不到禁用词表」不代表「不扫描」：<code>resolveStyleRule</code> 会先用 <code>hintCulture</code> 对传入正文判文化基准再选词表（eastern → 中式禁词、modern → 空表、其余 → 默认欧式基准），并把来源写进 <code>cultureSource</code>（<code>worldview</code> / <code>detected</code> / <code>default</code>）与 <code>checklist</code> 的备注。显式登记 <code>bannedWords: []</code>（「不要任何禁用词」）与「未登记」语义不同：前者 <code>defaultEnabled: false</code>，默认表整份不生效。</li>
-        <li><strong>数值与条数不可跨版本横比。</strong>v4.3.0 把候选章节列表统一截断到 5（此前用语 / 客套 / 仪式 / 称谓四路会把全书章节名全部塞进候选）、数字口径改为按数值分组去重（此前任意两两配对会产生 N(N−1)/2 条候选）、衔接模式的读取失败不再吞成空数组、书名在 <code>detectChapterBridge</code> 入口统一净化。<strong>v6.4.0</strong> 又有两处口径变化：<code>chapter</code> 模式开始返回 <code>styleCandidates</code>（此前该模式<strong>完全不扫</strong>禁词/语用，同样的正文本次会多出候选），且词源改由 <code>resolveStyleRule</code> 合并「用户登记 ∪ 默认表」（此前用户登记非空即丢弃默认表，同样的正文也可能多出候选）。同一本书在不同版本下的候选条数不可直接比较。</li>
+        <li><strong>数值与条数不可跨版本横比。</strong>v4.3.0 把候选章节列表统一截断到 5（此前用语 / 客套 / 仪式 / 称谓四路会把全书章节名全部塞进候选）、数字口径改为按数值分组去重（此前任意两两配对会产生 N(N−1)/2 条候选）、衔接模式的读取失败不再吞成空数组、书名在 <code>detectChapterBridge</code> 入口统一净化。<strong>v6.4.0</strong> 又有两处口径变化：<code>chapter</code> 模式开始返回 <code>styleCandidates</code>（此前该模式<strong>完全不扫</strong>禁词/语用，同样的正文本次会多出候选），且词源改由 <code>resolveStyleRule</code> 合并「用户登记 ∪ 默认表」（此前用户登记非空即丢弃默认表，同样的正文也可能多出候选）。同一本书在不同版本下的候选条数不可直接比较。<strong>v6.5.0</strong> 的变化更大：候选条数因「子串守卫 + 中式基准同表去重」而<strong>减少</strong>（实测 19 句无害语料 15 条 → 1 条；中式基准下 9 个命中词 18 条 → 9 条），同时每条候选<strong>多了</strong> <code>tier</code> / <code>word</code> / <code>locations</code> 三个字段、位置口径由「首处命中」改为「<strong>全部命中行的区间</strong>」，且跨句的模式不再可能命中——因此 v6.4.0 与 v6.5.0 的输出也不能直接对照。</li>
         <li><strong>语义距离的引擎状态与 <code>novel_semantic_search</code> 同源。</strong>该路复用 <code>embedding.isAvailable</code> / <code>embed</code> / <code>cosine</code>，与索引检索无关，是两次单段嵌入；仅对 600 字与 800 字文本做一次余弦，不落盘、不进索引缓存。</li>
       </ul>
 
       <h2>相关工具</h2>
       <ul>
-        <li><a href="novel-settings.html">novel_settings</a> —— 五张设定表的维护入口；本工具的人物缺场 / 别名 / 设定重复 / 用语与语用五路全部读它。</li>
+        <li><a href="novel-settings.html">novel_settings</a> —— 五张设定表的维护入口；本工具的人物缺场 / 别名 / 设定重复 / 用语与语用五路全部读它。v6.5.0 起 <code>worldview</code> 条目还承载<strong>逐词静音</strong>（<code>allowWords</code>，仅本书生效），字段语义见该页。</li>
         <li><a href="novel-outline.html">novel_outline</a> —— 创作资料（含 <code>剧情大纲.md</code> 与 <code>钩子记录.md</code>）的初始化与回填；大纲对照与钩子承接两路依赖它写入的 <code>- N </code> 方向行。</li>
         <li><a href="novel-summary.html">novel_summary</a> —— 章节摘要；长书审计后按摘要复核候选比逐章重读省 token。</li>
         <li><a href="novel-lexicon.html">novel_lexicon</a> —— 必用词表。其 <code>action: "audit"</code> 只管「必须写什么」（覆盖率 + 通用替身词），<strong>不含</strong>本工具的禁词/语用扫描；两者分工见该页「与世界观禁用词的分工」。本工具的 <code>checklist</code> 也会把这条边界写成一项。</li>
@@ -181,8 +258,9 @@ thr = n ≤ 4 ? 0.30 : 2σ
 
       <h2>源码位置</h2>
       <ul>
-        <li><span class="src">lib/index.js</span> —— 工具注册与四种模式的实现：<code>registerNovelContinuityCheck</code>、<code>collectStyleCandidates</code>（v6.4.0：用语/语用四路扫描的单一实现，全书与章节模式共用）、<code>buildAuditChecklist</code>（v6.4.0：必查项清单）、<code>capCandidateChapters</code>、<code>CANDIDATE_CHAPTER_LIMIT</code></li>
-        <li><span class="src">lib/core.js</span> —— <code>detectChapterBridge</code>（衔接四路）、<code>resolveStyleRule</code> / <code>hintCulture</code>（v6.4.0 词源与语用规范的唯一裁决点）、<code>TIME_JUMP_WORDS</code>、<code>readSettings</code>、<code>findChapter</code>、<code>parseChapterNumber</code>、<code>detectCulture</code>、<code>normalizeSettingList</code></li>
+        <li><span class="src">lib/index.js</span> —— 工具注册与四种模式的实现：<code>registerNovelContinuityCheck</code>、<code>collectStyleCandidates</code>（v6.4.0 起用语/语用四路扫描的单一实现，全书与章节模式共用；v6.5.0 重写为「逐行定位 + 三档 + 子串守卫 + 去重 + 逐句正则」）、<code>buildAuditChecklist</code>（v6.4.0：必查项清单）、<code>capCandidateChapters</code>、<code>CANDIDATE_CHAPTER_LIMIT</code></li>
+        <li><span class="src">lib/core.js</span> —— <code>detectChapterBridge</code>（衔接四路）、<code>resolveStyleRule</code> / <code>hintCulture</code>（v6.4.0 词源与语用规范的唯一裁决点；v6.5.0 增加逐词静音 <code>opts.allowWords</code> 与 <code>allowedWords</code> / <code>sources.muted</code> 回传）、<code>linesContaining</code> / <code>mergeLineRanges</code> / <code>formatLineRanges</code>（行号定位）、<code>isGuardedArtifact</code>（子串守卫判定）、<code>validatePattern</code>（正则静态安全校验）、<code>splitSentences</code>（逐句切分）、<code>TIME_JUMP_WORDS</code>、<code>readSettings</code>、<code>findChapter</code>、<code>parseChapterNumber</code>、<code>detectCulture</code>、<code>normalizeSettingList</code></li>
+        <li><span class="src">lib/lexicons/guards.js</span> —— <code>COLLISION_GUARDS</code> / <code>guardOf</code>（v6.5.0 新增）：有实证的子串碰撞守卫表，<code>notBefore</code> / <code>notAfter</code> 单字邻接与 <code>notBeforeSeq</code> / <code>notAfterSeq</code> 多字序列；文件头写明填写纪律与代价不对称</li>
         <li><span class="src">lib/analysis.js</span> —— <code>valenceStats</code> / <code>valenceSeries</code>（OOC 的情绪效价与否定过滤）</li>
         <li><span class="src">lib/embedding.js</span> —— <code>isAvailable</code> / <code>embed</code> / <code>cosine</code>（语义距离一路）</li>
         <li><span class="src">lib/lexicons/markers.js</span> —— <code>DEFAULT_BANNED_WORDS</code> / <code>SPEECH_STYLE_RULES</code> / <code>CULTURE_MARKERS</code></li>
