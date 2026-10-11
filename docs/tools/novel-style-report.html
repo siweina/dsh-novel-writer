@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_style_report — 风格画像报告｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_style_report 的实现细节：六维文笔指标的公式、词表与阈值，基线带 μ±σ 的计算与钳制规则，偏离判定分支，以及对调用方模型的约束。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_style_report","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-style-report.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_style_report — 风格画像报告｜dsh-novel-writer 技术文档","description":"novel_style_report 的实现细节：六维文笔指标的公式、词表与阈值，基线带 μ±σ 的计算与钳制规则，偏离判定分支，以及对调用方模型的约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-style-report.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.5.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_style_report, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_style_report — 风格画像报告｜dsh-novel-writer 技术文档","description":"novel_style_report 的实现细节：六维文笔指标的公式、词表与阈值，基线带 μ±σ 的计算与钳制规则，偏离判定分支，以及对调用方模型的约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-style-report.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.5.5","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_style_report, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -33,9 +33,10 @@
   <main class="docs__main">
     <article class="doc">
       <h1>novel_style_report</h1>
+      <div class="note"><b>v6.5.5：</b><strong>六维基线带的语料</strong>改为按面板「基线范围」选取（<strong>按全书</strong> 默认，＝旧行为；<strong>按部分</strong> 只用勾选的章，<strong>按书存储</strong>），<code>baseline</code> / <code>baselineChapterCount</code> / <code>baselineScope</code> / <code>baselineMode</code> 随之变化；勾选的章一章都取不到时回退<strong>按全书</strong>并在 <code>baselineScope</code> 里<strong>按原因</strong>写明（选择已失效 / 只选中了本章自身两种文案）。<strong>范围只影响「基线」这一项</strong>——文风指纹 / 高频词 / 题材流派 / 情感量化 / 氛围 12 维 / 语义风格距离，以及渲染层附的「原著段落 / 句式骨架」，仍全部是<strong>全书</strong>口径（它们回答的是「这本书是什么样」，不是「拿什么当基准」）。</div>
       <div class="note"><b>v6.1.0：</b>完整报告新增 <code>semanticDiagnostics: { reason, detail, count, at }</code>，表示本次语义风格计算的原因、细节、结果数与时间；功能未启用为 <code>not-run</code>，引擎不可用为 <code>no-engine</code>，精简报告省略明细。</div>
       <p class="doc__lead">
-        风格画像报告。对全书逐章测量六个文笔维度，汇总为基线带 μ±σ，并聚合文风指纹、高频词、题材流派、情感量化、氛围 12 维与语义风格距离，作为「测量数据」交给调用方模型做风格判断。<strong>插件只报数、不下结论</strong>：模型的判断可通过 <code>aiJudgment</code> 回传存盘，供后续续写时复用。
+        风格画像报告。对<strong>基线范围内的章节</strong>（默认全书）逐章测量六个文笔维度，汇总为基线带 μ±σ，并聚合文风指纹、高频词、题材流派、情感量化、氛围 12 维与语义风格距离，作为「测量数据」交给调用方模型做风格判断。<strong>插件只报数、不下结论</strong>：模型的判断可通过 <code>aiJudgment</code> 回传存盘，供后续续写时复用。
       </p>
 
       <h2>参数</h2>
@@ -57,9 +58,11 @@
         <tbody>
           <tr><th><code>report</code></th><td>string</td><td>人类可读的完整报告文本</td></tr>
           <tr><th><code>baseline</code></th><td>object</td><td>六维基线与每章测量值，见下文「基线带」</td></tr>
-          <tr><th><code>baselineChapterCount</code></th><td>integer</td><td>实际参与基线统计的章数（已剔除过短章节）</td></tr>
-          <tr><th><code>dimensions</code></th><td>object</td><td>指纹 / 词汇 / 题材 / 情感 / 氛围 12 维 / 语义距离</td></tr>
-          <tr><th><code>anchors</code> / <code>skeletons</code></th><td>array</td><td>原著代表性段落与句式骨架样例</td></tr>
+          <tr><th><code>baselineChapterCount</code></th><td>integer</td><td>实际参与基线统计的章数（已按面板「基线范围」筛选、并剔除正文 &lt; 40 字的章节）</td></tr>
+          <tr><th><code>baselineScope</code></th><td>string</td><td><strong>基线说明</strong>（v6.5.5，仅完整报告返回；<code>brief: true</code> 时该键不出现，范围文案并进 <code>brief</code> 文本，形如「六维基线（自定义基线 N 章…）」且只在自定义时才有）：写明本次基线取自哪些章——<code>按全书</code> 时为「<strong>全书 N 章</strong>」（语料只有 1 章时直接给章名）——注意本路<strong>没有「本章」概念</strong>（它不判定某一章，不排除任何章），故不写「除本章外」，这是本版新增字段，无历史读取方、不涉及兼容；<code>按部分</code> 时为「自定义基线 N 章（选中 M 章）」（有取不到的章时括注为「（选中 M 章，其中 K 章未纳入基线（已删除、或正文过短无法测量））」；<u>两种档位下</u> <code>N</code> 都是<strong>真正进 μ/σ 的可测章数</strong>——本路会用可测章池再解析一次范围（只覆盖回报口径），故 N 与同一返回体里的 <code>baselineChapterCount</code> <strong>恒等</strong>（按部分时若选中的章全过短而回退，则保留章池口径，由报告正文的"基线不足"另行说明，避免写出「回退全书 0 章」这种自相矛盾的文案）；<code>M</code> = 配置里选中的总数（含取不到的）），一章都取不到而回退时按原因给两种文案：「（自定义选择已失效，已回退全书）」或「（选中的章只有本章自身，不能作为自己的基线，已回退全书）」</td></tr>
+          <tr><th><code>baselineMode</code></th><td>string</td><td>范围档位（v6.5.5）：<code>all</code> = 按全书（默认） / <code>custom</code> = 按选中的部分章。<strong>回退后取值是 <code>all</code></strong>，要区分「本来就是按全书」与「回退」，读 <code>baselineScope</code> 文案里的后缀（按原因两种：「（自定义选择已失效，已回退全书）」/「（选中的章只有本章自身，不能作为自己的基线，已回退全书）」）</td></tr>
+          <tr><th><code>dimensions</code></th><td>object</td><td>指纹 / 词汇 / 题材 / 情感 / 氛围 12 维 / 语义距离（<strong>全书口径</strong>，不受基线范围影响）</td></tr>
+          <tr><th><code>anchors</code> / <code>skeletons</code></th><td>array</td><td>原著代表性段落与句式骨架样例（<strong>全书口径</strong>，与 <code>dimensions</code> 一样<b>不</b>受基线范围影响——本工具里只有 <code>baseline</code> 系列字段跟着范围走）</td></tr>
           <tr><th><code>brief</code></th><td>string</td><td>精简模式下的单句结论</td></tr>
           <tr><th><code>savedJudgment</code></th><td>string</td><td><code>action:"get"</code> 时返回的历史判断</td></tr>
         </tbody>
@@ -120,14 +123,28 @@ advMods：/[\u4e00-\u9fff]{1,4}地/g                      → 再排除「地」
       <p>两项都按千字归一是硬性要求：早期版本把千字密度与「未完句百分比」（0–100 量级）直接相加，15 字文本能算出 222.22，量纲不可比。未完句定位用顺序游标推进，重复文本不会误判。</p>
 
       <h2>基线带 μ±σ 的计算</h2>
-      <p>逐章测量后汇总，<strong>跳过正文长度不足 40 字的章节</strong>（不足则不参与统计，也不计入 <code>baselineChapterCount</code>）：</p>
-      <div class="formula">μ       = Σ vᵢ / n
+      <p>先按<strong>基线范围</strong>筛出语料章，再逐章测量后汇总，<strong>跳过正文长度不足 40 字的章节</strong>（不足则不参与统计，也不计入 <code>baselineChapterCount</code>）：</p>
+      <div class="formula">scoped = resolveBaselineScope( perChapter, 目标章 = 无 )     ← v6.5.5：按全书 / 按部分
+      mode = all    → 全部章（默认，＝旧行为，存量书零迁移）
+      mode = custom → <b>只用</b>面板选中的章（「只用」，不是「优先 + 不够再补」）
+      选中章里<b>取不到的</b>（已删除 / 正文过短）不纳入基线并如实计数（文案「…，其中 K 章未纳入基线（已删除、或正文过短无法测量）」）
+      一章都取不到 → 回退 all 并按原因披露（「已回退全书」/「选中的章只有本章自身…」）；绝不返回空基线
+      custom 时另用<b>可测章池</b>再解析一次范围 → baselineScope 的 N 与 baselineChapterCount 一致
+      样本 &lt; 3 章 → recTol 下限抬到 25（小样本；单章也能当基线）
+
+μ       = Σ vᵢ / n
 σ_measured = sqrt( Σ (vᵢ − μ)² / n )          ← 总体标准差
 minSigma   = max( μ × 0.15 , μ = 0 ? 0 : 1e-4 )
 σ_used     = max( σ_measured , minSigma )       ← 小书容差带过窄的保护
 low / high = μ ∓ σ_used
 recTol     = clamp( round(1.5 × σ_used / μ × 100 / 5) × 5 , 10 , 100 )</div>
       <p><code>minSigmaRatio</code> 默认 0.15，即 σ 下限为均值的 15%。推荐容差取「作者自身章节波动的 1.5 倍 σ」，四舍五入到 5 的倍数，下限 10%、上限 100%；μ=0 时回退 15 以避免除零。</p>
+      <div class="note">
+        <b>v6.5.5：基线范围（按全书 / 按部分）——「以哪些章为基准」由作者定，按书存储。</b>缘起是一个真实诉求（<a href="https://github.com/siweina/dsh-novel-writer/issues/1">issue #1「风格漂移」</a>）：模型续写每章只参考上一章，<strong>从第 2 章续写起参考的就是自己的产物</strong>；而报告原本对<strong>全书</strong>逐章测量（含 AI 写的章），<strong>锚点自己也在漂</strong>——书越长 AI 占比越高，报告给出的「作者风格」逐代变成 AI 的风格。本工具<strong>不判定「你是否漂移了」</strong>，只负责回答「<strong>相对你指定的标杆</strong>，这本书的写法处在什么位置」。<br>
+        <strong>与容差不同层：</strong>范围写在 <code>&lt;root&gt;/.novel-writer/baseline/&lt;书名&gt;.json</code>（<code>&#123; mode, chapters, updatedAt &#125;</code>；<code>mode</code> 只认 <code>all</code> / <code>custom</code>，其余回落 <code>all</code>；单条文件名截 220 字、上限 2000 章），<strong>文件不存在即等于「按全书」</strong>；面板里的<strong>容差</strong>（<code>styleTolerance</code>）是全局一份、所有书共用。<br>
+        <strong>小样本：</strong>实际参与统计的章少于 <strong>3</strong> 章时推荐容差抬到<strong>至少 ±25%</strong>——所以<strong>单章也能当基线</strong>，不会因 σ=0 把一切都报成偏差（此时 <code>baselineChapterCount</code> 会等于 1，读取方应据此降低结论强度）。<strong>回退：</strong>勾选的章<strong>一章都取不到</strong>时回退「按全书」，并在 <code>baselineScope</code> 里<strong>按原因</strong>写明「（自定义选择已失效，已回退全书）」或「（选中的章只有本章自身，不能作为自己的基线，已回退全书）」；取不到的章（已删除 / 正文过短）会被跳过并如实计数（文案「…，其中 K 章未纳入基线（已删除、或正文过短无法测量）」）——<strong>绝不返回空基线</strong>：空基线算出的 μ 是假的，会把「没有基线」伪装成「全都在带内」。<br>
+        <strong>范围只动「基线」，不动「这本书是什么样」：</strong>指纹 / 高频词 / 题材流派 / 情感量化 / 氛围 12 维 / 语义距离（<code>dimensions</code>）以及渲染层附的「原著段落 / 句式骨架」仍按<strong>全书</strong>统计；跟着范围走的只有 <code>baseline</code> / <code>baselineChapterCount</code> / <code>baselineScope</code> / <code>baselineMode</code>。<code>brief: true</code> 时这一点最明显——文案形如「<strong>全书 1329 字：六维基线（自定义基线 12 章（选中 12 章））μ=…</strong>」：<strong>字数是全书，基线才是那几章</strong>，别读成「整份报告只统计了那几章」。
+      </div>
       <div class="note">
         <b>σ 为什么要分两个字段。</b>返回体同时给出 <code>sigmaMeasured</code>（原始样本标准差）、<code>sigmaUsed</code>（参与 low/high/recTol 的钳制值）与 <code>sigmaClamped</code>（是否发生钳制）。早期版本只返回钳制后的值，展示层把 0.15μ 的下限当成「作者自身波动」念给用户——实测真实 σ=0.0084 被报成 0.15，差 18 倍。
       </div>
@@ -148,7 +165,9 @@ recTol     = clamp( round(1.5 × σ_used / μ × 100 / 5) × 5 , 10 , 100 )</div
       <ul>
         <li><strong>book 必填</strong>，且经 <code>sanitizeSegment</code> 过滤；<code>root</code> 在 MCP 形态下必须落在启动时的 <code>--root</code> 之内——越界时由 MCP 层<strong>静默回退</strong>到 <code>--root</code> 并只写 stderr 日志，调用方不会收到错误，因此不要把 <code>root</code> 当作可靠的越权探测手段。</li>
         <li><strong>测量与判断分离</strong>：本工具不返回风格结论。需要「这本书的文风是什么气质」这类判断时，由模型阅读报告后给出，并通过 <code>aiJudgment</code> 回传，插件负责存盘与复用。</li>
-        <li><strong>过短章节被排除</strong>：正文 &lt; 40 字的章节不参与基线；<code>baselineChapterCount</code> 会小于实际章数，这是预期行为。</li>
+        <li><strong>过短章节被排除</strong>：正文 &lt; 40 字的章节不参与基线；<code>baselineChapterCount</code> 会小于实际章数，这是预期行为。<strong>v6.5.5 起它还受面板「基线范围」影响</strong>：<code>按部分</code> 时只统计勾选的章（实际参与数 = 勾选章中正文 ≥ 40 字者），取不到的章（已删除 / 正文过短）被跳过并如实计数；<strong>一章都取不到</strong>则回退 <code>按全书</code>，并在 <code>baselineScope</code> <strong>按原因</strong>写明「（自定义选择已失效，已回退全书）」或「（选中的章只有本章自身，不能作为自己的基线，已回退全书）」。</li>
+        <li><strong>基线范围不改变维度定义与阈值</strong>：换范围只会换语料，<code>μ</code> / <code>σ</code> / <code>recTol</code> 的公式与偏离判据（<code>out</code> / <code>warn</code> / <code>ok</code>）一字未改；因此<strong>同一本书在不同范围下的基线带不可直接互比</strong>（这是两种标杆，不是两次采样）。范围按书存于 <code>&lt;root&gt;/.novel-writer/baseline/&lt;书名&gt;.json</code>，与<strong>全局</strong>的容差设置不同层；<code>action:"get"</code> 只读已保存的 AI 判断，不会因范围变化而重算。</li>
+        <li><strong>只有 1 章基线时分辨力很低</strong>：<code>μ</code> 由单章得出、<code>σ</code> 不可估计（会被 <code>minSigma</code> 或 25% 下限接管），此时 <code>baselineChapterCount = 1</code>——读取方应据此降低结论强度，不要把它当作「作者风格」的代表样本。</li>
         <li><strong>维度可能被跳过</strong>：当某维基线 μ=0 且 σ=0 时无法做相对判定，该维进入 <code>skippedDims</code>，<code>summary</code> 会写明「另有 N 个维度基线均值为 0、未做相对判定」。调用方不应把「无维度超出容差带」读成「全部维度合格」。</li>
         <li><strong>数值不可跨版本横比</strong>：v4.3.0 统一了句末符口径（省略号单独成句）、清洗了动作词表（去重 29 + 剔除 11 个非动词）、抽象度改为最长匹配、修饰密度增加停用词表——同一本书在新旧版本下的报告数值不可直接比较。</li>
         <li><strong>落盘位置</strong>：报告写入 <code>&lt;root&gt;/.novel-writer/style-reports/&lt;book&gt;.json</code>；<code>action:"get"</code> 只读取该文件，不重算。</li>
@@ -156,7 +175,7 @@ recTol     = clamp( round(1.5 × σ_used / μ × 100 / 5) × 5 , 10 , 100 )</div
 
       <h2>相关工具</h2>
       <ul>
-        <li><a href="novel-style-check.html">novel_style_check</a> —— 用同一套维度做「新章 vs 全书基线」的对照判定；基线会先剔除目标章再计算。</li>
+        <li><a href="novel-style-check.html">novel_style_check</a> —— 用同一套维度做「新章 vs 基线」的对照判定；基线会先剔除目标章再计算，范围同样取自面板「基线范围」。</li>
         <li><a href="novel-sentence-analysis.html">novel_sentence_analysis</a> —— 九类句式分布、情感曲线与风格指纹，是本报告「维度」部分的原始来源。</li>
         <li><a href="novel-semantic-search.html">novel_semantic_search</a> —— 语义风格距离所依赖的本地向量引擎。</li>
       </ul>
@@ -164,6 +183,7 @@ recTol     = clamp( round(1.5 × σ_used / μ × 100 / 5) × 5 , 10 , 100 )</div
       <h2>源码位置</h2>
       <ul>
         <li><span class="src">lib/style-metrics.js</span> —— 六维测量、基线计算、偏离判定（<code>measureStyleMetrics</code> / <code>computeBaselineFromPerChapter</code> / <code>judgeAgainstBaseline</code>）</li>
+        <li><span class="src">lib/core.js</span> —— <code>resolveBaselineScope</code>（v6.5.5 基线范围的<strong>唯一裁决点</strong>，配套 <code>readBaselineScope</code> / <code>writeBaselineScope</code> / <code>normalizeBaselineScope</code> 与 <code>buildTolerance</code>）</li>
         <li><span class="src">lib/analysis.js</span> —— <code>TERMINATORS</code> 句末符常量、句式与情感分析</li>
         <li><span class="src">lib/index.js</span> —— 工具注册：参数、输出契约与 <code>execute</code> 实现</li>
         <li><span class="src">lib/vibe.js</span> —— 氛围光谱 12 维</li>

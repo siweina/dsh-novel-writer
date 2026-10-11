@@ -4,21 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>novel_new_chapter — 新建章节｜dsh-novel-writer 技术文档</title>
-<meta name="description" content="novel_new_chapter 的实现细节：章号解析与文件名归一、wx 独占写入的防覆盖语义、标题与正文的合成文本口径、风格基线 μ 摘要与风格锚包的生成规则、「基线怎么用」的非强制口径，以及对调用方模型的约束。">
+<meta name="description" content="novel_new_chapter 的实现细节：章号解析与文件名归一、wx 独占写入的防覆盖语义、标题与正文的合成文本口径、风格基线 μ 摘要（含取样范围披露）与风格锚包的生成规则、「基线怎么用」的非强制口径，以及对调用方模型的约束。">
 <link rel="stylesheet" href="../styles.css">
 <link rel="stylesheet" href="docs.css">
 <link rel="canonical" href="https://siweina.github.io/dsh-novel-writer/tools/novel-new-chapter.html">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="dsh-novel-writer">
 <meta property="og:title" content="novel_new_chapter — 新建章节｜dsh-novel-writer 技术文档">
-<meta property="og:description" content="novel_new_chapter 的实现细节：章号解析与文件名归一、wx 独占写入的防覆盖语义、标题与正文的合成文本口径、风格基线 μ 摘要与风格锚包的生成规则、「基线怎么用」的非强制口径，以及对调用方模型的约束。">
+<meta property="og:description" content="novel_new_chapter 的实现细节：章号解析与文件名归一、wx 独占写入的防覆盖语义、标题与正文的合成文本口径、风格基线 μ 摘要（含取样范围披露）与风格锚包的生成规则、「基线怎么用」的非强制口径，以及对调用方模型的约束。">
 <meta property="og:url" content="https://siweina.github.io/dsh-novel-writer/tools/novel-new-chapter.html">
 <meta property="og:locale" content="zh_CN">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="novel_new_chapter — 新建章节｜dsh-novel-writer 技术文档">
-<meta name="twitter:description" content="novel_new_chapter 的实现细节：章号解析与文件名归一、wx 独占写入的防覆盖语义、标题与正文的合成文本口径、风格基线 μ 摘要与风格锚包的生成规则、「基线怎么用」的非强制口径，以及对调用方模型的约束。">
+<meta name="twitter:description" content="novel_new_chapter 的实现细节：章号解析与文件名归一、wx 独占写入的防覆盖语义、标题与正文的合成文本口径、风格基线 μ 摘要（含取样范围披露）与风格锚包的生成规则、「基线怎么用」的非强制口径，以及对调用方模型的约束。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_new_chapter","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-new-chapter.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_new_chapter — 新建章节｜dsh-novel-writer 技术文档","description":"novel_new_chapter 的实现细节：章号解析与文件名归一、wx 独占写入的防覆盖语义、标题与正文的合成文本口径、风格基线 μ 摘要与风格锚包的生成规则、「基线怎么用」的非强制口径，以及对调用方模型的约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-new-chapter.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.5.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_new_chapter, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_new_chapter — 新建章节｜dsh-novel-writer 技术文档","description":"novel_new_chapter 的实现细节：章号解析与文件名归一、wx 独占写入的防覆盖语义、标题与正文的合成文本口径、风格基线 μ 摘要（含取样范围披露）与风格锚包的生成规则、「基线怎么用」的非强制口径，以及对调用方模型的约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-new-chapter.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.5.5","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_new_chapter, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -33,8 +33,9 @@
   <main class="docs__main">
     <article class="doc">
       <h1>novel_new_chapter</h1>
+      <div class="note"><b>v6.5.5：</b>建章时附的<strong>六维基线 μ 摘要与「风格锚包」改为按面板「基线范围」取样</strong>（<strong>按全书</strong> 默认，＝旧行为；<strong>按部分</strong> 只用勾选的章，<strong>按书存储</strong>），且<strong>始终排除刚创建的新章</strong>；返回体新增 <code>baselineScope</code>（文案）与 <code>baselineMode</code>（<code>all</code> / <code>custom</code>），<strong>渲染文本也带上取样范围</strong>。此前锚段仍取全书、与基线口径不一致（书越长 AI 续写占比越高，锚段就越像 AI 自己写的——正是 issue #1 描述的漂移），本版一并修正。</div>
       <p class="doc__lead">
-        新建章节。为指定作品创建一个章节文件，章号可显式指定或自动取下一个，可同时写入 Markdown 一级标题与初始正文。<strong>同号章节一律拒绝创建，绝不覆盖既有稿件</strong>；创建成功后返回体自带全书六维风格基线 μ 摘要与「风格锚包」（原著代表性段落 + 句式骨架），使调用方模型在动笔前即可拿到测量数据与用于<strong>校准语感</strong>的样例，无需先调用风格报告工具。
+        新建章节。为指定作品创建一个章节文件，章号可显式指定或自动取下一个，可同时写入 Markdown 一级标题与初始正文。<strong>同号章节一律拒绝创建，绝不覆盖既有稿件</strong>；创建成功后返回体自带<strong>按面板「基线范围」取样</strong>的六维风格基线 μ 摘要（附 <code>baselineScope</code> / <code>baselineMode</code> 范围披露）与「风格锚包」（代表性段落 + 句式骨架，<strong>与基线同范围</strong>），使调用方模型在动笔前即可拿到测量数据与用于<strong>校准语感</strong>的样例，无需先调用风格报告工具。
       </p>
 
       <h2>参数</h2>
@@ -60,9 +61,11 @@
           <tr><th><code>file</code></th><td>string</td><td><strong>必返</strong>。文件名：无 <code>title</code> 时为 <code>第NN章.md</code>（章号左补零到至少 2 位）；<strong>给了 <code>title</code> 时为 <code>第NN章 标题.md</code></strong>（v5.0.0 修正：标题经 <code>sanitizeSegment</code> 剥掉 <code>\ / : * ? " &lt; &gt; |</code> 等非法字符并截断到 24 字；标题全是非法字符则退回不带标题的文件名，<strong>不因此拒绝创建</strong>）</td></tr>
           <tr><th><code>path</code></th><td>string</td><td><strong>必返</strong>。落盘绝对路径</td></tr>
           <tr><th><code>chars</code></th><td>integer</td><td><strong>必返</strong>。写入文本的字符数（合成文本整体长度，含标题行与结尾换行）</td></tr>
-          <tr><th><code>baseline</code></th><td>string</td><td>全书六维基线 μ 摘要，形如「标签 值 / 标签 值 …」，无法计算时为缺失</td></tr>
+          <tr><th><code>baseline</code></th><td>string</td><td>六维基线 μ 摘要，形如「标签 值 / 标签 值 …」，无法计算时为缺失。语料<strong>按面板「基线范围」取样</strong>（v6.5.5；<code>按部分</code> 只用勾选的章），并<strong>排除刚创建的新章</strong>——范围文案见同级的 <code>baselineScope</code></td></tr>
+          <tr><th><code>baselineScope</code></th><td>string</td><td><strong>取样范围披露</strong>（v6.5.5，<code>baseline</code> / <code>anchors</code> 的共同范围）：<code>按全书</code> 时为「全书除本章外的 N 章」，<code>按部分</code> 时为「自定义基线 N 章（选中 M 章）」（有取不到的章时括注为「（选中 M 章，其中 K 章未纳入基线（已删除、或正文过短无法测量））」；<code>N</code> = 本路语料池里实际入选的章数——本路递的是逐章指标，故 N 就是<strong>真正进 μ/σ 的可测章数</strong>）；<strong>一章都取不到而回退时按原因给两种文案：「（自定义选择已失效，已回退全书）」或「（选中的章只有本章自身，不能作为自己的基线，已回退全书）」</strong>。渲染层把它写进模型可见的文本：<code>【风格基线 μ】…（取样范围：&lt;文案&gt;）</code></td></tr>
+          <tr><th><code>baselineMode</code></th><td>string</td><td>范围档位（v6.5.5）：<code>all</code> = 按全书（默认） / <code>custom</code> = 按面板选中的部分章。<strong>回退发生后取值是 <code>all</code></strong>，要区分「本来就是按全书」与「回退」，读 <code>baselineScope</code> 文案里的后缀——两种原因两种文案：「（自定义选择已失效，已回退全书）」/「（选中的章只有本章自身，不能作为自己的基线，已回退全书）」。渲染层据它切换锚段标签：<code>custom</code> 时「【风格锚·原著段落】」改为「【风格锚·取样章节】动笔照此味道写（取样范围：…；数字基线只做事后校验）：」——按部分时那些章未必是「原著」</td></tr>
           <tr><th><code>reminder</code></th><td>string</td><td>「<strong>基线怎么用</strong>」提示（v5.1.0 改口径：此前这段标题里带「强制」二字，现改为「基线怎么用」）：① <strong>锚段读一遍校准语感</strong>（<strong>不要照 <code>skeletons</code> 造句</strong>）② 写完<strong>建议</strong>跑一次 <code>novel_style_check</code> 自检，<strong>偏离明显时才逐句修正</strong>。当前实现下恒有值</td></tr>
-          <tr><th><code>anchors</code></th><td>array</td><td>风格锚·原著段落，元素 <code>{ label, text }</code>，<strong>最多 5 条</strong></td></tr>
+          <tr><th><code>anchors</code></th><td>array</td><td>风格锚·代表性段落，元素 <code>{ label, text }</code>，<strong>最多 5 条</strong>。<strong>v6.5.5 起与基线同范围</strong>：语料先按面板「基线范围」筛选既有章节（新章本就不参与——它是刚创建的稿子，不能当「原著样例」）</td></tr>
           <tr><th><code>skeletons</code></th><td>array</td><td>句式骨架，元素 <code>{ type, text }</code>，<strong>最多 4 条</strong></td></tr>
         </tbody>
       </table>
@@ -103,14 +106,25 @@ chars = text.length        ← UTF-16 码元数，不是纯正文长度</div>
       <h3>4 · 风格基线 μ 摘要</h3>
       <div class="formula">bTexts  = 重扫目录后的全部章节（含刚创建的新章，其文本直接复用内存中的 text）
 perCh   = metricChaptersCached( root, book, bTexts )      ← 按内容哈希缓存六维测量
-excluding = perCh.filter( pc => pc.file !== 新章文件名 )
+scoped  = resolveBaselineScope( root, book, perCh, 新章文件名 )   ← v6.5.5：基线范围（按全书 / 按部分）
+            mode = all    → 全部章（默认，＝旧行为）
+            mode = custom → <b>只用</b>面板选中的章（「只用」，不是「优先 + 不够再补」）
+            新章<b>无条件排除</b>（即使它被选中）；选中章里<strong>取不到的</strong>（已删除 / 正文过短）<strong>不纳入基线</strong>并如实计数——文案写「…，其中 K 章未纳入基线（已删除、或正文过短无法测量）」（本路递的是逐章指标，短章本就不在其中，两种原因都列出来才不冤报）；<strong>一章都取不到</strong>时回退 <code>all</code> 并按实披露两种原因。
+excluding = scoped.items
 if ( excluding.length > 0 )
-    baseline = METRIC_ORDER.map( k => 标签[k] + " " + ( 有 mu ? mu : "-" ) ).join(" / ")</div>
+    baseline      = METRIC_ORDER.map( k => 标签[k] + " " + ( 有 mu ? mu : "-" ) ).join(" / ")
+    baselineScope = scoped.scope     ← 渲染文本里的「（取样范围：…）」
+    baselineMode  = scoped.mode      ← all / custom，渲染层据此切换锚段标签</div>
       <p>基线测量集合<strong>包含新章</strong>，以与风格报告、风格自检的「全章集合」保持同一缓存键（否则三者交替调用会全部缓存 miss）；但摘要本身<strong>排除新章</strong>，因为新章不能作为自己的基线。无其它章节时不输出 μ=0 的假基线。<code>novel_style_report</code> 基线计算中「正文不足 40 字的章节不参与统计」的规则由测量层统一执行。整段被 <code>try/catch</code> 包裹：失败静默，不影响章节创建。</p>
+      <div class="note">
+        <b>范围是一起回报的（v6.5.5）。</b>摘要可能是「按用户勾选的那几章」算出来的——不说明范围，作者会把它当成全书基线。所以返回体给 <code>baselineScope</code>（文案）与 <code>baselineMode</code>（档位），<strong>渲染文本也带上</strong>：<code>【风格基线 μ】…（取样范围：全书除本章外的 N 章）</code> 或 <code>…（取样范围：自定义基线 2 章（选中 2 章））</code>。范围按书存于 <code>&lt;root&gt;/.novel-writer/baseline/&lt;书名&gt;.json</code>（<code>&#123; mode, chapters, updatedAt &#125;</code>，<strong>文件不存在即等于「按全书」</strong>），与<b>全局</b>的容差设置（<code>styleTolerance</code>）不同层。选中章<strong>一章都取不到</strong>时回退「按全书」，并在文案里<strong>按原因</strong>注明：「（自定义选择已失效，已回退全书）」或「（选中的章只有本章自身，不能作为自己的基线，已回退全书）」——<strong>绝不返回空基线</strong>（空基线算出的 μ 是假的，会把「没有基线」伪装成「全都在带内」）。
+      </div>
 
       <h3>5 · 风格锚包</h3>
-      <div class="formula">语料 = 创建前的既有章节文本拼接（新章不作为「原著样例」）
-段落 = 按 /\n+/ 切分、trim、保留长度 ≥ 40 字的段；抽样方式为全书等距
+      <div class="formula">语料 = 创建前的既有章节文本（新章不作为「原著样例」）
+scope = resolveBaselineScope( root, book, 语料, 新章文件名 )   ← v6.5.5：与六维基线<b>同一范围</b>
+        → 按部分时<b>只用</b>面板选中的章（按全书时＝全部既有章）；新章与取不到的章都不在语料里（回报文案用中性措辞，见 §4）
+段落 = 按 /\n+/ 切分、trim、保留长度 ≥ 40 字的段；抽样方式为语料内等距
         （首尾保留、均匀取 n 条；n=1 取中位段）
   [对话] 含引号且 ≤ 200 字            → 2 条
   [心理] 含 想|觉得|心|怕|慌|记忆 且无引号且 ≤ 200 字 → 1 条
@@ -121,17 +135,21 @@ if ( excluding.length > 0 )
 骨架 = 按 /[。！？…]+/ 切句、去空白、长度 20–45 字、去重后等距取 4 条
   类型判定：含引号 → 对话；以 ？/? 结尾 → 疑问；含 想|觉得|仿佛|好像|似乎 → 心理；否则 陈述
 骨架全空 → 退化为 4 条 ≥ 15 字的陈述型段落（截 60 字）</div>
-      <p>锚包是「<strong>校准语感</strong>」的载体，不是造句模板：<code>anchors</code> 读一遍对上味道即可，<code>skeletons</code> <strong>只在写不出该类型句子时</strong>参考，<strong>不要照它造句、不要套句式模板</strong>；数字基线只用于事后校验。整段同样被 <code>try/catch</code> 包裹，失败时返回空锚包。</p>
+      <p>锚包是「<strong>校准语感</strong>」的载体，不是造句模板：<code>anchors</code> 读一遍对上味道即可，<code>skeletons</code> <strong>只在写不出该类型句子时</strong>参考，<strong>不要照它造句、不要套句式模板</strong>；数字基线只用于事后校验。整段同样被 <code>try/catch</code> 包裹，失败时返回空锚包。渲染标签与语料同受「基线范围」影响（见 §6）。</p>
 
       <h3>6 · 渲染文本</h3>
       <div class="formula">&lt;path&gt;…&lt;/path&gt;
 &lt;type&gt;novel-chapter-created&lt;/type&gt;
 &lt;content&gt;
 已创建 第NN章（N 字）
-[可选] 【风格基线 μ】…
-[可选] 【风格锚·原著段落】读一遍校准语感（数字基线只做事后校验）：
+[可选] 【风格基线 μ】标签 值 / 标签 值 …（取样范围：&lt;baselineScope&gt;）
+         例：句法复杂度 2 / 修饰密度 39.96 / 抽象度 0 / 动作密度 79.92 / 不确定性 39.96 / 留白指数 0
+         （取样范围：自定义基线 2 章（选中 2 章））
+[可选] 锚段标签随 baselineMode 变（v6.5.5）：
+         all    → 【风格锚·原著段落】动笔照此味道写（数字基线只做事后校验）：
+         custom → 【风格锚·取样章节】动笔照此味道写（取样范围：&lt;baselineScope&gt;；数字基线只做事后校验）：
          [标签] 段落…
-[可选] 【句式骨架】写不出该类型句子时才参考，不要照它造句：
+[可选] 【句式骨架】按此形状造句：
          [类型] 句子…
 reminder ← 【基线怎么用】块：① 锚段读一遍校准语感，不要照 skeletons 造句
                         ② 写完建议自检，偏离明显才逐句修正
@@ -144,6 +162,7 @@ reminder ← 【基线怎么用】块：① 锚段读一遍校准语感，不要
         <li><strong>并发只报错不重试</strong>：独占创建失败时返回「刚被并发创建」，需调用方自行重试或改用其它章号。</li>
         <li><strong>建目录是前置副作用</strong>：即使后续因同号失败，书目录也已被创建。</li>
         <li><strong>基线/锚包均为可选增强</strong>：任一环节抛错都被吞掉，返回体中相应字段缺失或为空数组。调用方不应假定 <code>baseline</code> 恒有值——单章作品、基线计算失败、锚包抽取失败都会导致缺失。</li>
+        <li><strong>取样范围与回退（v6.5.5）</strong>：<code>baseline</code> 与 <code>anchors</code> 的语料由面板「基线范围」决定（<strong>按全书</strong> 默认 / <strong>按部分</strong> 只用勾选的章，<strong>按书存储</strong>），并<strong>始终排除刚创建的新章</strong>；勾选的章若<strong>取不到</strong>（已删除 / 正文过短）会被跳过并如实计数（文案「…，其中 K 章未纳入基线（已删除、或正文过短无法测量）」），<strong>一章都取不到</strong>时回退「按全书」并<strong>按原因</strong>写进 <code>baselineScope</code>（「（自定义选择已失效，已回退全书）」或「（选中的章只有本章自身，不能作为自己的基线，已回退全书）」），<strong>不返回空基线</strong>。范围文案恒在渲染文本里（<code>【风格基线 μ】…（取样范围：…）</code>），读取方<strong>不要把失去范围说明的 μ 当作全书基线</strong>——按部分时它只代表那几章。</li>
         <li><strong>只统计顶层文件</strong>：<code>scanChapters</code> 不递归，放在子目录里的章节文件对本书「不可见」，既不计入章号也不参与基线。</li>
         <li><strong>自动章号依赖可解析章号</strong>：目录内若存在无法解析章号的文件（命名完全不含数字或中文数字），它们被排到末尾且不参与 <code>max</code>；此时「下一个章号」由可解析的最大值决定，可能与文件名视觉顺序不一致。</li>
         <li><strong>章号解析的已知缺口</strong>：中文数字解析器识别 <code>十</code> / <code>百</code> / <code>千</code>，但<strong>不识别「万」</strong>——<code>第一万章.md</code> 解析不出章号，会被当作不可解析文件排到列表末尾，既不参与自动章号计算，也不阻止同号冲突检测（该文件不占用任何章号）。四位以内的阿拉伯章号不受此影响。</li>
@@ -164,7 +183,7 @@ reminder ← 【基线怎么用】块：① 锚段读一遍校准语感，不要
       <ul>
         <li><span class="src">lib/index.js</span> —— 工具注册与 <code>execute</code>：参数 schema、输出契约、基线摘要、提醒文案（<code>registerNovelNewChapter</code>，约 2879 行）</li>
         <li><span class="src">lib/core.js</span> —— <code>sanitizeSegment</code> 路径段清洗、<code>resolveRoot</code> 根目录回退、<code>bookDir</code> / <code>novelsDir</code> 路径拼接、<code>scanChapters</code> 章节扫描、<code>parseChapterNumber</code> 章号解析、<code>cleanOutput</code> 输出清理</li>
-        <li><span class="src">lib/core.js</span> —— <code>buildStyleAnchorPackage</code> 风格锚包抽样与分类（约 2071 行）、<code>metricChaptersCached</code> 六维测量缓存（约 1864 行）</li>
+        <li><span class="src">lib/core.js</span> —— <code>buildStyleAnchorPackage</code> 风格锚包抽样与分类（约 2071 行）、<code>metricChaptersCached</code> 六维测量缓存（约 1864 行）、<code>resolveBaselineScope</code>（v6.5.5 基线范围的<strong>唯一裁决点</strong>，配套 <code>readBaselineScope</code> / <code>writeBaselineScope</code>，行号随版本变动，请按函数名检索）</li>
         <li><span class="src">lib/style-metrics.js</span> —— <code>computeBaselineFromPerChapter</code> / <code>METRIC_ORDER</code> / <code>METRIC_LABELS</code>，基线 μ 的计算与维度顺序</li>
       </ul>
     </article>

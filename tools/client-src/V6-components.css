@@ -24,3 +24,12 @@
 .nwRange{flex:1;min-width:0}
 .nwRangeVal{flex:none;min-width:36px;text-align:right;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary);font-variant-numeric:tabular-nums}
 @media (prefers-reduced-motion: reduce){.nwGCard,.nwPref{transition:none!important}}
+/* 风格基线·范围选择器（选「按部分」时的章节多选）：列表自身可滚动，侧栏高度有限时也不撑破面板。 */
+.nwBasePick{padding:0 16px 12px}
+.nwBaseList{max-height:230px;overflow-y:auto;overscroll-behavior:contain;margin-top:8px;padding:4px;border:0.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-layer-1)}
+.nwBaseItem{display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:var(--dsw-radius-sm);cursor:pointer;font-size:13px;line-height:20px;color:var(--dsw-alias-label-primary)}
+.nwBaseItem:hover{background:var(--dsw-specific-sidebar-nav-item-hover)}
+.nwBaseItemText{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nwBaseCheck{flex:none;margin:0;accent-color:var(--dsw-alias-state-business-primary)}
+/* 存量的显式清空行（已选摘要旁 / 档位=按全书而存量非空时）：说明占满余宽，破坏性按钮靠右。 */
+.nwBaseClear{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:10px}
