@@ -33,3 +33,11 @@
 .nwBaseCheck{flex:none;margin:0;accent-color:var(--dsw-alias-state-business-primary)}
 /* 存量的显式清空行（已选摘要旁 / 档位=按全书而存量非空时）：说明占满余宽，破坏性按钮靠右。 */
 .nwBaseClear{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:10px}
+/* 诊断·「值得注意」区块（v6.6.0）。
+   修复由来（用户反馈）：原先直接用 .nwBoxed，而那个类只有 0.5px 边框、没有阴影，
+   于是"得看老一会才看得出边框"；整块也没有外边距，与上下组件贴在一起。
+   这里改成与 .nwGCard 同一套观感（layer-2 底 + 柔和阴影 + xl 圆角），留白对齐 .nwGCard 的 12px。
+   注意：本文件会被整体内联进模板字符串，注释里不要写反引号、也不要写花括号。 */
+.nwDiagIssues{margin:12px 0}
+.nwDiagIssueList{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+.nwDiagIssue{background:var(--dsw-alias-bg-layer-2);border-radius:var(--dsw-radius-xl);box-shadow:var(--dsw-elevation-soft);padding:9px 12px}

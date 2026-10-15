@@ -4,21 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>技术文档总览｜dsh-novel-writer</title>
-<meta name="description" content="dsh-novel-writer 的 19 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
+<meta name="description" content="dsh-novel-writer 的 20 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
 <link rel="stylesheet" href="../styles.css">
 <link rel="stylesheet" href="docs.css">
 <link rel="canonical" href="https://siweina.github.io/dsh-novel-writer/tools/index.html">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="dsh-novel-writer">
 <meta property="og:title" content="技术文档总览｜dsh-novel-writer">
-<meta property="og:description" content="dsh-novel-writer 的 19 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
+<meta property="og:description" content="dsh-novel-writer 的 20 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
 <meta property="og:url" content="https://siweina.github.io/dsh-novel-writer/tools/index.html">
 <meta property="og:locale" content="zh_CN">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="技术文档总览｜dsh-novel-writer">
-<meta name="twitter:description" content="dsh-novel-writer 的 19 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
+<meta name="twitter:description" content="dsh-novel-writer 的 20 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","name":"技术文档总览｜dsh-novel-writer","description":"dsh-novel-writer 的 19 个工具实现细节：参数契约、计算原理、约束边界与源码位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/index.html","inLanguage":"zh-CN","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.5.5","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer","url":"https://siweina.github.io/dsh-novel-writer/"}}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","name":"技术文档总览｜dsh-novel-writer","description":"dsh-novel-writer 的 20 个工具实现细节：参数契约、计算原理、约束边界与源码位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/index.html","inLanguage":"zh-CN","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.6.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer","url":"https://siweina.github.io/dsh-novel-writer/"}}</script>
 </head>
 <body class="docs">
 
@@ -33,9 +33,9 @@
   <main class="docs__main">
     <article class="doc">
       <h1>技术文档</h1>
-      <p class="doc__version">当前版本 <code>6.5.5</code> · 更新记录见 <a href="https://github.com/siweina/dsh-novel-writer/blob/main/CHANGELOG.md">CHANGELOG</a>（下方「版本说明」）</p>
+      <p class="doc__version">当前版本 <code>6.6.0</code> · 更新记录见 <a href="https://github.com/siweina/dsh-novel-writer/blob/main/CHANGELOG.md">CHANGELOG</a>（下方「版本说明」）</p>
       <p class="doc__lead">
-        <code>dsh-novel-writer</code> 的 19 个工具全部在本地运行，<strong>不使用在线大模型</strong>：所有指标由规则统计与本地 ONNX 推理得出。本组页面面向二次开发与集成方，逐工具说明参数契约、计算原理、约束边界与源码位置。
+        <code>dsh-novel-writer</code> 的 20 个工具全部在本地运行，<strong>不使用在线大模型</strong>：所有指标由规则统计与本地 ONNX 推理得出。本组页面面向二次开发与集成方，逐工具说明参数契约、计算原理、约束边界与源码位置。
       </p>
 
       <h2>阅读约定</h2>
@@ -55,6 +55,12 @@
       <ul class="doc__releases">
         <li>
           <details open>
+            <summary><code>6.6.0</code> · 2026-10-15 <span class="doc__rel-sum">可观测性与诊断：本地事件日志 + 第 20 个工具 novel_diagnose</span></summary>
+            <p>起因是一句用户反馈：「有些错误光看提示看不出来，能不能加日志」。本版加了<b>本地事件日志</b>与<b>诊断报告</b>，但<b>刻意不做成「给作者看日志文件」</b>——作者不会去读 <code>.jsonl</code>，真正的消费者是<b>替他操作的 AI</b>。新增第 <b>20</b> 个工具 <a href="novel-diagnose.html">novel_diagnose</a>：读日志 + 做<b>五处体检</b>——书库根、<b>书库内容</b>（书数/章数/字数/解析不出章号的文件/过短章，只统计不读正文）、<b>插件数据目录</b>（应有子目录、JSON 能否解析、zstd 压缩缓存、0 字节、超大与读不出的文件）、<b>语义引擎</b>（惰性探测，<b>不加载模型</b>）、<b>开关与状态快照</b>（哪些工具/功能被关了、总开关在哪一档、lastRoot 是否失效）——把近期调用与降级失败、<b>「工具 × 书名」反复出问题的组合</b>、高频失败类型、可执行建议与「本次覆盖与未覆盖」聚合成一份中文报告（<code>report</code> / <code>events</code> / <code>clear</code>；<code>days</code> 默认 7、上限 90）。<b>工具调用审计在注册层统一包一层，20 个工具一处覆盖</b>（含诊断自身，不散落埋点），只记工具名、<b>安全参数摘要</b>（书名/章号/action 等定位字段 + <code>content</code>/<code>text</code> 的<b>长度</b>）、耗时、状态与错误 code。静默失败的留痕是<b>选择性</b>的：6 个服务端模块里 <b>catch 点 163</b>（块级 <code>} catch</code> 161 + 链式 <code>.catch(</code> 2；旧稿的 164 把 <code>core.js</code> 注释里引用的写法也算成了代码，属口径过计），<b>另有 84 处 <code>logEvent(</code> 调用点</b>——这两个是<b>不同总体</b>：84 处里 <b>77 处落在 catch 体内</b>（＝有留痕的 catch 点），其余 <b>7 处根本不在 catch 里</b>（书库根轨迹 <code>resolveRoot</code> / <code>noteRoot</code> 共 6 处 + 工具调用审计 <code>installToolAudit</code> 1 处，它在 <code>finally</code> 里），所以<b>静默的 catch 点 = 163 − 77 = 86</b>（旧稿的「静默 80」是拿 84 减 164 得来的，会少算 6 处；分 7 类，理由是"不存在/空是常态、已如实披露、重抛由审计层记、纯清理、允许的探测、有意不记的每项分支、无法区分 ENOENT"）；根解析另加一条只记「可疑决策」的留痕。本版内另修三处契约（都由实测触发）：<b>参数摘要的长度/计数派生键</b>（<code>contentChars</code> / <code>textChars</code> / <code>srcChars</code> / <code>filesCount</code> / <code>chaptersCount</code> / <code>termsCount</code>）与 <code>name</code> 此前漏登记在白名单外被整批丢掉——「只记长度」当时并不成立，现补齐；<b>分享层改为 fail-closed</b>（<code>readLogEvents</code> 只有显式 <code>forShare === false</code> 才返回本地层，其余一律脱敏）；分享层的 <code>redacted: true</code> 由条件性改为<b>恒带</b>（层级标志，不是"有内容"标志）。另有一组 <b>P0 修复：「读不到」不再被说成「没有」</b>——只有 <code>ENOENT</code> 才说「尚未初始化 / 未登记 / 尚未保存 / 无创作资料」，文件存在却读不出来时只说「该文件存在，但读不出来」并给出路径与原因（<a href="novel-outline.html">novel_outline</a> 的 read、<a href="novel-chapter-brief.html">开写包</a>的锚包、<a href="novel-style-report.html">novel_style_report</a> 的 <code>action=get</code>、<a href="novel-continuity-check.html">连贯性审计</a>的大纲对照四处）。<b>覆盖口径如实交代：四处里三处（创作资料读取 / 风格判断读取 / 大纲对照）端到端生效；锚包那一处在真实工具路径上不可达</b>（内部 <code>try</code> 里全是预读文本上的字符串操作，唯一会抛的 <code>assert</code> 在 <code>try</code> 之外），该分支只有函数级与源码级断言、<b>没有端到端覆盖</b>。<b>另有一条残留同类缺陷（下版处理）</b>：把某章文件换成<b>同名目录</b>后，<code>scanChapters</code> 的 <code>if (!entry.isFile()) continue</code> 会静默跳过它——该章从章表消失、诊断的「读不出来的文件」计数为 0、开写包 <code>degraded</code> 里也没有「读取章节失败」，即<b>这一条路径上「读不到」仍被讲成「没有」</b>。日志落在<b>状态目录旁</b>（<code>~/.dsh/dsh-novel-writer/logs/events.jsonl</code>，512 KB 轮转、留最近 3 份），<b>不在书库根</b>——理由很实在：最常见的故障就是「书库根不对」，那时 <code>.novel-writer/</code> 根本不存在或不可写。<b>隐私是两级设计（口径在本版定稿时改准）</b>：本地日志靠<b>字段白名单</b>以元数据为主（时间 / 工具名 / 书名 / 章号 / 状态 / 耗时 / 计数 / 路径 / 错误 code），<b>但自由文本字段（错误消息等）经收敛后至多保留一句（≤160 字）</b>——所以<b>本机</b>日志里可能出现被错误消息回显的输入片段（实测：<code>novel_lexicon</code> 找不到词条时会把传入的词条名回显进 <code>detail</code>），<b>日志文件不出本机</b>；而<b>任何离开本机的内容</b>（诊断报告、面板「复制诊断包」、诊断路由）一律走分享层，<b>自由文本整体剔除</b>，<b>报告层再把错误一律归类成固定 code</b>（<code>JSON.parse</code> 的报错会回显文件内容片段，而 summaries/plots/settings 正是由正文派生的）——因为值层面的长度 / 标点启发式<b>从原理上无法保证</b>自由文本里不含正文，真正的保证是「离开本机的东西不含自由文本」。报 bug 请用面板「复制诊断包」或 <code>novel_diagnose</code> 的输出，<b>不要直接附本机日志文件</b>。面板新增「诊断」入口（选统计窗口 + 一键复制诊断包，用于贴进 issue）；新增 <code>GET /api/dsh-novel-writer/diagnose</code> 路由，与工具<b>同一实现</b>。<b>本工具不判定对错、也不减少 bug，只让定位变快</b>：静默失败<b>只接了有诊断价值的那部分</b>（「文件不存在」这类正常分支刻意不记），并发/性能只给已记录到的耗时、<b>不做压测</b>，各清单有条数与读取预算上限。工具数 19 → 20，参数契约与书库格式不变。</p>
+          </details>
+        </li>
+        <li>
+          <details>
             <summary><code>6.5.5</code> · 2026-10-11 <span class="doc__rel-sum">风格基线可指定范围：按全书 / 按部分，锚点不再跟着 AI 一起漂</span></summary>
             <p>回应 <a href="https://github.com/siweina/dsh-novel-writer/issues/1">issue #1「风格漂移」</a>：AI 续写每章只参考上一章，<b>从第 2 章起它参考的就是自己的产物</b>；而「六维基线」与「原著锚段」原本都从<b>全书</b>取样——书越长 AI 占比越高，<b>锚点自己也在漂</b>（既测不出对原著的偏移，锚段也逐代变成 AI 的文风）。本版给侧栏「风格基线」面板加上<b>基线范围</b>：<b>按全书</b>（默认，＝旧行为，存量书零迁移）/ <b>按部分</b>（展开章节选择器，<b>只用</b>勾选的章——是「只用」，不是「优先 + 不够再补」）。<b>正在检查的那一章永远排除</b>（即使它在选中列表里）：拿自己跟自己比必然「完美符合」，比不检查更糟。勾中的章（剔除目标章后）少于 <b>3</b> 章时推荐容差自动放宽到<b>至少 ±25%</b>，所以单章也能当基线；勾中的章若取不到（已改名 / 删除，或<b>正文过短无法测量</b>）会被跳过并<b>如实计数</b>，<b>一章都取不到</b>时回退「按全书」并在返回体里写明原因——两种文案：选择<b>都失效</b> → 「（自定义选择已失效，已回退全书）」；<b>只选中了本章自身</b> → 「（选中的章只有本章自身，不能作为自己的基线，已回退全书）」。范围<b>按书保存</b>（<code>&lt;书库根&gt;/.novel-writer/baseline/&lt;书名&gt;.json</code>），与<b>全局</b>的容差设置（<code>styleTolerance</code>）不同层。风格自检 / 开写包 / 改稿台 / 风格画像 / 建章五路同源，<code>baselineScope</code> 的文案随之反映用户的选择（开写包与建章还把范围写进模型可见的渲染文本）。插件<b>不判定「你是否漂移了」</b>（文风本就允许演变，那不可判定），只回答「<b>相对你指定的标杆，这一章偏了多少</b>」。工具数与调用参数不变（19 个），五路返回体各新增两个只读字段：<code>baselineScope</code>（文案）与 <code>baselineMode</code>（<code>all</code> / <code>custom</code>）。</p>
           </details>
@@ -134,10 +140,11 @@
       <div class="tools__grid">
         <a class="tools__card" href="novel-continuity-check.html"><b>novel_continuity_check</b><span>三路审计：衔接、OOC 与大纲走偏，输出带原文引用的问题清单。</span></a>
         <a class="tools__card" href="novel-sentence-config.html"><b>novel_sentence_config</b><span>查看与修改工具开关、功能开关、系统提示词档位与场景、风格基线容差。</span></a>
+        <a class="tools__card" href="novel-diagnose.html"><b>novel_diagnose</b><span>诊断报告：读本地事件日志 + 五处体检（书库根 / 书库内容 / 数据目录损坏 / 语义引擎 / 开关快照），聚合「工具 × 书名」反复出问题的组合、高频失败类型与可执行建议；报告只含元数据，可安全分享。</span></a>
       </div>
 
       <h2>该调哪个工具</h2>
-      <p>工具数到 19 之后，「选对工具」本身也有了成本。下表按<strong>你想回答的问题</strong>给出口径；其中三个分析类工具名字最像，一并说明区别。</p>
+      <p>工具数到 20 之后，「选对工具」本身也有了成本。下表按<strong>你想回答的问题</strong>给出口径；其中三个分析类工具名字最像，一并说明区别。</p>
       <table>
         <thead><tr><th>你想回答的问题</th><th>用哪个</th><th>主要输出</th></tr></thead>
         <tbody>
@@ -148,6 +155,7 @@
           <tr><th>这一章<strong>要改哪里</strong>、改完没有</th><td><a href="novel-fix-plan.html">novel_fix_plan</a></td><td>按 severity → effort 排序的待办清单（带段落行号与<strong>改写方向</strong>，不给改写后的正文）+ <code>verify</code> 三态复测</td></tr>
           <tr><th>全书有没有<strong>断线 / 丢人 / 忘伏笔</strong></th><td><a href="novel-plot.html">novel_plot</a>（<code>action: "graph"</code>）</td><td>伏笔生命周期与埋设距离、人物出场矩阵与连续缺席（≥ 5 章）、线索活跃度与最大空档、时间线顺序核对、大纲方向行对照</td></tr>
           <tr><th>我想让 AI <strong>必须用我的专有名词 / 惯用词</strong></th><td><a href="novel-lexicon.html">novel_lexicon</a></td><td>开写包注入的硬清单（<code>lexicon</code> 分组词条 + <code>plan.checklist</code> 硬指令）、成稿 <code>audit</code> 的覆盖率与未使用清单、以及「通用词替身顶替」的行号与原句（只读）</td></tr>
+          <tr><th>出错了但<strong>看不出原因</strong>，或面板列不出书</th><td><a href="novel-diagnose.html">novel_diagnose</a></td><td>近期调用 / 降级 / 失败聚合、高频失败类型、<strong>「工具 × 书名」反复出问题的组合</strong>，五处体检（书库根 / 书库内容 / 数据目录损坏 / 语义引擎 / 开关快照）与可执行建议，以及本次覆盖与未覆盖清单（<strong>只含元数据</strong>，可安全贴进 issue）</td></tr>
         </tbody>
       </table>
       <div class="note">
@@ -160,12 +168,13 @@
 
       <h3>数据落盘</h3>
       <p>所有派生数据集中写在 <code>&lt;书库根&gt;/.novel-writer/</code> 下：<code>plots</code>（伏笔）、<code>settings</code>（设定）、<code>lexicon</code>（必用词表）、<code>summaries</code>（摘要）、<code>analysis</code>（分析报告）、<code>audits</code>（审计）、<code>embedding</code>（语义索引）、<code>style-reports</code>（风格画像）。写盘采用临时文件 + 原子替换；失败会抛出 <code>ENOVELWRITEFAIL</code> 而不是静默丢弃。</p>
+      <p><strong>唯一的例外是 v6.6.0 的事件日志</strong>：它写在<strong>状态目录旁</strong>——<code>~/.dsh/dsh-novel-writer/logs/events.jsonl</code>（受 <code>DSH_NOVEL_WRITER_STATE</code> 覆盖；512 KB 轮转、保留 3 份历史），<strong>不在</strong> <code>&lt;书库根&gt;/.novel-writer/</code>。理由很实在：最常见的故障就是「书库根不对」，那时 <code>.novel-writer/</code> 根本不存在或不可写，偏偏最需要留下证据。日志<strong>以元数据为主</strong>（工具名 / 书名 / 章号 / 状态 / 耗时 / 计数 / 路径 / 错误 code），<strong>但自由文本字段（错误消息等）经收敛后至多保留一句（≤160 字）</strong>——所以<strong>本机</strong>日志里可能出现被错误消息回显的输入片段，<strong>该文件不出本机</strong>；聚合查看与对外分享见 <a href="novel-diagnose.html">novel_diagnose</a>（报告与面板「复制诊断包」走分享层，自由文本整体剔除）。</p>
 
       <h3>语义引擎的可用性</h3>
-      <p>语义检索、语义风格距离与语义隐性情感依赖随包分发的 <code>bge-small-zh-v1.5</code> 量化模型（约 24MB）与 <code>onnxruntime-web</code>（WASM）。引擎不可用时这些能力自动降级为纯规则模式，其余功能不受影响；返回体会以 <code>skippedDims</code> 或专用文案说明降级原因，而非返回空结果。</p>
+      <p>语义检索、语义风格距离与语义隐性情感依赖随包分发的 <code>bge-small-zh-v1.5</code> 量化模型（约 24MB）与 <code>onnxruntime-web</code>（WASM）。引擎不可用时这些能力自动降级为纯规则模式，其余功能不受影响；返回体会以 <code>skippedDims</code> 或专用文案说明降级原因，而非返回空结果。引擎相关的降级同样会记入事件日志，可由 <a href="novel-diagnose.html">novel_diagnose</a> 聚合查看（本工具只聚合已记录到的事件，<strong>不会主动跑一次推理去探测</strong>）。</p>
 
       <h3>MCP 形态的边界</h3>
-      <p>包内 <code>mcp/server.mjs</code> 把同样 19 个工具暴露为 stdio MCP 服务器（可用 Streamable HTTP 传输）。协议侧：未知工具返回 <code>-32602</code>（Protocol Error）；支持 2025-11-25 / 2025-06-18 / 2025-03-26 / 2024-11-05 版本协商并原样回显；JSON-RPC 批量请求自 2025-06-18 起按规范拒绝；单行报文上限 4 MiB；<code>novel_import</code> 的 <code>src</code> 默认限制在书库根内，需显式加 <code>--allow-external-src</code> 才能放开。</p>
+      <p>包内 <code>mcp/server.mjs</code> 把同样 20 个工具暴露为 stdio MCP 服务器（可用 Streamable HTTP 传输）。协议侧：未知工具返回 <code>-32602</code>（Protocol Error）；支持 2025-11-25 / 2025-06-18 / 2025-03-26 / 2024-11-05 版本协商并原样回显；JSON-RPC 批量请求自 2025-06-18 起按规范拒绝；单行报文上限 4 MiB；<code>novel_import</code> 的 <code>src</code> 默认限制在书库根内，需显式加 <code>--allow-external-src</code> 才能放开。</p>
     </article>
 
     <nav class="docs__pager" id="docsPager"></nav>

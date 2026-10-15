@@ -10,13 +10,13 @@ English | [中文](./README.md)
 [![GitHub stars](https://img.shields.io/github/stars/siweina/dsh-novel-writer.svg?style=flat-square&color=orange)](https://github.com/siweina/dsh-novel-writer/stargazers)
 [![siweina/dsh-novel-writer MCP server](https://glama.ai/mcp/servers/siweina/dsh-novel-writer/badges/score.svg)](https://glama.ai/mcp/servers/siweina/dsh-novel-writer)
 
-**19 tools covering the whole loop: gather inputs before you write → quantify & self-check → work a prioritised fix list → audit the cross-chapter structure.**
+**20 tools covering the whole loop: gather inputs before you write → quantify & self-check → work a prioritised fix list → audit the cross-chapter structure.**
 One call before writing gathers **16 inputs** (missing one is how style drift starts); after you write, you don't just get numbers — you get a **priority-ordered to-do list** (line-anchored original text, current vs. target values, reference passages, **direction only, never ghost-written prose**); across chapters you can finally see "the thread snapped, a character vanished, a hook was forgotten".
 Sentence, emotion and semantic analysis all run **on your machine**: a 24MB Chinese model ships with the package,
 **zero API cost, your manuscript never leaves the device**. Built for DeepSeek Harness (DSH); the same engine is also
 exposed as a **stdio MCP server** for Claude Desktop / Cursor.
 
-[Website](https://siweina.github.io/dsh-novel-writer/) · [Technical docs (parameters & examples for all 19 tools)](https://siweina.github.io/dsh-novel-writer/tools/) · [Install](#install) · [The writing loop](#the-writing-loop-end-to-end) · [60-second start](#60-second-start) · [See the output](#see-the-output) · [The 19 tools](#provided-tools-19) · [MCP server](#mcp-server-usable-outside-dsh)
+[Website](https://siweina.github.io/dsh-novel-writer/) · [Technical docs (parameters & examples for all 20 tools)](https://siweina.github.io/dsh-novel-writer/tools/) · [Install](#install) · [The writing loop](#the-writing-loop-end-to-end) · [60-second start](#60-second-start) · [See the output](#see-the-output) · [The 20 tools](#provided-tools-20) · [MCP server](#mcp-server-usable-outside-dsh)
 
 ---
 
@@ -48,6 +48,7 @@ Full version history: see [CHANGELOG.md](./CHANGELOG.md).
 | "I planted a plot thread and forgot to pay it off" | **Plot registry**: add / list / scan / done, automatically recording which chapters mention each thread |
 | "Character settings contradict each other" | **Five settings tables + continuity audit** (bridge / OOC / outline drift) |
 | "I can't read the report" | Everything is **tabulated numbers + quoted anchors from your own text** — screenshot-ready |
+| "An error gives me one line, and never says why it keeps happening" | **Diagnostic report** (`novel_diagnose`): reads the local event log and runs **five health checks** (library root / library contents / data-directory corruption / semantic engine / switch snapshot), aggregating repeated **tool × book** trouble spots, top failure codes and actionable suggestions; the report goes through the **share layer** (free text stripped wholesale, every error classified into a fixed code), so it is **safe to paste into an issue** — use it (or the panel's "copy diagnostic bundle") rather than attaching the local log file. The local log is **metadata-first** (tool / book / chapter / status / duration / counts / paths / error code), and free-text fields (error messages) are clamped to **at most one sentence (≤160 characters)**: that local file may therefore echo a fragment of what you passed in, but it **never leaves the machine** |
 
 ## Install
 
@@ -155,7 +156,7 @@ fixAnchors：3 条原著锚段（对话 / 心理 / 描写各一条，供逐句�
 | Cost | **0 (local inference)** | Billed per token | Self-hosted |
 | Purpose-built for Chinese fiction | **Yes** | Generic | No |
 | Style baseline (μ±σ) | **Yes** | Rare | No |
-| DSH integration | **19 tools + official seats & website-style UI** | None | None |
+| DSH integration | **20 tools + official seats & website-style UI** | None | None |
 | Usable without DSH | **Yes (MCP)** | Yes | You wrap it yourself |
 
 > **A note for non-Chinese users**: this plugin is designed for analysing and writing Chinese fiction — the sentence-pattern,
@@ -179,11 +180,11 @@ fixAnchors：3 条原著锚段（对话 / 心理 / 描写各一条，供逐句�
 10. **Style Baseline**: Six writing metrics (syntactic complexity / modifier density / abstraction / action density / hedging / gap index) + per-chapter μ±σ baseline band; `novel_style_report` outputs the band, `novel_style_check` compares new chapters (in-band ✓ / out-of-band ⚠); per-metric ±% tolerance configurable in the panel's **Six-metric baseline** view (**recommended = 1.5× σ of the book's chapter variance**, rounded, clamped to ±10%~100%; leave blank to use recommended) — free theme, writing style kept inside the band.<br>**Baseline scope (v6.5.5, configured per book)**: the baseline does not have to be the whole book — in the panel's **Style baseline** view choose **whole book** (default, = the old behaviour) or **selected chapters**, then tick the chapters you treat as the yardstick; the baseline then uses **only** those (it means "only these", not "prefer these and top up when short"). This exists for "the AI keeps writing and ends up sounding like the AI": from chapter 2 onward the model is really reading its own previous chapter for reference, and **a baseline sampled from the whole book drifts along with it** (the longer the book, the higher the AI share). Nail the yardstick to the chapters you wrote yourself and the plugin can answer "**relative to those chapters**, how far has this chapter moved" — it never judges whether you have drifted, which is not decidable in the first place. The chapter being checked is **always excluded** (otherwise it would be comparing itself with itself); when fewer than 3 chapters are ticked the recommended tolerance widens to **at least ±25%**, so even a single chapter can serve as the baseline; chapters that cannot be used (renamed / deleted, or **too short to measure**) are skipped and reported honestly, and if not one of them can be used it falls back to **whole book** and states the reason in the returned baseline description. The scope is stored per book (`<library root>/.novel-writer/baseline/<book>.json`), so books do not affect each other.
 11. **Writing sentinels**: `novel_continuity_check` extended — ①**bridge check** (`chapter`: time jumps / semantic distance / character continuity / hook handoff, with quoted evidence) ②**OOC check** (`ooc`: per-character emotion baseline deviation) ③**outline drift** (`outline`: direction vs body keyword overlap); **brief mode** for report tools.
 12. **Original mode & creation files**: fill in creation settings in the panel's **Original mode** view (worldview/characters/forbidden/main conflict/genre/extras, blank = model decides, per-book profile library); novel_outline maintains creation files (bible/characters/outline/hooks/status), enforcing the bible → outline → hook chain with dynamic batches (10→20→30 chapters) to prevent plot jumps and OOC.
-13. **Experience & stats**: main panel **library stats** (per-book chapters/total chars/7-day active chars, 🔥 green), **🎬 demo** (built-in sample, no files, runs the 6-dim baseline), **📊 report history** (analysis/style-reports browsing); actionable error hints; slimmer tool descriptions.
+13. **Experience & stats**: main panel **library stats** (per-book chapters/total chars/7-day active chars, 🔥 green), **🎬 demo** (built-in sample, no files, runs the 6-dim baseline), **📊 report history** (analysis/style-reports browsing), **🩺 diagnostics** (diagnostic report + statistics window + **one-click copy of the diagnostic bundle** for pasting into an issue); actionable error hints; slimmer tool descriptions.
 
 ---
 
-## Provided Tools (19)
+## Provided Tools (20)
 
 > Parameters, return shapes and worked examples for every tool live in the [online tool manual](https://siweina.github.io/dsh-novel-writer/tools/).
 
@@ -208,12 +209,13 @@ fixAnchors：3 条原著锚段（对话 / 心理 / 描写各一条，供逐句�
 | `novel_chapter_brief` | **Chapter brief** — one call before writing gathers everything (previous-chapter hand-off / chapter direction / characters / open threads / wording rules / style baseline / anchors & skeletons / avoid-list / checklist) |
 | `novel_fix_plan` | **Fix plan** — turns style diagnostics into a priority-ordered to-do list (line anchors + reference passages), re-checkable after edits; **direction only, never generates prose** |
 | `novel_lexicon` | **Required-lexicon table** — per-book + global two-layer registry of proper nouns and author-favoured wording, batch import, hard-checklist injection into the chapter brief, and a wording audit for finished drafts |
+| `novel_diagnose` | **Diagnostic report** (v6.6.0) — reads the local event log and runs five health checks (library root / library contents / data-directory corruption / semantic engine / switch snapshot), aggregating recent calls / degradations / failures, repeated **tool × book** trouble spots, top failure codes and actionable suggestions; three actions: `report` / `events` / `clear`. **The report carries metadata only** (tool / book / chapter / status / duration / counts) — free text is stripped wholesale at the share layer and every error is classified into a fixed code, so it is **safe to paste into an issue** (use this or the panel's "copy diagnostic bundle", not the local log file) |
 
 ---
 
 ## MCP server (usable outside DSH)
 
-The package ships a **stdio MCP server** (`mcp/server.mjs`) that exposes all 19 tools to any MCP client,
+The package ships a **stdio MCP server** (`mcp/server.mjs`) that exposes all 20 tools to any MCP client,
 e.g. Claude Desktop or Cursor. **It runs as a local process on your own machine — no server, no network, no daemon.**
 
 ```bash
@@ -257,6 +259,8 @@ start the server with `--allow-external-src`. Details: [mcp/README.md](./mcp/REA
 
 Under `<library-root>/.novel-writer/`: `plots` / `settings` / `summaries` / `analysis` / `audits` (continuity audits + fix-plan lists) / `embedding` / `style-reports`.
 
+**The event log is deliberately not here**: it lives next to the state file — `~/.dsh/dsh-novel-writer/logs/events.jsonl` (overridable via `DSH_NOVEL_WRITER_STATE`), rotating at 512 KB and keeping the 3 most recent files. Reason: the most common failure is precisely "the library root is wrong", and at that moment `.novel-writer/` does not exist or is not writable — exactly when the evidence matters most. The log is **metadata-first** (time / tool / book / chapter / status / duration / counts / paths / error code), **but it cannot claim "no prose at all"**: free-text fields (error messages) are clamped to **at most one sentence (≤160 characters)**, so a fragment echoed back by an error message can land in the log **on this machine** (measured: when `novel_lexicon` cannot find a term it echoes the term you passed into `detail`). The log file **never leaves the machine**; to share evidence (issue / AI) use the `novel_diagnose` report or the panel's "copy diagnostic bundle" — that path goes through the **share layer**, which strips free text wholesale.
+
 ---
 
 ## Dependencies, permissions and failure bounds
@@ -280,8 +284,12 @@ Under `<library-root>/.novel-writer/`: `plots` / `settings` / `summaries` / `ana
 - Built-in skill: registers its own `novel-writing` skill through `ctx.skills`; it only reads the packaged
   `skills/novel-writing/SKILL.md`, **writes to no skill directory** and needs no host configuration; hosts without a `skills`
   service are skipped silently.
-- Local HTTP: registers 5 routes inside the DSH Web GUI (state / reveal / reports / demo / update-check), loopback-only;
-  `allowLanState` defaults to off, so LAN access is denied by default.
+- Local HTTP: registers 8 routes inside the DSH Web GUI (state / reveal / reports / demo / update-check / lexicon / baseline / **diagnose**), loopback-only;
+  `allowLanState` defaults to off, so LAN access is denied by default. Logging and diagnosis stay on the machine: the event log lives at
+  `~/.dsh/dsh-novel-writer/logs/events.jsonl` (512 KB rotation, 3 kept) is **metadata-first** (time / tool / book / chapter / status / duration / counts / paths / error code) — **free-text fields (error messages) are clamped to at most one sentence (≤160 characters)**, so a fragment echoed back by an error message can appear in that file **on this machine**; the file itself **never leaves the machine**. `novel_diagnose`
+  and the panel's "copy diagnostic bundle" go through the **share layer**, which strips free text before anything is emitted (**nothing that leaves the machine carries free text**);
+  **the share layer is the default** (`readLogEvents` returns the free-text local layer only when `forShare:false` is passed
+  explicitly — a privacy boundary defaults to giving less, never more).
 - MCP server (`mcp/server.mjs`): the `root` argument of every tool must fall inside the library root given to `--root`
   (out-of-root values are rejected and fall back); `novel_import`'s `src` is likewise root-limited unless you explicitly
   opt out with `--allow-external-src`.
@@ -291,7 +299,12 @@ Under `<library-root>/.novel-writer/`: `plots` / `settings` / `summaries` / `ana
 - Lifecycle scripts: none (no preinstall / postinstall / prepare).
 
 **Failure bounds**: semantic engine failure falls back to pure rule mode; cache/disk failures never block
-tool results; a plugin load failure cannot affect the DSH host process.
+tool results; **"can't read it" is never reported as "there's nothing there"** — only a genuinely missing file
+(`ENOENT`) is described as "not initialised / not registered / not saved / no creation files"; when the file
+exists but cannot be read (corrupt / no permission / undecodable encoding) the plugin states that fact with the
+path and reason, says an `init` is *not* needed, and records an event you can inspect with `novel_diagnose`;
+- **Known leftover (deferred to the next release, recorded as-is)**: if a chapter file is replaced by a **directory with the same name**, `scanChapters`'s `if (!entry.isFile()) continue` skips it **silently** — the chapter disappears from the chapter table (`novel_chapters` loses one entry), `novel_diagnose` reports **zero** unreadable files, and `novel_chapter_brief`'s `degraded` contains **no** "could not read chapter" entry. On that one path, **"can't read it" is still reported as "there's nothing there"**; when a chapter seems to have vanished, first check whether a **directory named like the chapter** exists in the book folder;
+a plugin load failure cannot affect the DSH host process.
 
 **Compatibility**: Node.js >= 22.3 (`engines.node`); DSH >= 0.1.1-rc.2 (`dsh.engines.dsh`).
 

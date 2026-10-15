@@ -38,7 +38,7 @@
  *     B4 react.use[A-Z] == 12；
  *     B5 ctx.inject( =0、sidebar.panellist=5、name:"main"=1、createNovelWriterUI 定义=1、
  *        var NW_UI = createNovelWriterUI =1、primitives require 在 try 之后、
- *        client.js 与仓库内构建源重放一致、ALL_TOOLS=19（v6.2.0 起 18 → 19）；
+ *        client.js 与仓库内构建源重放一致、ALL_TOOLS=20（v6.2.0 起 18 → 19，v6.6.0 起 19 → 20）；
  *     B6 css 模板段禁区 3×0；style: 对象裸色值违规 0（1 条 ⚠ 全局关键字豁免，见下）。
  *
  * ── 两处口径说明（已报总负责人）──────────────────────────────────────────────
@@ -59,7 +59,7 @@ import { fileURLToPath } from "node:url";
 // ============================== 写死的基线与清单 ==============================
 
 const HOOK_BASELINE = 12;                       // 见头注释：实测命令与指纹
-const EXPECTED_ALL_TOOLS = 19;                  // v6.2.0 起：18 → 19（新增 novel_lexicon 必用词表）
+const EXPECTED_ALL_TOOLS = 20;                  // v6.2.0 起：18 → 19（novel_lexicon 必用词表）；v6.6.0 起：19 → 20（novel_diagnose 诊断报告）
 const PRIMITIVES_REQ = 'require("@deepseek-ai/dsh-client-ui-primitives")';
 
 // 契约 §4.2：5.5.0 新增类必须全部保留定义（逐字来自契约第 58 行冻结清单，共 34 个）

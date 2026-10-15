@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>novel_diagnose — 诊断报告｜dsh-novel-writer 技术文档</title>
+<meta name="description" content="novel_diagnose 的实现细节：本地事件日志的字段白名单与两级隐私设计、错误文本一律归类成固定 code、五处体检（书库根 / 书库内容 / 数据目录损坏 / 语义引擎惰性探测 / 开关快照）、「工具 × 书名」反复失败聚合、512 KB 轮转与落点、调用审计的注册层包装、诊断路由与面板入口，以及读取预算与「不减少 bug、只加快定位」的边界。">
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="docs.css">
+<link rel="canonical" href="https://siweina.github.io/dsh-novel-writer/tools/novel-diagnose.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="dsh-novel-writer">
+<meta property="og:title" content="novel_diagnose — 诊断报告｜dsh-novel-writer 技术文档">
+<meta property="og:description" content="novel_diagnose 的实现细节：本地事件日志的字段白名单与两级隐私设计、错误文本一律归类成固定 code、五处体检（书库根 / 书库内容 / 数据目录损坏 / 语义引擎惰性探测 / 开关快照）、「工具 × 书名」反复失败聚合、512 KB 轮转与落点、调用审计的注册层包装、诊断路由与面板入口，以及读取预算与「不减少 bug、只加快定位」的边界。">
+<meta property="og:url" content="https://siweina.github.io/dsh-novel-writer/tools/novel-diagnose.html">
+<meta property="og:locale" content="zh_CN">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="novel_diagnose — 诊断报告｜dsh-novel-writer 技术文档">
+<meta name="twitter:description" content="novel_diagnose 的实现细节：本地事件日志的字段白名单与两级隐私设计、错误文本一律归类成固定 code、五处体检（书库根 / 书库内容 / 数据目录损坏 / 语义引擎惰性探测 / 开关快照）、「工具 × 书名」反复失败聚合、512 KB 轮转与落点、调用审计的注册层包装、诊断路由与面板入口，以及读取预算与「不减少 bug、只加快定位」的边界。">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_diagnose","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-diagnose.html"}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_diagnose — 诊断报告｜dsh-novel-writer 技术文档","description":"novel_diagnose 的实现细节：本地事件日志的字段白名单与两级隐私设计、错误文本一律归类成固定 code、五处体检（书库根 / 书库内容 / 数据目录损坏 / 语义引擎惰性探测 / 开关快照）、「工具 × 书名」反复失败聚合、512 KB 轮转与落点、调用审计的注册层包装、诊断路由与面板入口，以及读取预算与「不减少 bug、只加快定位」的边界。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-diagnose.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.6.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_diagnose, dsh-novel-writer, MCP 工具文档"}</script>
+</head>
+<body class="docs">
+
+<header class="docs__top">
+  <a class="docs__brand" href="../index.html">← dsh-novel-writer</a>
+  <span class="docs__crumb">技术文档 / <code>novel_diagnose</code></span>
+</header>
+
+<div class="docs__layout">
+  <aside class="docs__side" id="docsSide"></aside>
+
+  <main class="docs__main">
+    <article class="doc">
+      <h1>novel_diagnose</h1>
+      <p class="doc__lead">
+        诊断报告（v6.6.0 新增，第 <strong>20</strong> 个工具）。读<strong>本地事件日志</strong>并做五处体检——书库根、书库内容、插件数据目录（含损坏检测）、语义引擎（惰性探测，<strong>不加载模型</strong>）、开关与状态快照——把「平时看不出来的问题」聚合成一份<strong>中文报告</strong>：近期调用 / 降级 / 失败统计、<strong>「工具 × 书名」反复出问题的组合</strong>、高频失败类型、可执行建议，以及「本次覆盖与未覆盖」清单。
+      </p>
+      <p>它<strong>刻意不做成「给作者看日志文件」</strong>——本插件的使用者是小说作者，不会去读 <code>.jsonl</code>；真正的消费者是<strong>替他操作的 AI</strong>（经本工具读成中文报告）与<strong>维护者</strong>（收到用户附上的诊断包）。所以要修的是「<strong>跨调用 / 跨会话才看得出来的规律</strong>」：同一本书同一个工具错了 5 次、语义引擎反复不可用、书库根其实一直不对、某个工具被自己关掉了却忘了——这些在单次调用的友好报错里全都看不见，而用户报 bug 时手上也没有任何可附带的证据。</p>
+      <p><strong>它不判定对错、也不减少 bug，只让定位变快。</strong>报告不替代工具自己返回的中文提示（那条提示仍是第一手信息），它补的是「这件事已经重复发生」与「环境/开关侧其实有事」这两层。</p>
+      <div class="note">
+        <b>报告只含元数据，绝不含正文，连原始异常消息也不含。</b>本地事件日志<strong>以元数据为主</strong>（时间 / 工具名 / 书名 / 章号 / 状态 / 耗时 / 计数 / 路径 / 错误 code），<strong>但自由文本字段（错误消息等）经收敛后至多保留一句（≤160 字）</strong>——所以<strong>本机</strong>日志里可能出现被错误消息回显的输入片段（实测：<code>novel_lexicon</code> 找不到词条时会把传入的词条名回显进 <code>detail</code>；口径见「两级隐私设计」一节）。任何<strong>离开本机的内容</strong>（本报告、面板「复制诊断包」、诊断路由）都会<strong>整体剔除自由文本</strong>，而各类错误在生成报告前就被<strong>归类成固定 code 与中文短标签</strong>——因为 <code>JSON.parse</code> 的报错会回显文件内容片段，而 <code>summaries/</code>、<code>plots/</code>、<code>settings/</code> 正是由正文派生的。因此本工具的报告可以直接贴进 issue；<strong>报 bug 请用它或面板「复制诊断包」，不要直接附本机日志文件</strong>。
+      </div>
+
+      <h2>参数</h2>
+      <table>
+        <thead><tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><th><code>book</code></th><td>string</td><td>否</td><td>只看这本书相关的事件。取值先 <code>trim</code>，空串即「不过滤」；过滤是<strong>严格相等</strong>（事件里的 <code>book</code> 必须与它逐字符相同），所以末尾多一个空格就什么都匹配不到。</td></tr>
+          <tr><th><code>days</code></th><td>integer</td><td>否</td><td>统计窗口（天）。<strong>默认 7、上限 90</strong>；非数字 / <code>0</code> / 负数一律回退 7，小数被 <code>Math.trunc</code> 截断（<code>days: 7.9</code> ＝ 7 天）。</td></tr>
+          <tr><th><code>action</code></th><td>string</td><td>否</td><td><code>report</code>（默认）= 生成报告；<code>events</code> = 额外附带事件明细（≤ 200 条）；<code>clear</code> = 清空本地事件日志。<strong>插件内部只区分 <code>clear</code> 与 <code>events</code>，其余取值一律按 <code>report</code> 行为处理</strong>（<code>action</code> 字段仍原样回传）；三个合法取值由参数 schema 的 <code>enum</code> 在宿主侧约束。</td></tr>
+          <tr><th><code>root</code></th><td>string</td><td>否</td><td>章节库根目录（含 <code>novels</code> 子目录）。省略时按 <code>config.root</code> → 会话工作目录回退（见「根解析与来源披露」）。</td></tr>
+        </tbody>
+      </table>
+      <p>参数 schema 声明 <code>additionalProperties: false</code>，即只接受以上四项。本工具的 <code>execute</code> <strong>不调用</strong> <code>assertToolEnabled</code>——诊断必须在「把一堆工具都关掉了」的时候仍然能用（否则最先需要它的人恰好是被自己关掉的人）。</p>
+
+      <h2>输出结构</h2>
+      <p>契约字段（<code>output.schema.required</code>）：<code>action</code>、<code>days</code>、<code>root</code>、<code>calls</code>、<code>issues</code>、<code>checklist</code>、<code>report</code>。</p>
+      <table>
+        <thead><tr><th>字段</th><th>类型</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr><th><code>report</code></th><td>string</td><td>渲染好的中文报告（与 <code>output.render</code> 同源，均由 <code>formatDiagnosis</code> 生成）</td></tr>
+          <tr><th><code>action</code></th><td>string</td><td>本次生效的 action（默认 <code>report</code>；<code>clear</code> 时另附 <code>cleared:true</code>、<code>days:0</code>）</td></tr>
+          <tr><th><code>days</code></th><td>integer</td><td>本次生效的窗口天数（<code>clear</code> 时为 0）</td></tr>
+          <tr><th><code>root</code></th><td>object</td><td>根解析 + <strong>书库内容体检</strong>：<code>path</code> / <code>source</code> / <code>looksLikeLibraryRoot</code> / <code>lastRoot</code> / <code>lastRootLooksLikeLibraryRoot</code>，以及 <code>booksPath</code> / <code>bookCount</code> / <code>chapterCount</code> / <code>chars</code> / <code>books[]</code> / <code>booksListed</code> / <code>emptyBookCount</code> / <code>unreadableBookCount</code> / <code>badNameTotal</code> / <code>shortTotal</code> / <code>unreadableTotal</code> / <code>badNames[]</code> / <code>shortChapters[]</code> / <code>unreadableFiles[]</code> / <code>scanPartial</code> / <code>scannedFiles</code></td></tr>
+          <tr><th><code>root.books[]</code></th><td>array</td><td>每部作品一行 <code>{ name, chapters, chars, badNames, shortChapters, unreadable }</code>；按字数降序、<strong>最多 40 部</strong>（<code>booksListed</code> 为实际列出数）</td></tr>
+          <tr><th><code>dataDir</code></th><td>object</td><td>数据目录体检：<code>path</code> / <code>exists</code> / <code>bytes</code> / <code>files</code> / <code>subdirs[]</code>（≤12）/ <code>expectedSubdirs</code> / <code>presentSubdirs</code> / <code>missingSubdirs[]</code> / <code>checkedJson</code> / <code>nonJsonFiles</code> / <code>compressedJson</code> / <code>compressedSkipped</code> / <code>corruptTotal</code> + <code>corruptFiles[]</code> / <code>emptyTotal</code> + <code>emptyFiles[]</code> / <code>oversizedTotal</code> + <code>oversizedFiles[]</code> / <code>unreadableTotal</code> + <code>unreadableFiles[]</code></td></tr>
+          <tr><th><code>dataDir.corruptFiles[]</code></th><td>array</td><td><code>{ file, rel, subdir, bytes, error }</code>；<code>error</code> 是<strong>固定文案</strong>（「无法解析为合法 JSON」/「zstd 缓存解压失败（写入被打断或文件被改坏）」/「zstd 解压后不是合法 JSON」），<strong>绝不含原始异常文本</strong>；每类清单最多 12 条，只给计数之外的明细</td></tr>
+          <tr><th><code>log</code></th><td>object</td><td><code>{ dir, bytes, files, kinds, exists, selfCallExcluded }</code>：日志目录、现有 <code>events*.jsonl</code> 合计字节数、文件份数、已定义的事件类型数（当前 9）、是否已有日志，以及下面那条契约声明</td></tr>
+          <tr><th><code>log.selfCallExcluded</code></th><td>boolean</td><td>恒为 <code>true</code>：<strong>合约声明</strong>——本报告的读数取自<strong>本次诊断自身那条审计记录落盘之前</strong>（审计包装要等 <code>execute</code> 返回后才写），因此比事后调 <code>logStats()</code> 少恰好一条事件。想「与磁盘现算比对」的一方必须同样在调用<strong>之前</strong>读盘、或把 <code>novel_diagnose</code> 那条减掉，否则会差出恰好一条事件的计数与字节数——看起来像 bug，其实是口径</td></tr>
+          <tr><th><code>calls</code></th><td>object</td><td><code>{ total, ok, degraded, failed }</code>，只统计 <code>kind: "tool_call"</code> 的事件</td></tr>
+          <tr><th><code>byTool</code></th><td>array</td><td><code>{ tool, total, ok, degraded, failed, msTotal, msAvg }</code>；按 <code>total</code> 降序、<strong>前 12 个</strong></td></tr>
+          <tr><th><code>byKind</code></th><td>array</td><td><code>{ kind, count, codes[] }</code>，按计数降序；<code>codes</code> 是该类型下的 code 分布（≤4 项）——<strong>「12 次 cache 事件」不可行动，「12 次都是同一个 code」才能定位到具体文件</strong></td></tr>
+          <tr><th><code>topCodes</code></th><td>array</td><td>高频失败类型 <code>{ code, count }</code>，按计数降序、<strong>前 8 个</strong>；无 code 的失败会聚到空串上</td></tr>
+          <tr><th><code>problems</code></th><td>array</td><td><strong>「工具 × 书名」反复出问题的组合</strong>：<code>{ tool, book, failed, degraded, codes, chapters }</code>（<code>codes</code> / <code>chapters</code> 各截前 4 项）；按「失败 + 降级」次数降序、<strong>前 10 组</strong></td></tr>
+          <tr><th><code>issues</code></th><td>array</td><td>问题与建议，元素 <code>{ level, title, detail, suggestion }</code>；<code>level</code> ∈ <code>error</code> / <code>warn</code> / <code>info</code>（报告里渲染为「⚠ 阻断 / △ 注意 / · 提示」），<strong>已按级别排序</strong>（error → warn → info，同级保持发现顺序）。元素 schema 是 <code>additionalProperties:false</code>，只允许这四个键</td></tr>
+          <tr><th><code>checklist</code></th><td>array</td><td>本次覆盖与未覆盖（<strong>9 项</strong>），元素 <code>{ item, state, note }</code>；<code>state</code> ∈ <code>checked</code> / <code>warn</code> / <code>skipped</code> / <code>off</code></td></tr>
+          <tr><th><code>tools</code></th><td>object</td><td><strong>能力 + 开关快照</strong>：<code>registered</code> / <code>enabled</code> / <code>disabled[]</code> / <code>disabledCount</code> / <code>features</code>（功能开关生效值）/ <code>disabledFeatures[]</code> / <code>master{enabled,autoAnalyze,source}</code> / <code>prompt{systemPromptMode,promptScene,leanWorkflow}</code> / <code>styleTolerance</code> / <code>stateFile{path,exists}</code> / <code>engine{…}</code></td></tr>
+          <tr><th><code>tools.engine</code></th><td>object</td><td><code>{ modelDir, model, modelPresent, loaded, errorCode, errorLabel, lastCacheErrorCode, lastCacheErrorLabel, events{count,codes[]} }</code></td></tr>
+          <tr><th><code>events</code></th><td>array</td><td>仅 <code>action=events</code> 时出现：事件明细（≤ 200 条，<strong>仍为分享层</strong>，自由文本已剔除）</td></tr>
+          <tr><th><code>book</code></th><td>string</td><td>仅在传了非空 <code>book</code> 时出现</td></tr>
+        </tbody>
+      </table>
+      <p>渲染层（<code>output.render</code>）返回 <code>[{ type: "text", text: value.report }]</code>：报告是一条纯文本，首行固定为 <code>【诊断报告】生成于 &lt;ISO 时间&gt;</code>，之后的小节号由渲染器<strong>动态分配</strong>，顺序固定为：一、书库根 / 二、书库内容体检（只统计，不读正文）/ 三、插件数据目录 / 四、语义引擎（本地 embedding，惰性加载）/ 五、开关与状态 / 六、近 N 天调用 / 七、问题与建议 / 八、<strong>事件明细</strong>（<strong>仅 <code>action=events</code> 且有明细时才有这一节</strong>，只渲染前 40 行）/ 九、本次覆盖与未覆盖。因此「本次覆盖与未覆盖」在<strong>没有事件明细时是第八节、有明细时是第九节</strong>——按节号解析的读取方请注意这一点（按标题解析则不受影响）。末尾固定附一句「本报告只含<strong>元数据</strong>……日志从设计上就不记录正文」——<strong>该句的后半截属旧口径残留</strong>：报告本身确实不含正文（分享层已剔除自由文本），但「日志从设计上就不记录正文」对<strong>本地层</strong>不成立（本地层至多保留一句 ≤160 字，见「约束与边界」一节的实测复现）。这句固定文案在 <code>lib/diagnose.js</code> 的 <code>formatDiagnosis</code> 里，属本轮<strong>未改动</strong>的实现文件，留待下版与代码一起改；此处文档口径已改准。</p>
+
+      <h2>行为与实现</h2>
+
+      <h3>1 · 根解析与来源披露</h3>
+      <div class="formula">root = resolveRoot(config, args, exec)          // 与其他工具同一实现
+root.source（三选一）：
+  调用参数 root 非空          → "调用参数 root"
+  否则 config.root 非空        → "插件配置 config.root"
+  否则                        → "cwd（当前工作目录兜底）"
+
+root.looksLikeLibraryRoot = 根下存在 novels/ 或 .novel-writer/
+root.lastRoot                 = state.json 里记住的上一次写操作根（"" = 无）
+root.lastRootLooksLikeLibraryRoot = lastRoot 为 "" 时是 null，否则同上判据
+
+resolveRoot 只在「可疑决策」时记 root_resolve（level:"warn"）：
+  显式 root 不像书库根 / config.root 不像书库根 / 走到 cwd 兜底且 cwd 不像书库根
+
+noteRoot（写操作之后记 lastRoot）另有三类留痕：
+  显式 root → root_resolve（说明"跳过落盘"，<strong>每次显式 root 的写操作都会记</strong>）
+  cwd 兜底且不像书库根 → root_resolve（level:"warn"，拒绝记为 lastRoot）
+  lastRoot 真的变化 → root_resolve（"lastRoot 首次记录" / "lastRoot 变更"，含旧值与新值前 120 字）
+  写 lastRoot 失败 → config（status:"failed"、level:"warn"，面板下次可能列不出书）</div>
+      <p><code>looksLikeLibraryRoot</code> 为假时直接产出一条 <code>level: "error"</code> 的问题（「书库根可能不对」），并给出可执行修法：根必须是 <code>novels</code> 的<strong>父目录</strong>（把 <code>novels</code> 目录本身填进去，会去找 <code>novels/novels</code>）。<code>lastRoot</code> 失效则单独一条 <code>warn</code>——面板会静默跳过失效的 <code>lastRoot</code>，但每次解析根都要白跑一次，所以必须点名。</p>
+      <div class="note">
+        <b>留痕是刻意「有选择性」的，但选择性不等于全静默。</b><code>resolveRoot</code> 每次工具调用都会跑，因此只记可疑决策；而 <code>noteRoot</code> 在<strong>显式 root 的写操作</strong>后固定记一条（说明"不改写宿主记住的书库位置"），<code>lastRoot</code> 变化时再记一条。<strong>后果之一</strong>：一次 <code>novel_new_chapter</code>（或其他写操作）可能同时留下 <code>root_resolve</code> 与 <code>tool_call</code> <strong>两条</strong>事件——统计口径上 <code>calls</code> 只数 <code>tool_call</code>，所以计数不会被这条多算，但「一次调用一条记录」这个说法<strong>不成立</strong>，读日志时按 <code>kind</code> 区分。
+      </div>
+
+      <h3>2 · 书库内容体检（只统计，不读正文）</h3>
+      <div class="formula">listBookNames(root) → 逐本 scanChapters（只 readdir + 解析文件名）
+逐章 countChapterChars(file) = readTextFile(file).length   ← 返回值是 number，正文不出这个函数
+
+统计：书数 / 章数 / 总字数
+命名异常 badNames    ：解析不出章号的文件（章序排到书末、无法用章号定位）
+过短章节 shortChapters：< 40 字（空壳章、只有标题的占位章——会把六维基线与风格指纹拉偏）
+空书目录 emptyBookCount / 读不出的章节与书目录 unreadableTotal、unreadableBookCount
+
+读取预算：SCAN_MAX_FILES = 2000 个文件、SCAN_MAX_CHARS = 8 MB
+  用尽即停并把 scanPartial 置真（报告写「字数按已读的 N 章计」）
+排序：books 按 chars 降序；输出最多 MAX_BOOKS_LISTED = 40 部
+清单：badNames / shortChapters / unreadableFiles 各最多 12 条（MAX_LIST）</div>
+      <p>为什么要这一节：<code>&lt; 40 字</code>的章与「解析不出章号」的文件在 <code>novel_chapters</code> 里都只表现为「有一章」，但它们会（前者）把六维基线与风格指纹拉偏、（后者）让章序排到末尾且无法被章号定位——两类问题在别处都看不出来。</p>
+
+      <h3>3 · 插件数据目录体检（含损坏检测）</h3>
+      <div class="formula">dir = novelDataDir(root) = &lt;root&gt;/.novel-writer
+应有子目录（9 个）：analysis audits baseline embedding lexicon plots settings style-reports summaries
+  → presentSubdirs / missingSubdirs（用到时才建，缺失属正常，报告会说明这一点）
+目录根下的散落文件也扫一眼（正常应为空）
+
+逐文件：累加 bytes / files，然后分类
+  0 字节            → emptyFiles（写入被打断；调用方读到会当成"空表"）
+  非 .json          → nonJsonFiles（不解析）
+  > 8 MB（MAX_PARSE_BYTES）→ oversizedFiles（<strong>只记体积、不整读</strong>）
+  读不出来          → unreadableFiles（权限 / 占用）
+  zstd 魔数 28 b5 2f fd → compressedJson（embedding/*.json 与 *__style*.json 是<strong>压缩体</strong>）
+      可解压 → 解压后再 JSON.parse 判定
+      旧 Node（无 zstdDecompressSync）或 > 2 MB（MAX_DECOMPRESS_BYTES）→ compressedSkipped（不判损坏）
+  其余文本 JSON     → checkedJson → JSON.parse 只判可解析性，结果立刻丢弃
+解析失败 / 解压失败 → corruptFiles（error 是固定文案，绝不含原始异常文本）</div>
+      <div class="note">
+        <b>「按魔数认出压缩缓存」这条是踩过坑才加的。</b> <code>embedding/*.json</code> 不是文本 JSON，而是 zstd 压缩后直接落盘（扩展名仍叫 <code>.json</code>）。第一版检测器只做 <code>JSON.parse(readFileSync)</code>，于是在真实书库上把 15 个<strong>健康</strong>的缓存全报成「损坏」——正是「报告说坏了、其实没坏」这类最伤信任的错。现在按魔数识别、按需解压再判；纯文本才走 <code>JSON.parse</code>；解压后超过上限时按「缓存很大」处理，不判损坏。
+      </div>
+      <p>损坏的判定口径与 <code>core.js</code> 的词表守卫一致：<strong>文件存在但读不出内容 = 损坏</strong>，文件不存在是另一回事（<code>missingSubdirs</code> / 0 字节各有独立归类）。</p>
+
+      <h3>4 · 语义引擎体检（惰性探测，不加载模型）</h3>
+      <div class="formula">inspectEngine(events) 用 embedding.status() —— 纯探测：existsSync 模型文件 + 读进程内存里的引擎状态
+  不创建 WASM 会话、不预热模型、不写缓存（诊断必须便宜且无副作用）
+输出：modelDir / model / modelPresent / loaded / errorCode / errorLabel
+      / lastCacheErrorCode / lastCacheErrorLabel
+      / events{ count, codes[] }（日志里历史的 kind==="engine" 事件，≤6 个 code）
+
+引擎错误归类（固定 code + 中文短标签，原文一律不透出）：
+  runtime-missing  运行时依赖没加载（onnxruntime-web / @huggingface/tokenizers 未解析到）
+  model-missing    模型文件缺失（lib/models/ 下的 onnx 模型或 tokenizer）
+  wasm-failed      WASM 会话创建或推理失败
+  unknown          未能归类（原始文本按隐私设计不入报告）
+缓存错误归类：
+  no-space / denied / locked / corrupt / unknown</div>
+      <p>三件事必须在报告里讲清，否则会误导人：<strong>①</strong> <code>loaded:false</code> <strong>不等于坏</strong>——模型是首次真正用到时才惰性加载的；<strong>②</strong> 只有 <code>modelPresent:false</code> 或 <code>errorCode</code> 非空才是确定的问题；<strong>③</strong> 进程内的错误状态重启宿主即丢，所以还要看日志里历史的 <code>engine</code> 事件（跨进程证据）。分类不是装饰：它决定给用户哪一条修法（重装依赖 / 补齐模型 / 换宿主版本 / 清盘 / 给权限 / 关掉占用程序）。</p>
+
+      <h3>5 · 开关与状态快照</h3>
+      <div class="formula">readSentenceStateSync() + effectiveSentenceAnalysis()（core 的单一裁决点，不重写判断）
+  状态文件 stateFile{ path, exists }（同步读拿不到 exists，这里自己 existsSync 补上）
+  工具：registered / enabled / disabled[]（逐个 toolEnabled 求值）
+  功能开关：已声明的全查 + 用户自加的布尔键（≤20），缺失回退 FEATURE_DEFAULTS
+  总开关：master{ enabled, autoAnalyze, source }（source = "state.json" 或 "config / 默认值"）
+  提示词：prompt{ systemPromptMode, promptScene, leanWorkflow }（枚举外的值回退默认）
+  容差：clampStyleTolerance(state.styleTolerance)（走同一套钳制，脏值不带出来）
+  lastRoot</div>
+      <p>这是本次增强里最值钱的一条：工具被关掉时 AI 只会收到一句「当前已在 UI 中关闭」，而<strong>用户往往不记得是自己关的</strong>——于是反复重试、以为插件坏了。报告把「哪些工具关了、哪些功能关了、总开关在哪一档」直接列出来，并给出 <code>novel_sentence_config</code> 的开启写法，一句话就能对上。注意口径：<strong>开关缺失 = 开启</strong>（不是关着），无状态文件时全部走默认值，属正常而不是异常。</p>
+
+      <h3>6 · 两级隐私设计（本模块的核心）</h3>
+      <p>日志天生会被贴出去（贴进 issue、贴给 AI 看），所以<strong>隐私红线是「任何离开本机的内容都不含自由文本」</strong>——<strong>不是</strong>「日志里绝不含正文」：后半句在<strong>本地层做不到</strong>（本地层的自由文本至多保留一句，见本节口径修正）。实现手段是<strong>字段白名单</strong>，而不是「检查值里有没有正文」：</p>
+      <div class="formula">本地日志（logs/events.jsonl）——只落白名单键，白名单之外一律丢弃：
+  ts kind level tool action status code book chapter file path root
+  rootSource mode scope name ms count degradedCount bytes files
+  note detail suggestion source phase version plugin
+  contentChars textChars srcChars filesCount chaptersCount termsCount   ← 参数摘要的长度/计数派生键
+  truncated                                                            ← 超长事件被裁过的显式标记
+显式黑名单（纵深防御，即使在白名单里也丢）：
+  text content body excerpt raw paragraph paragraphs anchor anchors
+  skeleton skeletons summary brief report prompt term terms entries
+  chaptertext fulltext
+自由文本（note / detail / suggestion）额外收敛 —— 这不是安全保证，只是把误用的爆炸半径压到一句话：
+  换行/制表压成空格 → 遇句末标点（。！？!?…）即从该处截断并加 … →
+  超 160 字上限截断 → 连续表意文字超 40 字截断
+  ⇒ 因此本地层「至多保留一句（≤160 字）」：无句末标点且连续表意文字 ≤40 字时，那一句会被完整保留
+    （F1 已知边界，实测复现命令见「约束与边界」一节；协调方判定不收紧本地层，只改口径）
+其余标量 200 字上限；数组最多 20 项且只收标量；对象 / 函数 / 符号一律丢弃
+
+对外分享层（readLogEvents 的默认行为，fail-closed）：
+  只有显式传 forShare === false 才返回本地层；其余（1 / "true" / {} / 忘传）一律按分享层处理
+  分享层删除 note / detail / suggestion 三个键，并<strong>恒带</strong> redacted: true（层级标志，不是"有内容"标志）
+报告生成前再走一道<strong>错误归类</strong>（引擎 / 缓存 / JSON）→ 只出固定 code 与短标签</div>
+      <ul>
+        <li><strong>本地日志（口径修正，本版定稿时改准的一句）</strong>：<strong>以元数据为主</strong>（时间 / 工具名 / 书名 / 章号 / 状态 / 耗时 / 计数 / 路径 / 错误 code / 插件自己写的固定短语），<strong>但它做不到「绝不记录章节正文」</strong>——<strong>自由文本字段（<code>note</code> / <code>detail</code> / <code>suggestion</code>，也就是错误消息那条通道）经 <code>clampFreeText</code> 收敛后至多保留一句（≤160 字）</strong>，因此<strong>本机</strong>日志里<strong>可能</strong>出现被错误消息回显的输入片段。实测复现（真实工具路径）：<code>novel_lexicon action=update term=…</code> 传一句 34 字、无句末标点的文字 → 抛「词表中找不到词条「…」」→ 该句<strong>逐字落进 <code>logs/events.jsonl</code></strong>。这不影响「正文不外传」的承诺（日志文件<strong>不出本机</strong>），且<strong>协调方判定不收紧本地层</strong>（改成 40 字上限之类会削弱诊断价值、又仍会泄漏若干字）——<strong>正确的修法是改口径，不是改代码</strong>。白名单机制的关键性质是「<strong>未知键一律丢弃</strong>」：调用方「顺手多传一个字段」不会把正文带出去。读侧还会<strong>再净化一遍</strong>——历史文件可能由旧版本写入，读取方不能假设它已经干净。<br><strong>本版内修正</strong>：参数摘要的长度 / 计数派生键（<code>contentChars</code> / <code>textChars</code> / <code>srcChars</code> / <code>filesCount</code> / <code>chaptersCount</code> / <code>termsCount</code>）与 <code>name</code> 此前<strong>漏登记在白名单外、被整批丢掉</strong>（实测 15 个键落盘只剩 8 个），也就是「参数摘要只记长度」这句<strong>当时并不成立</strong>——隐私侧没问题（正文本来也进不来），损失的是可观测性：「这次调用带了多少字正文」永远查不到。现 7 个键已补齐。</li>
+        <li><strong>对外分享层</strong>：本工具的报告、面板的「复制诊断包」、诊断路由返回的内容，<strong>一律走分享层</strong>——<strong>自由文本整体剔除</strong>，只留结构性字段（工具名 / 书名 / 章号 / 状态 / 耗时 / 错误 code / 计数 / 时间）。<strong>分享层是默认行为（fail-closed）</strong>：<code>readLogEvents</code> 只有显式传 <code>forShare === false</code> 才返回本地层，其余一切情况（<code>1</code> / <code>"true"</code> / <code>{}</code> / 忘传）<strong>一律按分享层处理</strong>——旧写法是 <code>!== true</code> 就返回含自由文本的本地层，属于 fail-open，<strong>默认值必须偏向"少给"</strong>。代价：本地调试想直接看 <code>detail</code> / <code>note</code>，必须显式传 <code>false</code>（日志文件本身始终可以直读）。</li>
+        <li><strong><code>redacted: true</code> 恒带</strong>（本版内修正）：原先只在"本来就有 <code>note</code> / <code>detail</code> / <code>suggestion</code>"时才加，导致一条没有自由文本的事件在本地层与分享层里<strong>长得一模一样</strong>，读取方无法自证这条走过哪一层；现在<strong>恒带</strong>——它是<strong>层级标志</strong>，不是「有内容」标志。</li>
+        <li><strong>报告层再挡一道：原始异常消息一律不透出</strong>。<code>JSON.parse</code> 的报错会把<strong>文件内容片段</strong>带进 message（<code>Unexpected token 'x', "…" is not valid JSON</code> 会回显约 10 个字），而 <code>summaries/</code>、<code>plots/</code>、<code>settings/</code> 正是由正文派生的；语义引擎的异常则可能带绝对路径与系统信息。所以本模块把错误<strong>归类成固定 code</strong>，只输出 code 与中文短标签，<strong>永不输出原文</strong>。</li>
+        <li><strong>为什么必须分两级</strong>：值层面的长度 / 标点启发式<strong>从原理上无法保证</strong>自由文本里不含正文——<strong>正文的一句话就是正文，截多短都还是</strong>。所以真正的保证不是「让日志不含正文」，而是「<strong>任何离开本机的东西都不含自由文本</strong>」。本地日志文件<strong>不出本机</strong>，不违背「正文不外传」的承诺。</li>
+      </ul>
+      <div class="note">
+        <b>日志落点在状态目录旁，不在书库根。</b><code>~/.dsh/dsh-novel-writer/logs/events.jsonl</code>（受 <code>DSH_NOVEL_WRITER_STATE</code> 覆盖；目录取状态文件所在目录），<b>不是</b> <code>&lt;书库根&gt;/.novel-writer/</code>。理由很实在：<b>最常见的故障就是「书库根不对」</b>，那时 <code>.novel-writer/</code> 根本不存在或不可写，偏偏最需要留下证据。顺带一个副作用：状态目录可被环境变量覆盖，测试因此天然隔离。
+      </div>
+
+      <h3>7 · 事件类型与轮转</h3>
+      <div class="formula">kinds（9 类，诊断按 kind 聚合；其中 degraded 目前由 tool_call 的 status 表达，独立事件暂未使用）：
+  tool_call  root_resolve  silent_skip  degraded  cache
+  engine     config        panel        internal
+轮转：单文件 512 KB（LOG_MAX_BYTES）→ events.jsonl → events.1.jsonl → … → events.3.jsonl（删除最旧）
+  保留最近 3 份历史（LOG_KEEP_FILES），加当前文件共 4 份，总量有界
+单条事件：序列化后上限 4096 字节。超长时<strong>逐级丢弃信息量最低的字段</strong>（先 detail/note/suggestion/files/path/file/name/scope/root，
+          仍超限就只留结构性骨架）并置 truncated:true —— <strong>永远写一整行合法 JSON</strong>
+          （本版内修正：旧写法 delete detail + slice() 会写出<strong>半行 JSON</strong>，读侧当坏行跳过 →
+           <strong>整条事件从诊断里凭空消失</strong>，比"被截断"更糟）
+写入：sanitize → JSON.stringify → mkdir（首次）→ rotateIfNeeded → appendFileSync（同步）</div>
+      <p>写入刻意用<strong>同步</strong> <code>appendFileSync</code>：一次 append 只有几十字节，代价远小于「异步队列在进程退出时丢事件」的风险（本插件没有常驻进程的生命周期钩子）。<strong>任何写入失败都被吞掉</strong>——写日志绝不能让工具调用失败（那才是本末倒置）；唯一的例外是<strong>首次</strong>失败时往 stderr 打一行提示，且只打一次，否则连「日志本身坏了」都无从知晓。</p>
+
+      <h3>8 · 工具调用审计：注册层统一包一层</h3>
+      <p>审计不是散落在 20 个工具体内的埋点，而是在<strong>注册层</strong>临时替换 <code>ctx.tools.register</code>，对每个工具定义包一层 <code>execute</code>，注册完立刻还原。理由是「体内埋点迟早会漏，而且新加的工具必然忘」，而 <code>register</code> 是唯一必经之路。</p>
+      <div class="formula">每次调用记录（kind: "tool_call"）：
+  tool / status（ok | degraded | failed）/ ms / degradedCount / code / detail
+  + summarizeArgs(args)  ← 安全参数摘要
+summarizeArgs 取哪些：
+  定位字段（标量）book chapter action mode scope root file path name
+  只记"给了几个"：content text src files chapters terms
+    字符串 → &lt;键&gt;Chars = 长度；数组 → &lt;键&gt;Count = 条数
+  ⚠ 这些派生键必须同时登记在 ALLOWED_KEYS 里才落得下来：本版曾因漏登记被整批丢掉
+    （实测 15 个键落盘只剩 8 个，"只记长度"当时并不成立）——现已补齐
+状态判定：
+  返回体 ok === false            → failed，code = error 前 80 字
+  返回体 degraded 数组非空        → degraded（条数 = 数组长度）
+  抛异常                        → failed，code = e.code 前 40 字，detail = message（异常原样抛出）
+
+三条铁律：
+  ① 审计绝不影响工具本身（异常不吞、不转换、不改返回）
+  ② 参数绝不记正文（只走 summarizeArgs。注意：失败调用还会把错误消息写进 detail，
+     那条路经 clampFreeText 至多保留一句 ≤160 字——见「两级隐私设计」的本地层口径）
+  ③ 注册完立刻还原 register，不留副作用
+包装装不上时（宿主把 register 设成只读）→ 放弃审计，但记一条 internal 事件说明
+  「本次会话的 tool_call 审计已关闭」——否则日志里"什么都没有"会被读成"什么都没发生"</div>
+      <p>本工具自身也在被审计之列（包装在注册之前装好、在最后一个工具注册完之后才还原），所以「谁在什么时候调了诊断、跑了几毫秒」同样会进日志。代价已知：每次调用多一次同步写盘。</p>
+      <div class="note">
+        <b>静默失败留痕是「选择性接线」，两个总体分开给、便于自行复算。</b>6 个服务端模块（<code>core</code> / <code>index</code> / <code>brief</code> / <code>vibe</code> / <code>embedding</code> / <code>analysis</code>）里 <strong>catch 点 163</strong>（块级 <code>} catch</code> 161 + 链式 <code>.catch(</code> 2；分文件 core 80 / index 52 / brief 7 / vibe 11 / embedding 11 / analysis 2）——<strong>163 是屏蔽注释与字符串字面量后的代码真值</strong>：旧稿写 164，因为 <code>core.js</code> 有一条注释引用了 <code>try { … } catch { … }</code> 的写法、被「数 catch 关键字」的口径算成了代码（口径过计，不是漏接）。<strong>另有 84 处 <code>logEvent(</code> 调用点</strong>（core 46 / index 24 / brief 2 / vibe 5 / embedding 6 / analysis 1）——<strong>它不是「已接住的 catch 数」</strong>：其中 <strong>77 处落在 catch 体内</strong>（＝有留痕的 catch 点 77），其余 <strong>7 处根本不在 catch 里</strong>（书库根轨迹 <code>resolveRoot</code> 3 处 + <code>noteRoot</code> 3 处，都是 <code>root_resolve</code>；以及工具调用审计 <code>installToolAudit</code> 的 <code>tool_call</code> 1 处，它在 <code>finally</code> 里）。因此<strong>静默的 catch 点 = 163 − 77 = 86</strong>；旧稿的「静默 80」是拿 84 去减 164 得来的，等于把 7 处 catch 外的调用点也算成「接住了 catch」，会少算 6 处。口径：屏蔽注释与字符串后按括号配对求每个 catch 体区间（链式 <code>.catch(</code> 取实参区间），再判定每个 <code>logEvent(</code> 调用点是否落在某个 catch 体区间内。
+        <br>静默的 80 处分 7 类、每类都有理由：① 「文件不存在 / 空」是常态（<code>ENOENT</code> 不是故障）；② 该失败已如实披露给调用方（<code>degraded[]</code> / <code>notes[]</code> / <code>checklist[]</code> 已写明）；③ 重抛由审计层统一记（记两次反而重复）；④ 纯清理 / 统计路径（失败无后果）；⑤ 按设计允许的探测（"先试一个不存在的路径"）；⑥ 有意不记的「每项」分支（记了会刷屏）；⑦ 无法区分 <code>ENOENT</code> 的场合（宁可漏报，不制造噪音）。接线的类型是 <code>silent_skip</code> / <code>cache</code> / <code>engine</code> / <code>config</code> / <code>panel</code> / <code>root_resolve</code> / <code>internal</code>，覆盖「缓存写不进去 → 每次都要重算」「词表/设定表读不出 → 调用方当成没登记」「语义引擎失败 → 静默回退纯规则」这些此前只能靠猜的路径。因此日志<strong>不等于</strong>「所有被吞掉的失败都留了痕」。
+      </div>
+
+      <h3>9 · 聚合口径与「问题清单」的触发规则</h3>
+      <div class="formula">calls：只数 kind === "tool_call"；status 缺失按 ok 计
+byTool：按 total 降序取前 12；msTotal 只累加有限数值的 ms，msAvg = 四舍五入均值
+byKind：每类计数 + 该类下 code 分布（各留前 4）
+topCodes：code × 次数，降序取前 8
+problems（工具 × 书名）：仅 failed / degraded 的事件参与；
+  同一 (tool, book) 归一组，收集 code 与 chapter 集合（各留前 4）
+  按 (failed + degraded) 降序取前 10</div>
+      <p><code>problems</code> 是本版最有价值的产出：插件里大量用法错误是 <code>assert</code> 抛的普通 <code>Error</code>（<strong>没有 code</strong>），而这类恰恰是「使用者的操作错误」（书名写错、章号不存在、书库根填低一层）——按书分组后，「同一本书同一个工具错了 5 次」这种<strong>模式</strong>才看得出来，而这正是单次调用的友好报错给不了的。</p>
+      <p><code>issues</code> 由体检结果逐条推导，<strong>按级别排序</strong>（error → warn → info）。触发条件按来源分四组（每条都给一句「照着做就行」的动作，不给「建议检查一下环境」这种空话）：</p>
+      <table>
+        <thead><tr><th>来源</th><th>触发条件</th><th>级别</th></tr></thead>
+        <tbody>
+          <tr><th rowspan="7">日志聚合</th><td>同一「工具 × 书名」失败 ≥ 2 次，或失败 + 降级 ≥ 3 次</td><td><code>warn</code></td></tr>
+          <tr><td>书库根结构不对（根下既无 <code>novels/</code> 也无 <code>.novel-writer/</code>）</td><td><code>error</code></td></tr>
+          <tr><td>窗口内有失败调用</td><td><code>warn</code></td></tr>
+          <tr><td>窗口内有降级调用</td><td><code>info</code></td></tr>
+          <tr><td>数据目录不存在</td><td><code>info</code></td></tr>
+          <tr><td>日志合计 &gt; 300 KB（接近轮转上限）</td><td><code>info</code></td></tr>
+          <tr><td>传了 <code>book</code> 但窗口内没有该书事件</td><td><code>info</code></td></tr>
+          <tr><th rowspan="5">语义引擎</th><td>功能总门控 <code>features.semanticEmbedding=false</code></td><td><code>info</code></td></tr>
+          <tr><td><code>modelPresent === false</code>（模型文件不在位）</td><td><code>warn</code></td></tr>
+          <tr><td><code>errorCode</code> 非空（初始化失败，已回退纯规则）</td><td><code>warn</code></td></tr>
+          <tr><td><code>lastCacheErrorCode</code> 非空（索引缓存读写失败）</td><td><code>info</code></td></tr>
+          <tr><td>窗口内有 <code>engine</code> 事件（跨进程证据）</td><td><code>info</code></td></tr>
+          <tr><th rowspan="4">开关与状态</th><td>有工具被关闭（点名是哪些）</td><td><code>warn</code></td></tr>
+          <tr><td>有功能开关被关闭（除「仅 semanticEmbedding 且模型也缺」外）</td><td><code>info</code></td></tr>
+          <tr><td>总开关 <code>enabled=false</code></td><td><code>warn</code></td></tr>
+          <tr><td>状态文件不存在（全部走默认值）／<code>lastRoot</code> 已失效</td><td><code>info</code> / <code>warn</code></td></tr>
+          <tr><th rowspan="4">数据目录</th><td>有损坏文件（<code>corruptTotal &gt; 0</code>）</td><td><code>error</code></td></tr>
+          <tr><td>有读不出来的文件（权限 / 占用）</td><td><code>warn</code></td></tr>
+          <tr><td>有 0 字节文件</td><td><code>warn</code></td></tr>
+          <tr><td>有 ≥ 8 MB 的超大文件（只记体积）</td><td><code>info</code></td></tr>
+          <tr><th rowspan="6">书库内容</th><td><code>novels/</code> 下没有作品目录</td><td><code>warn</code></td></tr>
+          <tr><td>有空书目录（无章节文件）</td><td><code>info</code></td></tr>
+          <tr><td>有解析不出章号的文件名</td><td><code>warn</code></td></tr>
+          <tr><td>有过短章节（&lt; 40 字）</td><td><code>info</code></td></tr>
+          <tr><td>有章节 / 书目录读不出来</td><td><code>warn</code></td></tr>
+          <tr><td>字数统计未覆盖全部章节（读取预算用尽）</td><td><code>info</code></td></tr>
+        </tbody>
+      </table>
+      <p>一条都不触发时给一条 <code>info</code>「未发现异常」（说明窗口内调用都正常完成，书库根、数据目录、语义引擎与各开关都没发现问题）。</p>
+
+      <h3>10 · 「本次覆盖与未覆盖」清单（9 项）</h3>
+      <table>
+        <thead><tr><th>清单项</th><th>state 取值</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><th>书库根与目录结构</th><td><code>checked</code> / <code>warn</code></td><td>根下存在 <code>novels/</code> 或 <code>.novel-writer/</code> 即 checked，否则 warn 并注明「既无 novels/ 也无 .novel-writer/」</td></tr>
+          <tr><th>书库内容体检（书数/章数/字数/命名）</th><td>恒 <code>checked</code></td><td>只统计书数、章数、字数、命名异常与过短章（含本次章数）；<strong>不读正文内容</strong>，读文件只取 <code>length</code>；读取预算用尽时在 note 里说明</td></tr>
+          <tr><th>插件数据目录体检</th><td><code>checked</code> / <code>skipped</code></td><td>存在则 checked：体积 / 文件数 + JSON 可解析性（含 zstd 压缩缓存解压校验）+ 0 字节 / 超大文件；不存在则 skipped</td></tr>
+          <tr><th>语义引擎（本地 embedding）</th><td>恒 <code>checked</code></td><td>只做状态探测（模型文件是否在位、进程内是否已加载、上次错误归类）——<strong>不触发模型加载</strong>，所以「未加载」不等于坏</td></tr>
+          <tr><th>开关与状态快照</th><td>恒 <code>checked</code></td><td>有 <code>state.json</code> 则读出被关的工具 / 功能、总开关、风格容差；没有则说明全部走默认值（首次使用属正常，不是异常）</td></tr>
+          <tr><th>近 N 天事件聚合</th><td>恒 <code>checked</code></td><td>按工具 / 类型 / code 聚合，注明「自由文本已在分享层剔除」；<strong>读数上限：本工具传 2000 条</strong>（事件更多时计数只覆盖最近 2000 条；<code>readLogEvents</code> 自身的默认值是 1000、钳制上限 5000）</td></tr>
+          <tr><th>事件原文</th><td><code>checked</code> / <code>off</code></td><td>只有 <code>action=events</code> 才 checked（明细仍为分享层，无自由文本）</td></tr>
+          <tr><th>章节内容 / 正文</th><td>恒 <code>off</code></td><td><strong>本工具不读正文，也不把正文写进任何离开本机的内容</strong>——本模块读章节只为取字数（<code>length</code>），正文不出那个函数。但别把它读成「本机日志里绝不含正文」：日志的自由文本字段（错误消息等）至多保留一句（≤160 字）</td></tr>
+          <tr><th>并发与性能画像</th><td>恒 <code>off</code></td><td>本工具不做压测；只给已记录到的耗时合计（<code>byTool[].msTotal</code> / <code>msAvg</code>）</td></tr>
+        </tbody>
+      </table>
+      <p>清单存在的理由与 <a href="novel-continuity-check.html">novel_continuity_check</a> 的 <code>checklist</code> 一致：<strong>「0 条候选」不等于「没问题」</strong>。恒为 <code>off</code> 的两项就是明说「这两件事本工具不管」。</p>
+
+      <h3>11 · <code>action=clear</code> 与 <code>action=events</code></h3>
+      <div class="formula">clear：删除 logs/events.jsonl 与 events.1/2/3.jsonl（force，单个失败忽略）
+  返回 action:"clear"、days:0、cleared:true、
+       root:{ path, source:"", looksLikeLibraryRoot:false }、
+       calls 全 0、一条「本地事件日志已清空」的 issue、一条 checklist、一段专用 report
+events：读取条数上限从 2000 降到 200（明细），并写入返回体的 events 字段；
+        报告里只渲染前 40 行，格式为「时:分:秒  kind  tool  status  code  Nms」</div>
+      <p><code>clear</code> 是删除而不是轮转，<strong>不可恢复</strong>；它删的是本机日志，与书库内容无关。清空后 <code>root</code> 字段刻意<strong>不做体检</strong>（<code>looksLikeLibraryRoot:false</code>、<code>source:""</code>），避免把「清日志」误读成「根有问题」。另需知道：<strong><code>clear</code> 自身也是一次工具调用</strong>，所以清空之后日志里通常立刻又多一条记录（这正是审计包装在生效）。</p>
+
+      <h3>12 · 诊断路由与面板（与工具同一实现）</h3>
+      <div class="formula">GET /api/dsh-novel-writer/diagnose?days=&amp;book=&amp;events=1
+  守卫 isAllowedRequest（与 state / lexicon / baseline 等路由同一条）：
+    isLoopbackRequest 要求 socket.remoteAddress ∈ {127.0.0.1, ::1, ::ffff:127.0.0.1}
+      <strong>且</strong> Host 头解析出的 hostname ∈ {127.0.0.1, localhost, [::1]}
+      <strong>且</strong> sec-fetch-site ≠ cross-site；带 Origin 时必须与 Host 同源
+    否则 allowLanState === true 才放行；allowLanState 关闭时一律 403
+  非回环地址（且 allowLanState 未开）→ 403 { error: "forbidden: loopback-only" }
+  非 GET                            → 405 { error: "method not allowed: …" }
+  days 非有限或 ≤ 0                  → 7
+  events=1                          → action = "events"，否则 "report"
+  成功 → 200 { ok: true, report, root, dataDir, log, calls, byTool, byKind,
+               topCodes, problems, issues, checklist, tools }
+  异常 → 500 { ok: false, error: "diagnose failed: &lt;前 160 字&gt;" }</div>
+      <p>注意守卫看的是 <strong>Host 头 + 连接来源</strong>两者，而不是只看来源地址：这解释了「本机用真实浏览器访问正常，但伪造一个不带 Host 头（或没有 socket 来源地址）的请求会拿到 403」。</p>
+      <p>路由与 <code>novel_diagnose</code> <strong>共用 <code>buildDiagnosis</code> + <code>formatDiagnosis</code></strong>，所以面板看到的数字与 AI 看到的数字必然一致（口径分叉正是最伤信任的那类问题）。它注册在 <code>lib/index.js</code> 而不是 <code>core.makeStateRoutes</code>，是因为 <code>core.js</code> 不能被 <code>diagnose.js</code> 反向依赖（会形成循环导入，ESM 下 <code>const</code> 导出的 TDZ 风险高）。</p>
+      <p>面板侧新增「<strong>诊断</strong>」入口：展示报告、选择统计窗口（默认 7 天、上限 90，与工具同一套钳制），并支持<strong>一键复制诊断包</strong>（用于贴进 issue）。复制的正文 = 接口给的 <code>report</code> + 一段极简环境信息（书库根 / 窗口 / 调用计数 / 数据目录 / 日志目录）——<strong>这段环境信息只由结构化字段拼成</strong>，面板<strong>只展示不重拼报告</strong>（否则面板与工具的报告会各写一份、随时间分叉），所以复制出去的内容<strong>既无自由文本也无正文</strong>；刷新失败时保留上一份报告（不把仅有的可分享材料清掉）。剪贴板不可用时不谎报成功，改为提示手动全选报告块。</p>
+
+      <h2>约束与边界</h2>
+      <ul>
+        <li><strong>本地日志的边界（本版定稿时改准；别读成「日志里绝不含正文」）</strong>：它以元数据为主，但<strong>自由文本字段（错误消息等）经收敛后至多保留一句（≤160 字）</strong>——所以<strong>本机</strong> <code>logs/events.jsonl</code> 里可能出现被错误消息回显的输入片段（实测复现：<code>novel_lexicon action=update term=「<u>一句 34 字、无句末标点的文字</u>」</code> → 抛「词表中找不到词条」，该句逐字落盘）；<strong>这个文件不出本机</strong>。分享层把自由文本整体剔除、报告层再把错误归类成固定 code 之后，报告里能看到「失败了 5 次、code 是什么」，但<strong>看不到原始错误消息</strong>——需要原文时请看本机 <code>logs/events.jsonl</code> 的 <code>detail</code>，<strong>但不要把它附进 issue</strong>：报 bug 请用面板「复制诊断包」或 <code>novel_diagnose</code> 的输出（那条路可安全贴出）。<strong>协调方判定不收紧本地层</strong>（改成 40 字上限之类会削弱诊断价值、又仍会泄漏若干字），正确的修法是改口径而不是改代码。</li>
+        <li><strong>它不减少 bug，只加快定位</strong>：报告给的是「发生了什么、几次、最可能的原因、下一步做什么」，<strong>不判定对错、不自动修</strong>，也不替代工具自己返回的中文提示。它不改变任何工具的返回体，也不写书库数据（<code>action=clear</code> 只删自己的日志）。</li>
+        <li><strong>静默失败只接了有诊断价值的那部分</strong>：<strong>catch 点 163</strong>（块级 161 + 链式 2）里<strong>有留痕的只有 77 处、保持静默 86 处</strong>（分 7 类、口径与过计说明见上文注记；注意「84 处 <code>logEvent(</code> 调用点」是<strong>另一个总体</strong>——其中 7 处在 catch 之外，是工具调用审计与书库根轨迹，不能拿它当「已接住的 catch 数」去减）；「文件不存在 / 本来就没有」这类正常分支刻意不记；<code>root_resolve</code> 的记账规则见「根解析与来源披露」（<code>resolveRoot</code> 只记可疑决策，<code>noteRoot</code> 另有三类固定留痕）。因此「日志里没有 <code>silent_skip</code>」不等于「没有失败被吞掉」。</li>
+        <li><strong>已知残留（独立验证代理实测，本版不动代码）</strong>：把某章文件换成<strong>同名目录</strong>后，<code>core.js</code> 的 <code>scanChapters</code> 里那句 <code>if (!entry.isFile()) continue</code> 会<strong>静默跳过</strong>它——① 该章从章表消失（<code>novel_chapters</code> 少一章，无任何提示）；② 本工具的「读不出来的文件」计数为 <strong>0</strong>、报告里<strong>完全不提</strong>这个目录（只显示「章节 N 个」）；③ <code>novel_chapter_brief</code> 的 <code>degraded</code> 里<strong>没有</strong>任何「读取章节失败」——只有「可测章变少」这类间接副作用（实测锚段抽样池由 2 条降为 1 条）。也就是<strong>这一条路径上「读不到」仍被讲成「没有」</strong>，留待下版处理；遇到「章数莫名少了一章」时请先确认书目录里是不是有一个<strong>叫章节名的目录</strong>。</li>
+        <li><strong>分享层是默认行为，本地层必须显式索取</strong>：<code>readLogEvents</code> 只有显式 <code>forShare === false</code> 才返回带自由文本的本地层，其余（<code>1</code> / <code>"true"</code> / <code>{}</code> / 忘传）一律脱敏（fail-closed）；分享层<strong>恒带</strong> <code>redacted: true</code>。写新代码做本地调试时请显式传 <code>false</code>，不要依赖旧默认。</li>
+        <li><strong>报告与磁盘会差出「本次调用」那一条</strong>：见 <code>log.selfCallExcluded</code>——要拿报告的数字与磁盘现算比对，必须在调用<strong>之前</strong>读盘，或把 <code>novel_diagnose</code> 自身那条减掉（差的恰好是这一条事件）。</li>
+        <li><strong>五处体检都只读元数据，但书库体检会把章节读一遍</strong>：数据目录只做「能不能解析」而不看内容（解析结果立刻丢弃）；书库体检为算字数必须读每个章节文件，因此有读取预算兜底——<strong>2000 个文件 / 8 MB</strong> 用尽即停，并把字数标为「按已读部分计」（此时单本准确字数请看 <code>novel_chapters</code>）。数据目录里 <strong>&gt; 8 MB 的 JSON 只记体积、不整读</strong>；<strong>zstd 压缩缓存 &gt; 2 MB 或旧 Node（&lt; 23.8，无 <code>zstdDecompressSync</code>）一律不解压校验</strong>（宁可漏报，不误报）。</li>
+        <li><strong>清单有上限</strong>：损坏 / 0 字节 / 超大 / 读不出 / 命名异常 / 过短章节每类最多 <strong>12</strong> 条，作品列表最多 <strong>40</strong> 部，子目录最多 12 个，<code>byTool</code> 12 行、<code>topCodes</code> 8 行、<code>problems</code> 10 组——一个坏掉的库不该把报告撑爆，超出部分只给计数（报告写「仅列前 N 个」）。</li>
+        <li><strong>语义引擎的「上次错误」是进程内状态</strong>，重启宿主即丢；跨进程证据只有日志里的 <code>engine</code> 事件。并且<strong>诊断本身不会触发模型加载</strong>——<code>loaded:false</code> 只表示「本进程还没用到它」，报告里会明写这一点。</li>
+        <li><strong>不做压测</strong>：报告里的耗时只是「已记录事件的 <code>ms</code> 合计」（<code>byTool[].msTotal</code> / <code>msAvg</code>），<code>checklist</code> 里的「并发与性能画像」恒为 <code>off</code>。</li>
+        <li><strong>窗口与条数有上限</strong>：<code>days</code> 默认 7、上限 <strong>90</strong>；条数上限是<strong>三层不同的东西</strong>——<code>novel_diagnose</code> 给 <code>readLogEvents</code> <strong>传 2000</strong>、<code>readLogEvents</code> 自身的<strong>默认值是 1000</strong>、其<strong>钳制上限是 5000</strong>（另有 <code>days</code> 的 365 天上限，工具层已先收到 90）；<code>action=events</code> 的明细最多 <strong>200</strong> 条，报告只渲染前 <strong>40</strong> 行。窗口越大越可能截断，排查「很久以前那一次失败」时不要只靠它。</li>
+        <li><strong>数字口径是「日志里的事件」，不是「真实发生过的调用」</strong>：日志自 v6.6.0 起才开始写，因此升级后第一份报告的窗口内可能只有很少几条记录（甚至只有「这次调用」）——这是预期，不是「日志没生效」。<code>action=clear</code> 之后历史归零且不可恢复，且 <code>clear</code> 自身会立刻留下一条新记录。</li>
+        <li><strong>日志写入失败是静默的</strong>：失败只表现为「诊断信息缺失」，功能不受影响；唯一提示是首次失败时的一行 stderr。<code>log.exists</code> 为假且窗口内确实调用过工具时，应怀疑日志目录不可写（而不是「最近没调用过」）。</li>
+        <li><strong>轮转意味着老事件会被删掉</strong>：单文件 512 KB、只留 3 份历史（合计约 2 MB 上限），高频使用下更早的事件会被自动清理。想留证就及时把报告贴出去，别指望日志长期留存。</li>
+        <li><strong>本地日志不出本机</strong>：它写在本机磁盘上，不参与任何网络请求；插件唯一的外呼仍只有 GitHub Releases 的版本检查（3 秒超时、24 小时缓存、不含任何稿件内容）。<code>novel_diagnose</code> 本身也不调用任何在线模型。</li>
+        <li><strong><code>book</code> 过滤是严格相等</strong>：事件里的 <code>book</code> 来自调用参数（同一份 <code>summarizeArgs</code>），因此「按要求过滤却什么都没查到」时，先核对书名的首尾空格与全半角。</li>
+        <li><strong>体检结论是「当下快照」，不是历史</strong>：除事件聚合外，其余体检（根、书库内容、数据目录、引擎、开关）读的都是<strong>本次调用那一刻</strong>的状态；想对比「昨天与今天」请用 <code>action=events</code> 看事件时间线。</li>
+      </ul>
+
+      <h2>相关工具</h2>
+      <ul>
+        <li><a href="novel-sentence-config.html">novel_sentence_config</a> —— 开关状态的真源；报告里的 <code>tools.*</code> 与它读的是同一份状态文件与同一个裁决点，报告给出的是「照抄就能开回来」的写法。</li>
+        <li><a href="novel-books.html">novel_books</a> · <a href="novel-chapters.html">novel_chapters</a> —— 核对书名的<strong>原文</strong>与章号格式；「同一本书同一个工具反复失败」绝大多数就是这两处写法不一致造成的。准确字数也以它们为准。报告给出的「命名异常 / 过短章节 / 读不出来」三张清单也都是可行动的：<strong>命名异常</strong>用 <a href="novel-import.html">novel_import</a> 重新导入可按章号改名并避让重号；<strong>过短章节</strong>补齐正文、或先把占位章移出 <code>novels/&lt;书名&gt;/</code>（六维基线只统计该书目录下的章节文件）；<strong>读不出来</strong>的章节先查编码（UTF-8 / GBK / UTF-16）与占用（网盘同步常见）。</li>
+        <li><a href="novel-lexicon.html">novel_lexicon</a> · <a href="novel-settings.html">novel_settings</a> · <a href="novel-plot.html">novel_plot</a> · <a href="novel-summary.html">novel_summary</a> —— 这些工具的数据文件就在被体检的目录里；报告点出「损坏 / 0 字节」后，按提示删除或改名让插件重建即可（词表损坏走 <code>action=import force=true</code>）。</li>
+        <li><a href="novel-semantic-search.html">novel_semantic_search</a> —— 报告说「语义引擎初始化失败」时，用它跑一次复现；引擎的降级路径与缓存重建也由它触发。</li>
+        <li><a href="novel-continuity-check.html">novel_continuity_check</a> —— 同样带 <code>checklist</code>（「本次覆盖了什么、跳过了什么及原因」），两者是同一套「不许把 0 条候选读成没问题」的披露习惯。</li>
+        <li><strong>v6.6.0 的一条共同口径：「读不到」不再被说成「没有」。</strong>只有 <code>ENOENT</code>（真的没有那个文件）才说「尚未初始化 / 未登记 / 尚未保存 / 无创作资料」；<strong>文件存在却读不出来</strong>（损坏 / 无权限 / 编码识别不了 / 被取消）时只说事实「该文件存在，但读不出来」+ 路径 + 原因，并明确<strong>不必</strong>去 <code>init</code>。所以日志里那条 <code>config</code> 事件常常是「真因」，而工具返回的那句提示可能是旧口径的残留——两者不一致时以日志为准，并去看 <a href="novel-outline.html">novel_outline</a> / <a href="novel-chapter-brief.html">novel_chapter_brief</a> / <a href="novel-style-report.html">novel_style_report</a> / <a href="novel-continuity-check.html">novel_continuity_check</a> 四页里各自的口径说明。</li>
+      </ul>
+
+      <h2>源码位置</h2>
+      <p><strong>以符号名（函数名 / 常量名）为准</strong>：下附的行号是 v6.6.0 定稿时的位置，只作快速跳转用——实现一增删就会整体漂移（本页行号已随 <code>lib/log.js</code> / <code>lib/diagnose.js</code> 的两次增长重定位过一次）。</p>
+      <ul>
+        <li><span class="src">lib/index.js</span> —— 工具注册与执行（<code>registerNovelDiagnose</code>，第 4846 行起；<code>action=clear</code> 分支第 4888 行起）、<strong>调用审计包装</strong>（<code>installToolAudit</code>，第 4922 行起；装不上时的 <code>internal</code> 留痕在第 4970 行）、诊断路由（<code>registerStyleConfigRoute</code> 第 412 行，路由在<strong>第 423 行</strong>注册）、<code>apply</code> 中的装配与还原（第 4984–5014 行）</li>
+        <li><span class="src">lib/diagnose.js</span> —— 常量与隐私红线（第 64–114 行：<code>DATA_SUBDIRS</code> / <code>MAX_LIST</code> / <code>SHORT_CHAPTER_CHARS</code> / <code>MAX_PARSE_BYTES</code> / <code>MAX_DECOMPRESS_BYTES</code> / <code>ZSTD_MAGIC</code> / 归类标签与预算）、<code>classifyEngineError</code>（第 117 行）、<code>classifyCacheError</code>（第 127 行）、<code>looksLikeRoot</code>（第 138 行）、<code>inspectDataDir</code>（第 157 行）、<code>inspectEngine</code>（第 258 行）、<code>countChapterChars</code>（第 291 行）、<code>inspectLibrary</code>（第 306 行）、<code>inspectSwitches</code>（第 368 行）、<code>aggregate</code>（第 423 行）、<code>deriveIssues</code>（第 493 行）、<code>buildDiagnosis</code>（第 757 行；<code>log.selfCallExcluded</code> 在第 824 行）、<code>formatDiagnosis</code>（第 857 行）</li>
+        <li><span class="src">lib/log.js</span> —— <code>ALLOWED_KEYS</code> / <code>FORBIDDEN_KEYS</code> / <code>LOG_KINDS</code>（第 100–135 行）、<code>logDir</code> / <code>logFilePath</code>（第 148–153 行）、<code>sanitizeLogData</code>（第 172 行）、<code>summarizeArgs</code>（第 203 行）、<code>rotateIfNeeded</code>（第 224 行）、<code>logEvent</code>（第 244 行）、<code>logToolCall</code>（第 264 行）、<code>readLogEvents</code>（第 292 行；fail-closed 与恒带 <code>redacted</code> 在第 320–335 行）、<code>logStats</code>（第 341 行）、<code>clearLogs</code>（第 357 行）；常量 <code>LOG_MAX_BYTES</code> / <code>LOG_KEEP_FILES</code> / <code>LOG_MAX_EVENT_BYTES</code> / <code>LOG_FREE_TEXT_MAX</code> / <code>LOG_CJK_RUN_MAX</code>（第 58–69 行）</li>
+        <li><span class="src">lib/core.js</span> —— <code>resolveRoot</code>（第 323 行，三种可疑决策的 <code>root_resolve</code> 留痕在第 331 / 343 / 355 行）、<code>looksLikeLibraryRoot</code>（第 375 行）、<code>ALL_TOOLS</code>（第 958 行，第 20 项为 <code>novel_diagnose</code>）、<code>TOOL_LABELS</code>（第 970 行）、<code>isLoopbackRequest</code> / <code>isAllowedRequest</code>（第 1383 / 1396 行）、<code>novelDataDir</code>（第 2575 行）、<code>noteRoot</code>（第 2953 行起：显式 root 的说明、cwd 兜底拒落盘、lastRoot 首次记录/变更、写失败各一条留痕）</li>
+        <li><span class="src">lib/client.js</span> —— 面板侧「诊断」入口：取数与重取（<code>loadDiagnose</code> 第 2686 行、<code>setDiagDays</code> 第 2705 行）、诊断包文本与复制（<code>diagPackText</code> 第 2718 行、<code>diagCopy</code> 第 2739 行）、视图渲染（第 4042 行起）、入口登记（第 4289 行）与文案键 <code>diag.*</code>（第 1489 行起）</li>
+        <li><span class="src">mcp/server.mjs</span> —— MCP 形态下的工具清单从 <code>ALL_TOOLS</code> 派生并与实际注册表比对，因此本工具在 MCP 客户端里自动可见，无需改动</li>
+      </ul>
+    </article>
+
+    <nav class="docs__pager" id="docsPager"></nav>
+  </main>
+
+  <aside class="docs__toc" id="docsToc"></aside>
+</div>
+
+<script src="docs.js"></script>
+</body>
+</html>

@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_style_check — 风格自检｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_style_check 的实现细节：风格指纹 13 维向量的构造与余弦相似度分级，偏差清单的阈值，六维文笔基线「排除本章后现算」的口径与基线范围（按全书 / 按部分），原著锚段的选取与语义风格相似度的降级文案。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_style_check","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-style-check.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_style_check — 风格自检｜dsh-novel-writer 技术文档","description":"novel_style_check 的实现细节：风格指纹 13 维向量的构造与余弦相似度分级，偏差清单的阈值，六维文笔基线「排除本章后现算」的口径与基线范围（按全书 / 按部分），原著锚段的选取与语义风格相似度的降级文案。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-style-check.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.5.5","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_style_check, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_style_check — 风格自检｜dsh-novel-writer 技术文档","description":"novel_style_check 的实现细节：风格指纹 13 维向量的构造与余弦相似度分级，偏差清单的阈值，六维文笔基线「排除本章后现算」的口径与基线范围（按全书 / 按部分），原著锚段的选取与语义风格相似度的降级文案。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-style-check.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.6.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_style_check, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -102,7 +102,7 @@ similarity = dot(va, vb) / (‖va‖ · ‖vb‖)        ← 任一范数为 0 �
 
       <h3>3 · 基线范围与「排除本章」口径</h3>
       <p>先用 <code>metricChaptersCached</code> 取得全书每章的六维测量值（带缓存），再按<strong>基线范围</strong>筛出语料（<strong>目标章无条件排除</strong>），最后算判定基线与其容差：</p>
-      <div class="formula">scoped    = resolveBaselineScope(chapters, 目标章)   ← 第一次：用**章节全集**挑出要读的文本
+      <div class="formula">scoped    = resolveBaselineScope(chapters, 目标章)   ← 第一次：用<strong>章节全集</strong>挑出要读的文本
         mode = all    → 全部章（默认，＝旧行为，存量书零迁移）
         mode = custom → <b>只用</b>面板选中的章（「只用」，不是「优先 + 不够再补」）
         目标章<b>无条件排除</b>（即使它出现在选中列表里）
@@ -113,7 +113,7 @@ similarity = dot(va, vb) / (‖va‖ · ‖vb‖)        ← 任一范数为 0 �
           「（选中的章只有本章自身，不能作为自己的基线，已回退全书）」
 
 reported  = resolveBaselineScope(perCh, 目标章)     ← 第二次（v6.5.5，仅 custom 时执行）
-        只用于**回报口径**：让「自定义基线 N 章」的 N 与**真正进 μ/σ 的章数**一致
+        只用于<strong>回报口径</strong>：让「自定义基线 N 章」的 N 与<strong>真正进 μ/σ 的章数</strong>一致
         （正文 &lt; 40 字的章已不在 perCh 里，故 N 可能小于第一次的选中数；
           这样风格自检与改稿台报的是同一个数字）
 

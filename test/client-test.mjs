@@ -437,7 +437,7 @@ console.log("面板组件渲染: 组件数 " + panelRender.stats.components + " 
 const panelProps = panelRender.element.props;
 const controller = panelProps.controller;
 if (!controller || typeof controller.getSnapshot !== "function") fail("PanelView 未拿到可用的 controller");
-for (const view of ["features", "tools", "baseline", "creation", "reports", "model", "lexicon"]) {
+for (const view of ["features", "tools", "baseline", "creation", "reports", "model", "lexicon", "diagnose"]) {
   controller.set({ view }, { silent: true });
   if (controller.getSnapshot().view !== view) fail("controller.set 未生效：view=" + view);
 }
@@ -469,6 +469,186 @@ if (renderLog.length <= lexRenderBefore) fail("词表页加载数据后未触发
 // 搜索过滤分支：只留一条
 controller.set({ lexiconQuery: "潮汐" }, { silent: true });
 controller.set({ lexiconQuery: "" }, { silent: true });
+
+// ---------------------------------------------------------------------------
+// v6.6.0：诊断页（view="diagnose"）——空态 / 有数据态 / 忙态 / 剪贴板三条路径
+// 口径：report 由宿主「分享层」渲染（与 novel_diagnose 同一实现），面板**只展示不重拼**；
+//      状态 pill 与 issues 行取结构化字段。诊断页用的是既有组件类，没有自造组件。
+// ---------------------------------------------------------------------------
+const DIAG_REPORT = [
+  "【诊断报告】生成于 2026-01-01T00:00:00.000Z",
+  "一、书库根",
+  "  /tmp/lib-root　来源：调用参数 root",
+  "六、近 7 天调用",
+  "  共 9 次：正常 7 / 降级 1 / 失败 1"
+].join("\n");
+
+// ① 空态：按钮可点、报告块不渲染、复制按钮必须禁用（否则会复制出空内容）
+const diagEmptyBefore = renderLog.length;
+controller.set({ view: "diagnose", diag: null, diagBusy: false, diagErr: false, diagManual: false, diagDays: "7" }, { silent: true });
+if (renderLog.length <= diagEmptyBefore) fail("诊断页空态未触发重渲染（订阅失效）");
+const diagEmptyRender = renderLog[renderLog.length - 1];
+if (!diagEmptyRender.stats.text.includes("生成诊断报告")) fail("诊断页空态按钮文案应为「生成诊断报告」，实际：" + diagEmptyRender.stats.text.slice(0, 160));
+if (!diagEmptyRender.stats.text.includes("拉取最近 7 天")) fail("诊断页空态应把窗口天数填进 {n} 提示（diagFill 未生效？），实际：" + diagEmptyRender.stats.text.slice(0, 160));
+if (diagEmptyRender.stats.classes.has("nwReportPre")) fail("空态不应渲染报告块（.nwReportPre）");
+const diagEmptyCopy = diagEmptyRender.stats.buttons.find((b) => vnodeText(b).includes("复制诊断包"));
+if (!diagEmptyCopy) fail("诊断页缺少「复制诊断包」按钮");
+if (diagEmptyCopy.props.disabled !== true) fail("无报告时「复制诊断包」应禁用");
+
+// ② 有数据态：report 原文进 .nwReportPre；三档计数 pills + error/warn/info 三种语义类
+const diagDataBefore = renderLog.length;
+controller.set({
+  view: "diagnose",
+  diagDays: "7",
+  diagBusy: false,
+  diagErr: false,
+  diagManual: false,
+  diag: {
+    action: "report",
+    days: 7,
+    root: { path: "/tmp/lib-root", source: "调用参数 root", looksLikeLibraryRoot: true },
+    dataDir: { path: "/tmp/state/.novel-writer", exists: true, bytes: 2048, files: 3 },
+    log: { dir: "/tmp/state/logs", bytes: 512, files: 1 },
+    calls: { total: 9, ok: 7, degraded: 1, failed: 1 },
+    issues: [
+      { level: "error", title: "书库根可能不对", detail: "根下既无 novels/ 也无 .novel-writer/", suggestion: "把根指向 novels 的父目录" },
+      { level: "warn", title: "近期有工具调用失败：1 次", detail: "自由文本已剔除（原文请看本地日志）", suggestion: "先看 topCodes 里最多的那个 code" },
+      { level: "info", title: "还没有插件数据目录", detail: "首次使用属正常。", suggestion: "无需处理。" }
+    ],
+    report: DIAG_REPORT,
+    // 合成自由文本字段：面板只该用**结构化字段 + report** 组报告/诊断包，这两个不得出现在页面或剪贴板里
+    note: "不应外泄的自由文本-NOTE",
+    detail: "不应外泄的自由文本-DETAIL"
+  }
+}, { silent: true });
+if (renderLog.length <= diagDataBefore) fail("诊断页加载数据后未触发重渲染");
+const diagRender = renderLog[renderLog.length - 1];
+if (!diagRender.stats.classes.has("nwReportPre")) fail("诊断页未用既有 .nwReportPre 渲染宿主报告块");
+if (!diagRender.stats.text.includes("【诊断报告】生成于 2026-01-01T00:00:00.000Z")) fail("诊断页未把宿主 report 原文渲染出来（面板不得重拼报告）");
+if (!diagRender.stats.classes.has("nwPill") || !diagRender.stats.classes.has("nwPillKey") || !diagRender.stats.classes.has("nwPillVal")) fail("诊断页缺少调用统计 pills（nwPill/nwPillKey/nwPillVal）");
+if (!diagRender.stats.text.includes("调用9") || !diagRender.stats.text.includes("降级1") || !diagRender.stats.text.includes("失败1")) {
+  fail("pills 的计数必须来自结构化字段 calls，实际文本：" + diagRender.stats.text.slice(0, 200));
+}
+if (!diagRender.stats.classes.has("nwPlotErr")) fail("error 级 issue 应走既有语义色类 nwPlotErr");
+if (!diagRender.stats.classes.has("nwNoteWarn")) fail("warn 级 issue 应走既有 nwNoteWarn");
+if (!diagRender.stats.classes.has("nwNoteDim")) fail("info 级 issue 应走既有 nwNoteDim");
+if (!diagRender.stats.classes.has("nwNoteAccent")) fail("issue 的建议行应走既有 nwNoteAccent");
+if (!diagRender.stats.text.includes("书库根可能不对")) fail("诊断页未渲染 issue 标题");
+if (!diagRender.stats.text.includes("建议：把根指向 novels 的父目录")) fail("诊断页未渲染 issue 建议（应带「建议：」前缀）");
+if (diagRender.stats.text.includes("不应外泄")) fail("诊断页把 data 里的自由文本字段渲染出来了（只应使用结构化字段 + report）");
+
+// ③ 忙态：文案切到「诊断中…」且按钮禁用（避免重复触发）
+const diagBusyBefore = renderLog.length;
+controller.set({ diagBusy: true }, { silent: true });
+if (renderLog.length <= diagBusyBefore) fail("诊断忙态未触发重渲染");
+const diagBusyRender = renderLog[renderLog.length - 1];
+if (!diagBusyRender.stats.text.includes("诊断中")) fail("诊断中应显示「诊断中…」，实际：" + diagBusyRender.stats.text.slice(0, 160));
+const diagBusyRun = diagBusyRender.stats.buttons.find((b) => vnodeText(b).includes("诊断中"));
+if (!diagBusyRun || diagBusyRun.props.disabled !== true) fail("诊断中应禁用「生成/重新生成」按钮");
+const diagBusyCopy = diagBusyRender.stats.buttons.find((b) => vnodeText(b).includes("复制诊断包"));
+if (!diagBusyCopy || diagBusyCopy.props.disabled !== true) fail("诊断中应禁用「复制诊断包」按钮");
+controller.set({ diagBusy: false }, { silent: true });
+
+// ④ 窗口天数：UI 字符串值 → 请求值是**同一口径**，且钳到 [1, 90]
+controller.set({ diagDays: "abc" }, { silent: true });
+if (controller.diagDaysNum() !== 7) fail("diagDays 非数值应回退 7，实际 " + controller.diagDaysNum());
+controller.set({ diagDays: "999" }, { silent: true });
+if (controller.diagDaysNum() !== 90) fail("diagDays 超上限应钳到 90，实际 " + controller.diagDaysNum());
+controller.set({ diagDays: "0" }, { silent: true });
+if (controller.diagDaysNum() !== 7) fail("diagDays=0 应回退 7，实际 " + controller.diagDaysNum());
+controller.set({ diagDays: "30" }, { silent: true });
+if (controller.diagDaysNum() !== 30) fail("diagDays=30 应原样，实际 " + controller.diagDaysNum());
+if (controller.diagUrl() !== "/api/dsh-novel-writer/diagnose?days=30") fail("诊断请求 URL 不对：" + controller.diagUrl());
+controller.set({ diagDays: "7" }, { silent: true });
+
+// ⑤ 现取：loadDiagnose 打到同一个 URL、写回 state.diag；失败时**保留上一份报告**
+const realFetch = globalThis.fetch;
+const diagFetched = [];
+globalThis.fetch = (url) => {
+  diagFetched.push(String(url));
+  return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ ok: true, report: "【诊断报告】FROM-STUB", calls: { total: 3, ok: 3, degraded: 0, failed: 0 }, issues: [] }) });
+};
+try {
+  controller.set({ view: "diagnose", diag: null, diagBusy: false, diagErr: false, diagDays: "7" }, { silent: true });
+  controller.loadDiagnose();
+  if (controller.getSnapshot().diagBusy !== true) fail("loadDiagnose 期间应置 diagBusy=true");
+  await new Promise((resolve) => setImmediate(resolve));
+  if (diagFetched.length !== 1) fail("loadDiagnose 应只发一次请求，实际 " + diagFetched.length);
+  if (diagFetched[0] !== "/api/dsh-novel-writer/diagnose?days=7") fail("loadDiagnose 请求 URL 不对：" + diagFetched[0]);
+  const diagState = controller.getSnapshot();
+  if (diagState.diagBusy !== false || diagState.diagErr !== false) fail("loadDiagnose 成功后应清掉 busy/err");
+  if (!diagState.diag || diagState.diag.report !== "【诊断报告】FROM-STUB") fail("loadDiagnose 未把响应写进 state.diag");
+  globalThis.fetch = () => Promise.reject(new TypeError("Failed to fetch"));
+  controller.loadDiagnose();
+  await new Promise((resolve) => setImmediate(resolve));
+  const diagState2 = controller.getSnapshot();
+  if (diagState2.diagErr !== true) fail("loadDiagnose 失败应置 diagErr=true");
+  if (!diagState2.diag || diagState2.diag.report !== "【诊断报告】FROM-STUB") fail("loadDiagnose 失败时不得清掉上一份报告（那是仅有的可分享材料）");
+} finally {
+  globalThis.fetch = realFetch;
+}
+
+// ⑥ 剪贴板三条路径：可用 → 写入诊断包并提示成功；被拒 → 不谎报成功；不可用 → 同样降级
+const clipTexts = [];
+function installClipboard(writeText) {
+  try {
+    Object.defineProperty(globalThis.navigator, "clipboard", { configurable: true, writable: true, value: { writeText } });
+    return true;
+  } catch { return false; }
+}
+function removeClipboard() {
+  try { delete globalThis.navigator.clipboard; return true; } catch { return false; }
+}
+controller.set({
+  view: "diagnose", diagBusy: false, diagErr: false, diagManual: false, diagDays: "7",
+  diag: {
+    action: "report", days: 7,
+    root: { path: "/tmp/lib-root", source: "调用参数 root" },
+    dataDir: { path: "/tmp/state/.novel-writer", exists: true },
+    log: { dir: "/tmp/state/logs" },
+    calls: { total: 9, degraded: 1, failed: 1 },
+    issues: [],
+    report: DIAG_REPORT,
+    note: "不应外泄的自由文本-NOTE"
+  }
+}, { silent: true });
+if (installClipboard((text) => { clipTexts.push(text); return Promise.resolve(); })) {
+  controller.diagCopy();
+  await new Promise((resolve) => setImmediate(resolve));
+  if (clipTexts.length !== 1) fail("剪贴板可用时 diagCopy 未调用 writeText");
+  const pack = clipTexts[0];
+  if (!pack.startsWith(DIAG_REPORT)) fail("诊断包应以宿主 report 原文开头（不得由面板重拼）");
+  if (!pack.includes("---- ") || !pack.includes("----")) fail("诊断包应含环境信息分区");
+  if (!pack.includes("/tmp/lib-root")) fail("诊断包应含书库根路径");
+  if (pack.includes("不应外泄")) fail("诊断包不得包含 data 里的自由文本字段");
+  if (controller.getSnapshot().diagManual === true) fail("复制成功后不应保留「手动复制」提示");
+  if (controller.getSnapshot().revealErr === true) fail("复制成功后不应是错误提示");
+  if (!String(controller.getSnapshot().revealMsg).includes("已复制")) fail("复制成功提示不对：" + controller.getSnapshot().revealMsg);
+  // 被拒 → 降级为手动复制，不谎报成功
+  installClipboard(() => Promise.reject(new Error("denied")));
+  controller.diagCopy();
+  await new Promise((resolve) => setImmediate(resolve));
+  if (controller.getSnapshot().diagManual !== true || controller.getSnapshot().revealErr !== true) fail("剪贴板被拒时必须降级为「手动复制」提示，不得谎报成功");
+  console.log("诊断页: 空态/有数据态/忙态 ✓ | report 原文入 nwReportPre ✓ | 窗口钳制 [1,90] ✓ | 剪贴板：写入成功 / 被拒降级 ✓");
+} else {
+  console.log("诊断页: 空态/有数据态/忙态 ✓ | report 原文入 nwReportPre ✓ | 窗口钳制 [1,90] ✓ | 本环境无法替换 navigator.clipboard，剪贴板分支只测降级");
+}
+removeClipboard();
+controller.set({ diagManual: false, revealErr: false, revealMsg: "" }, { silent: true });
+controller.diagCopy();
+if (controller.getSnapshot().diagManual !== true) fail("剪贴板不可用时 diagCopy 必须降级为「手动复制」提示");
+// 无报告时点复制 → 明确提示，不静默
+controller.set({ diag: null, diagManual: false, revealErr: false, revealMsg: "" }, { silent: true });
+controller.diagCopy();
+if (controller.getSnapshot().revealErr !== true || !String(controller.getSnapshot().revealMsg).includes("还没有诊断报告")) {
+  fail("无报告时点复制应提示「还没有诊断报告」，实际：" + controller.getSnapshot().revealMsg);
+}
+// 降级提示必须真的渲染出来（diagManual=true）
+controller.set({ view: "diagnose", diag: { report: DIAG_REPORT, calls: { total: 1 }, issues: [] }, diagManual: true, diagBusy: false, diagErr: false }, { silent: true });
+const diagManualRender = renderLog[renderLog.length - 1];
+if (!diagManualRender.stats.text.includes("手动")) fail("diagManual=true 时应渲染「手动复制」提示，实际：" + diagManualRender.stats.text.slice(0, 160));
+controller.set({ view: "main", diagManual: false, diagErr: false, revealMsg: "" }, { silent: true });
+
 const viewRenders = renderLog.length;
 if (viewRenders <= 1) fail("切换视图未触发任何重渲染（订阅失效）");
 // 弹窗分支（rawModal / rawPromiseOpen）也必须能渲染——真机上这两条是"非净化模式"的必走路径

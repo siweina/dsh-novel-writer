@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_fix_plan — 改稿台｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_fix_plan 的实现细节：plan / verify / mark 三个动作、mark 的 itemId + state 双必填与其不受引擎门禁约束的边界、待办项的稳定 id 与八类 type、severity 与 effort 的排序口径、locate 的段落级行号归因与字面类的行号区间 / 子串守卫（宁可粗也不给错的行号）、2 字词待判档与本书用词豁免、hint 只给改写方向不生成正文的边界、fix-plan JSON 的原子写落盘，以及「正常文本不产出待办」的误报约束。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_fix_plan","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-fix-plan.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_fix_plan — 改稿台｜dsh-novel-writer 技术文档","description":"novel_fix_plan 的实现细节：plan / verify / mark 三个动作、mark 的 itemId + state 双必填与其不受引擎门禁约束的边界、待办项的稳定 id 与八类 type、severity 与 effort 的排序口径、locate 的段落级行号归因与字面类的行号区间 / 子串守卫（宁可粗也不给错的行号）、2 字词待判档与本书用词豁免、hint 只给改写方向不生成正文的边界、fix-plan JSON 的原子写落盘，以及「正常文本不产出待办」的误报约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-fix-plan.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.5.5","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_fix_plan, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_fix_plan — 改稿台｜dsh-novel-writer 技术文档","description":"novel_fix_plan 的实现细节：plan / verify / mark 三个动作、mark 的 itemId + state 双必填与其不受引擎门禁约束的边界、待办项的稳定 id 与八类 type、severity 与 effort 的排序口径、locate 的段落级行号归因与字面类的行号区间 / 子串守卫（宁可粗也不给错的行号）、2 字词待判档与本书用词豁免、hint 只给改写方向不生成正文的边界、fix-plan JSON 的原子写落盘，以及「正常文本不产出待办」的误报约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-fix-plan.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.6.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_fix_plan, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -195,11 +195,11 @@ for 每个章级出带的维度 v：
 文件内容 = &#123; tool: "novel_fix_plan", version: "&lt;插件版本，取自 package.json&gt;", book, chapter &#123; file, number, title &#125;,
              chapterKey, generatedAt, baselineScope, summary, notes[], detectedIds[],
              items: [ &#123; …9 个字段, state: "open"|"done"|"skip", stateAt: ISO|null &#125; ] &#125;
-       ← 注意：**落盘文件只有 `baselineScope`（没有 `baselineMode`）**；返回体两个键都有
+       ← 注意：<strong>落盘文件只有 <code>baselineScope</code>（没有 <code>baselineMode</code>）</strong>；返回体两个键都有
 
 plan   → 重新测量 + 原子写（先写 .tmp-&lt;pid&gt;-&lt;时间戳&gt; 再 rename，走在 withFileTx 文件事务内；
          与上一次同 id 的项保留其 done/skip 状态与 stateAt）
-verify → 读该文件 + 对当前正文重算，逐项给出三态（**本次不写盘**）
+verify → 读该文件 + 对当前正文重算，逐项给出三态（<strong>本次不写盘</strong>）
 mark   → 读-改-写该文件，只把 itemId 指定项的 state / stateAt 更新，并刷新 updatedAt</div>
       <p>必然需要落盘：<code>mark</code> 与 <code>verify</code> 要跨调用记得「这一项处理过了」。文件按<strong>书名 + 归一化章键</strong>命名，且章键取自<strong>解析后的章文件</strong>（<code>chapter="1"</code> / <code>"第01章.md"</code> / <code>"码头等船"</code> 三种写法都归到同一份），避免同章不同写法各写一份、<code>verify</code> / <code>mark</code> 换个写法就「找不到清单」。落盘与 <a href="novel-continuity-check.html">novel_continuity_check</a> 的审计报告同处 <code>audits/</code> 目录，文件名前缀 <code>fix-plan-</code> 与审计报告区分。<code>plan</code> 每次重新测量并<strong>整份覆盖</strong>该章的清单，但会按 id 把上一次的人工标记搬过来：<em>N 项此前已人工标记 done/skip（状态已保留）</em>会写进 <code>summary</code>。正文改动后 id 会随位置变化，旧 id 的标记自然失效（不会张冠李戴）。</p>
       <p>落盘失败（目录只读 / 磁盘满 / 文件被占用）不抛错，本次清单仍内存返回；<code>summary</code> 明确追加保存失败原因，<code>planFile</code> 为空，调用方不会被误导为已保存。</p>
