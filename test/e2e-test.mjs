@@ -318,8 +318,17 @@ console.log("v1.5.0 功能开关: 关→生效, 开→恢复 ✓");
 const saQ = await defs.novel_sentence_analysis.execute({ book: "测试", fresh: true }, exec);
 const q = saQ.emotion?.quantification;
 if (!q || typeof q.stats?.variance !== "number") throw new Error("quantification missing");
-if (!["high", "medium", "low"].includes(q.complexity?.level)) throw new Error("complexity level broken");
-console.log("v1.6.0 量化: V=" + q.stats.variance + " C=" + q.stats.conflict + " level=" + q.complexity?.level);
+// v6.6.5：level 新增 "unknown"（结论不可采信时不再给顶格 high，见 CHANGELOG「唯一的契约级变化」）。
+// 这条断言守的是**取值集合**：穷举三值会让任何一次合法新增都变成"测试坏了"，
+// 所以改成"四值白名单 + 不可采信↔unknown 的双向蕴含"——既容得下新契约，也仍然抓得住回归。
+if (!["high", "medium", "low", "unknown"].includes(q.complexity?.level)) throw new Error("complexity level broken: " + q.complexity?.level);
+if (typeof q.complexity?.reliable !== "boolean") throw new Error("complexity reliable missing (v6.6.5)");
+if (q.complexity.reliable === false && q.complexity.level !== "unknown") throw new Error("reliable=false 时 level 必须是 unknown，实际 " + q.complexity.level);
+if (q.complexity.reliable === true && q.complexity.level === "unknown") throw new Error("reliable=true 时 level 不得是 unknown");
+if (q.complexity.reliable === false && String(q.complexity.reliabilityNote ?? "").trim() === "") throw new Error("reliable=false 时 reliabilityNote 不得为空");
+if (q.complexity.reliable === false && !/不可采信|无数据可依|请勿据此/.test(String(q.complexity.reliabilityNote ?? ""))) throw new Error("reliable=false 时 reliabilityNote 必须说明不可采信/无数据可依，实际 " + JSON.stringify(q.complexity.reliabilityNote));
+if (q.complexity.reliable === true && q.complexity.reliabilityNote !== "") throw new Error("reliable=true 时 reliabilityNote 必须是空串，实际 " + JSON.stringify(q.complexity.reliabilityNote));
+console.log("v1.6.0 量化: V=" + q.stats.variance + " C=" + q.stats.conflict + " level=" + q.complexity?.level + " reliable=" + q.complexity?.reliable);
 await defs.novel_sentence_config.execute({ action: "set", features: { emotionComplexity: false } }, exec);
 const saQOff = await defs.novel_sentence_analysis.execute({ book: "测试", fresh: true }, exec);
 if ("quantification" in (saQOff.emotion ?? {})) throw new Error("emotionComplexity off should drop quantification");
