@@ -37,14 +37,14 @@ function DialogCard(el, h, t, NW_UI, props) {
   );
 }
 
-// 5) 计数徽标(复用既有类): .nwBadge + .nwBadgeOn/.nwBadgeOff; 文本=label 直传, 否则 t(labelOn/labelOff).
+// 5) v7 导航计数：中性胶囊，不表达开关状态；保留 labelOn/labelOff 兼容旧调用。
 function CountBadge(el, h, t, NW_UI, props) {
   var p = props || {};
   var on = !!p.on;
   var text = (p.label !== undefined && p.label !== null)
     ? p.label
     : t(on ? p.labelOn : p.labelOff);
-  return el("span", { className: "nwBadge " + (on ? "nwBadgeOn" : "nwBadgeOff") }, text);
+  return el("span", { className: "nwBadge nwCountBadge" }, text);
 }
 
 // 6) 行分隔线: 单 div .nwRowDiv, 无子节点; props.key 透传(GroupCard children 数组需 React key).

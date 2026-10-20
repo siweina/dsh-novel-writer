@@ -128,7 +128,7 @@ manifest 的 `shots[].driver` 如实记录用了哪条路：
 |---|---|---|
 | `main` | `api:reset` | 默认视图 |
 | `features` / `tools` / `baseline` / `creation` / `lexicon` | `click:nav` | 点击主面板 `.nwNavEntry` 导航行（文案取自插件自己的 zh 词典） |
-| `model` | `click:features→model` | 功能开关页 → 「⚙ 管理语义模型」按钮（`.nwModelBtn`） |
+| `model` | `click:nav` | 主页 →「语义模型」导航行（`.nwNavEntry`） |
 | `creation-form` | `click:creation→form` | 原创模式列表 →「长夜将至」行的「编辑」chip |
 | `reports` | `click:reports-entry` | **必须真点**：报告数据由主面板入口的 `onClick` 拉取，直接 `openView("reports")` 只会得到「加载中」 |
 

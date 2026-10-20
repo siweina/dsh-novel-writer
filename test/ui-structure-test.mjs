@@ -75,12 +75,12 @@ const NEW_550_CLASSES = [
 // 契约 §4.2 末条「测试命脉类」（client-test.mjs 断言直接依赖，E/F 双重保证存活）
 const LIFELINE_CLASSES = [
   "nwPanel", "nwPanelHeader", "nwPanelTitle", "nwRefresh", "nwClose",
-  "nwBanner", "nwBannerOn", "nwBannerIcon", "nwPlotOk", "nwPlotErr", "nwMuted"
+  "nwHeaderStatus", "nwHeaderStatusOn", "nwHeaderIdentity", "nwPlotOk", "nwPlotErr", "nwMuted"
 ];
 
 // 契约 §7.1 结构存在性阈值（只统计 js 段 = css 模板段之外，防止被 E 的 CSS 定义"误判为已插入"）
 const STRUCTURE_MIN = [
-  ["A1.1", "nwHero", 1],
+  ["A1.1", "nwHomeSubtitle", 1],
   ["A1.2", "nwSection", 2],
   // A1.3 已升级为 v6 口径（见下方独立块：kicker 三件套统一经 SectionTitle 组件渲染）
   // A1.4 已升级为 v6 口径（见下方独立块：图标槽 = nwIconSlot(遗留) + nwPrefIcon(新行模式)）
@@ -317,11 +317,13 @@ for (const [id, cls, min] of STRUCTURE_MIN) {
   report("A", 1, "A1.3", "SectionTitle(分区标题) ≥2", ok, `js 段 SectionTitle 调用 ${stCalls}（期望 ≥2；v6 起 kicker 三件套统一经组件渲染，组件定义内 nwKicker=${countClassNode(jsCode, "nwKicker")}）`);
 }
 {
-  // v6 口径：行模式迁移后图标槽两形态并存——遗留 nwIconSlot（导航卡/工具行）+ 新 nwPrefIcon（PreferenceRow 内）。
+  // v7-A：工具行迁入 PreferenceRow，不能继续要求重复写三个图标槽字面量。
+  // 保留两种槽定义，并额外验证工具行经组件使用逐工具语义图标，避免放松成无图标也能过。
   const a = countClassNode(jsCode, "nwIconSlot");
   const b = countClassNode(jsCode, "nwPrefIcon");
-  const ok = a + b >= 3;
-  report("A", 1, "A1.4", "图标槽 ≥3（nwIconSlot+nwPrefIcon）", ok, `js 段 nwIconSlot=${a} + nwPrefIcon=${b}（合计 ${a + b}，期望 ≥3）；同段 nwIconGlyph=${countClassNode(jsCode, "nwIconGlyph")}`);
+  const toolPreference = /PreferenceRow\(el, el, t, NW_UI, nwIconEls\(el\), \{\s*key: name, icon: toolIcons\[name\]/.test(jsCode);
+  const ok = a >= 1 && b >= 1 && toolPreference;
+  report("A", 1, "A1.4", "图标槽定义 + 工具 PreferenceRow 语义图标", ok, `js 段 nwIconSlot=${a} + nwPrefIcon=${b}（各 ≥1）；工具行语义图标=${toolPreference}`);
 }
 {
   const nk = countClassNode(jsCode, "nwKicker");

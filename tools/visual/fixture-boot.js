@@ -213,6 +213,17 @@
       }
       return Promise.resolve(json(REPORTS));
     }
+    if (u.indexOf("/api/dsh-novel-writer/diagnose") === 0) return Promise.resolve(json({
+      ok: true, days: 7,
+      calls: { total: 38, degraded: 3, failed: 1 },
+      root: { path: DATA_ROOT, source: "lastRoot" },
+      dataDir: { path: DATA_DIR, exists: true }, log: { dir: DATA_ROOT + "\\logs" },
+      issues: [
+        { level: "warn", title: "部分分析使用了简化处理", detail: "最近 7 天有 3 次分析未使用语义模型。", suggestion: "前往语义模型页检查模型状态。" },
+        { level: "info", title: "书库和数据目录可正常读取", detail: "未发现需要处理的存储问题。" }
+      ],
+      report: "写作助手诊断报告\n统计范围：最近 7 天\n\n使用次数：38\n简化处理：3\n未成功：1\n\n书库目录：可读取\n数据目录：可读取\n\n本报告不包含正文、提示词或原始错误文本。"
+    }));
     if (u.indexOf("/api/dsh-novel-writer/demo") === 0) return Promise.resolve(json(DEMO));
     if (u.indexOf("/api/dsh-novel-writer/update-check") === 0) return Promise.resolve(json(UPDATE_CHECK));
     if (u.indexOf("/api/dsh-novel-writer/reveal") === 0) return Promise.resolve(json({ ok: true, path: DATA_DIR }));
@@ -335,7 +346,9 @@
     features: "功能开关",
     tools: "工具开关",
     baseline: "风格基线",
-    creation: "原创模式",
+    diagnose: "诊断报告",
+    creation: "原创设定",
+    model: "语义模型",
     lexicon: "必用词表"
   };
   // 每个视图的最小状态覆盖（全部为常量；在导航前一次性写入，silent 不参与 rev 计数）
@@ -346,6 +359,7 @@
     tools: { toolGroupOpen: { analyze: true, settings: true, create: true } },
     baseline: {},
     reports: {},
+    diagnose: {},
     creation: {},
     lexicon: {},
     model: {},
@@ -412,9 +426,9 @@
         await clickNav(NAV_LABEL.creation);
         await waitFor(function () { return controller.getSnapshot().view === "creation"; }, 4000, "creation");
         // 点「长夜将至」那一行的「编辑」→ 进入表单页（并带上该书已存设定）
-        var row = qsa("div.nwFileRow").filter(function (r) { return textOf(r).indexOf("长夜将至") !== -1; })[0];
+        var row = qsa(".nwCreationPage .nwPref").filter(function (r) { return textOf(r).indexOf("长夜将至") !== -1; })[0];
         if (!row) throw new Error("原创模式列表页找不到「长夜将至」行");
-        var chip = Array.prototype.slice.call(row.querySelectorAll("button.nwChip")).filter(function (b) { return textOf(b) === "编辑"; })[0];
+        var chip = Array.prototype.slice.call(row.querySelectorAll("button.nwChip")).filter(function (b) { return textOf(b).indexOf("编辑") === 0; })[0];
         if (!chip) throw new Error("「长夜将至」行找不到「编辑」按钮");
         clickEl(chip);
         driver = "click:creation→form";
@@ -428,7 +442,7 @@
       try {
         controller.set({ view: "main", reportsGroups: null, reportsError: false }, { silent: true });
         await settle();
-        var entry = qsa("button.nwFileRow").filter(function (b) { return textOf(b).indexOf("报告历史") !== -1; })[0];
+        var entry = qsa("button.nwNavEntry").filter(function (b) { return textOf(b).indexOf("报告历史") !== -1; })[0];
         if (!entry) throw new Error("主面板找不到「报告历史」入口");
         clickEl(entry);
         driver = "click:reports-entry";
@@ -461,7 +475,17 @@
       }, 5000, "reports 数据");
       waited.push("reports");
     }
+    if (view === "diagnose") {
+      await waitFor(function () { return controller.getSnapshot().diagBusy !== true; }, 5000, "diagnose 数据");
+      waited.push("diagnose");
+    }
     await settle();
+    // 诊断入口位于主页底部；真实点击的 scrollIntoView 不应带入截图。
+    if (view === "diagnose") {
+      window.scrollTo(0, 0);
+      qsa("#stage, .nwPanel, .nwPanelMain").forEach(function (node) { node.scrollTop = 0; });
+      await settle();
+    }
     var entryOut = { view: view, driver: driver, waitedFor: waited, ms: Date.now() - t0 };
     lastLog.push(entryOut);
     info.navigation = lastLog;

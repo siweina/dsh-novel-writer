@@ -23,7 +23,7 @@ import { snapshotClient, vendorReact, HERE } from "./prepare.mjs";
 const CHROME = process.env.NW_CHROME || "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
 const PLAYWRIGHT_DIR = process.env.NW_PLAYWRIGHT || "C:\\Users\\zg\\.dsh\\profiles\\desktop\\node_modules\\playwright";
 
-const VIEWS = ["main", "features", "tools", "baseline", "reports", "creation", "lexicon", "model", "creation-form"];
+const VIEWS = ["main", "features", "tools", "baseline", "reports", "diagnose", "creation", "lexicon", "model", "creation-form"];
 // ⚠️ v6.4.0 修正（这条是**流程性缺陷**的修复，不只是加个数字）：
 // 此前只有 [720, 380] 两个宽度 —— 而桌面端宿主的**主栏面板实际约 1250px 宽**。
 // 后果：我在 720px 下把行式布局（左文字 + 右控件）调好并"目视确认"，用户却在真实宽度下看到

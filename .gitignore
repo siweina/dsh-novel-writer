@@ -16,3 +16,4 @@ tools/visual/vendor/
 
 # ---- 临时探针残留 ----
 _v2probe/
+logs/

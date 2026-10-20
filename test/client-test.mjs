@@ -422,11 +422,11 @@ if (!panelRender) {
 const panelClasses = panelRender.stats.classes;
 if (panelRender.stats.components < 1) fail("面板渲染期间没有执行任何函数组件");
 if (panelRender.stats.nodes < 20) fail("面板 vnode 树节点过少（" + panelRender.stats.nodes + "），组件体可能提前返回");
-if (!panelClasses.has("nwPanelHeader") || !panelClasses.has("nwBanner")) {
-  fail("面板缺少标题栏/状态横幅（className 实际：" + [...panelClasses].join(" ") + "）");
+if (!panelClasses.has("nwPanelHeader") || !panelClasses.has("nwHeaderStatus")) {
+  fail("面板缺少标题栏/状态胶囊（className 实际：" + [...panelClasses].join(" ") + "）");
 }
 // enabled 默认 true → 横幅应为「已开启」态（文案随 locale，取不到则退回状态类名断言）
-if (!panelClasses.has("nwBannerOn") && !panelRender.stats.text.includes("已开启")) {
+if (!panelClasses.has("nwHeaderStatusOn") && !panelRender.stats.text.includes("已启用")) {
   fail("面板状态横幅未反映 enabled=true：" + panelRender.stats.text.slice(0, 120));
 }
 if (panelRender.stats.text.length < 20) fail("面板渲染出的文本过少（" + panelRender.stats.text.length + " 字符），内容可能为空");
@@ -436,6 +436,7 @@ console.log("面板组件渲染: 组件数 " + panelRender.stats.components + " 
 // 视图切换：主面板之外的各分支也必须能渲染（旧桩下这些分支零执行）
 const panelProps = panelRender.element.props;
 const controller = panelProps.controller;
+if (controller.getSnapshot().lexiconFormOpen !== false) fail("词表表单展开状态必须初始化为 false");
 if (!controller || typeof controller.getSnapshot !== "function") fail("PanelView 未拿到可用的 controller");
 for (const view of ["features", "tools", "baseline", "creation", "reports", "model", "lexicon", "diagnose"]) {
   controller.set({ view }, { silent: true });
@@ -461,6 +462,7 @@ controller.set({
     dir: "lexicon"
   },
   lexiconQuery: "",
+  lexiconFormOpen: true,
   lexiconForm: { term: "青铜灯", kind: "专名", scene: "", avoid: "铜灯,油灯", note: "", editing: "" },
   lexiconImportOpen: true,
   lexiconImportText: "北境哨塔|专名"
@@ -470,10 +472,62 @@ if (renderLog.length <= lexRenderBefore) fail("词表页加载数据后未触发
 controller.set({ lexiconQuery: "潮汐" }, { silent: true });
 controller.set({ lexiconQuery: "" }, { silent: true });
 
+// v7-B: layout and UI-only disclosure must not change lexicon controller contracts.
+controller.set({ view: "lexicon", lexiconFormOpen: false, lexiconForm: null, lexiconBusy: false, loading: false }, { silent: true });
+const currentB = () => renderLog[renderLog.length - 1].stats;
+const primaryB = (stats) => stats.buttons.filter((b) => String(b.props.className || "").split(/\s+/).includes("nwBtnPrimary"));
+if (currentB().text.includes("词条详情")) fail("词表表单默认应收起");
+if (primaryB(currentB()).length !== 1) fail("词表默认态应只有一个 Primary");
+currentB().buttons.find((b) => vnodeText(b) === "新增词条").props.onClick();
+if (!controller.getSnapshot().lexiconFormOpen || !currentB().text.includes("词条详情")) fail("新增词条未展开表单");
+if (currentB().text.indexOf("星轨") > currentB().text.indexOf("词条详情")) fail("词条列表必须在表单之前");
+if (primaryB(currentB()).length !== 1) fail("词表展开态应只有一个 Primary");
+currentB().buttons.find((b) => vnodeText(b) === "取消").props.onClick();
+if (controller.getSnapshot().lexiconFormOpen || controller.getSnapshot().lexiconForm !== null) fail("取消应收起并重置表单");
+currentB().buttons.find((b) => vnodeText(b) === "编辑").props.onClick();
+if (!controller.getSnapshot().lexiconFormOpen || controller.getSnapshot().lexiconForm.editing !== "星轨") fail("编辑必须展开原词条表单");
+const confirmBeforeB = globalThis.confirm;
+const confirmsB = [];
+globalThis.confirm = (message) => { confirmsB.push(message); return false; };
+try {
+  currentB().buttons.find((b) => vnodeText(b) === "删除").props.onClick();
+  if (confirmsB.length !== 1 || !confirmsB[0].includes("星轨")) fail("词条删除必须保留二次确认");
+  let snapB = Object.assign({}, controller.getSnapshot(), { view: "creation", books: ["测试书"], creationProfile: {}, creationProfiles: { "测试书": { worldview: "世界", genre: "悬疑", extra: "要求" } }, creationBook: "测试书", creationDirty: false, creationDraft: null });
+  const writesB = [];
+  const ctrlB = Object.assign({}, controller, {
+    subscribe: () => () => {}, getSnapshot: () => snapB,
+    set: (patch) => { snapB = Object.assign({}, snapB, patch); },
+    openView: (view) => { snapB = Object.assign({}, snapB, { view }); }
+  });
+  const renderB = () => runRender(reactStub.createElement(panelRender.element.type, { controller: ctrlB, toggle: (patch) => writesB.push(patch) }));
+  let listB = renderB();
+  if (!listB.text.includes("已填 3/6 项") || !listB.text.includes("未填写，全部交给 AI 决定")) fail("设定列表计数/空态不正确");
+  if (listB.text.indexOf("默认设定") > listB.text.indexOf("测试书")) fail("默认设定应置顶");
+  if (primaryB(listB).length !== 1) fail("设定列表只应有一个 Primary");
+  snapB.view = "creation-form";
+  let formB = renderB();
+  if (primaryB(formB).length !== 1 || vnodeText(primaryB(formB)[0]) !== "保存") fail("设定表单保存应为唯一 Primary");
+  for (const helpB of ["告诉 AI 故事发生在哪里", "主要角色的身份", "不希望故事发生", "主角要完成什么", "类型和整体氛围", "其他写作要求"]) if (!formB.text.includes(helpB)) fail("设定字段缺少帮助文字：" + helpB);
+  formB.buttons.find((b) => vnodeText(b) === "清空").props.onClick();
+  if (writesB.length) fail("取消清空确认后不应写入");
+  globalThis.confirm = (message) => { confirmsB.push(message); return true; };
+  formB.buttons.find((b) => vnodeText(b) === "清空").props.onClick();
+  if (writesB.length !== 1 || writesB[0].creationProfiles["测试书"] !== null) fail("确认清空必须保留按书清空的语义");
+  snapB.creationDirty = true;
+  globalThis.confirm = () => false;
+  renderB().buttons.find((b) => String(b.props.className || "") === "nwCreationBack").props.onClick();
+  if (snapB.view !== "creation-form") fail("有草稿时取消返回应留在表单");
+  globalThis.confirm = () => true;
+  renderB().buttons.find((b) => String(b.props.className || "") === "nwCreationBack").props.onClick();
+  if (snapB.view !== "creation") fail("表单轻量返回应进入原创设定列表");
+} finally { globalThis.confirm = confirmBeforeB; }
+controller.set({ lexiconFormOpen: false, lexiconForm: null }, { silent: true });
+console.log("v7-B：词表默认收起/新增编辑展开/取消/唯一主按钮/删除确认 | 设定计数/字段帮助/清空确认/草稿返回确认 ✓");
+
 // ---------------------------------------------------------------------------
 // v6.6.0：诊断页（view="diagnose"）——空态 / 有数据态 / 忙态 / 剪贴板三条路径
 // 口径：report 由宿主「分享层」渲染（与 novel_diagnose 同一实现），面板**只展示不重拼**；
-//      状态 pill 与 issues 行取结构化字段。诊断页用的是既有组件类，没有自造组件。
+//      状态 pill 与 issues 行取结构化字段。v7 将正文及建议改为专属排版类。
 // ---------------------------------------------------------------------------
 const DIAG_REPORT = [
   "【诊断报告】生成于 2026-01-01T00:00:00.000Z",
@@ -489,8 +543,8 @@ controller.set({ view: "diagnose", diag: null, diagBusy: false, diagErr: false, 
 if (renderLog.length <= diagEmptyBefore) fail("诊断页空态未触发重渲染（订阅失效）");
 const diagEmptyRender = renderLog[renderLog.length - 1];
 if (!diagEmptyRender.stats.text.includes("生成诊断报告")) fail("诊断页空态按钮文案应为「生成诊断报告」，实际：" + diagEmptyRender.stats.text.slice(0, 160));
-if (!diagEmptyRender.stats.text.includes("拉取最近 7 天")) fail("诊断页空态应把窗口天数填进 {n} 提示（diagFill 未生效？），实际：" + diagEmptyRender.stats.text.slice(0, 160));
-if (diagEmptyRender.stats.classes.has("nwReportPre")) fail("空态不应渲染报告块（.nwReportPre）");
+if (!diagEmptyRender.stats.text.includes("最近 7 天")) fail("诊断页空态应把窗口天数填进 {n} 提示（diagFill 未生效？），实际：" + diagEmptyRender.stats.text.slice(0, 160));
+if (diagEmptyRender.stats.classes.has("nwDiagReport")) fail("空态不应渲染报告块（.nwDiagReport）");
 const diagEmptyCopy = diagEmptyRender.stats.buttons.find((b) => vnodeText(b).includes("复制诊断包"));
 if (!diagEmptyCopy) fail("诊断页缺少「复制诊断包」按钮");
 if (diagEmptyCopy.props.disabled !== true) fail("无报告时「复制诊断包」应禁用");
@@ -523,16 +577,16 @@ controller.set({
 }, { silent: true });
 if (renderLog.length <= diagDataBefore) fail("诊断页加载数据后未触发重渲染");
 const diagRender = renderLog[renderLog.length - 1];
-if (!diagRender.stats.classes.has("nwReportPre")) fail("诊断页未用既有 .nwReportPre 渲染宿主报告块");
+if (!diagRender.stats.classes.has("nwDiagReport")) fail("诊断页未用可选择滚动的 .nwDiagReport 渲染宿主报告块");
 if (!diagRender.stats.text.includes("【诊断报告】生成于 2026-01-01T00:00:00.000Z")) fail("诊断页未把宿主 report 原文渲染出来（面板不得重拼报告）");
 if (!diagRender.stats.classes.has("nwPill") || !diagRender.stats.classes.has("nwPillKey") || !diagRender.stats.classes.has("nwPillVal")) fail("诊断页缺少调用统计 pills（nwPill/nwPillKey/nwPillVal）");
-if (!diagRender.stats.text.includes("调用9") || !diagRender.stats.text.includes("降级1") || !diagRender.stats.text.includes("失败1")) {
+if (!diagRender.stats.text.includes("使用次数9") || !diagRender.stats.text.includes("简化处理1") || !diagRender.stats.text.includes("未成功1")) {
   fail("pills 的计数必须来自结构化字段 calls，实际文本：" + diagRender.stats.text.slice(0, 200));
 }
 if (!diagRender.stats.classes.has("nwPlotErr")) fail("error 级 issue 应走既有语义色类 nwPlotErr");
 if (!diagRender.stats.classes.has("nwNoteWarn")) fail("warn 级 issue 应走既有 nwNoteWarn");
-if (!diagRender.stats.classes.has("nwNoteDim")) fail("info 级 issue 应走既有 nwNoteDim");
-if (!diagRender.stats.classes.has("nwNoteAccent")) fail("issue 的建议行应走既有 nwNoteAccent");
+if (!diagRender.stats.classes.has("nwNote")) fail("info 级 issue 应使用清晰可见的中性 Note");
+if (!diagRender.stats.classes.has("nwDiagDetail")) fail("issue 的建议行应显示为中性说明文字");
 if (!diagRender.stats.text.includes("书库根可能不对")) fail("诊断页未渲染 issue 标题");
 if (!diagRender.stats.text.includes("建议：把根指向 novels 的父目录")) fail("诊断页未渲染 issue 建议（应带「建议：」前缀）");
 if (diagRender.stats.text.includes("不应外泄")) fail("诊断页把 data 里的自由文本字段渲染出来了（只应使用结构化字段 + report）");
@@ -629,9 +683,9 @@ if (installClipboard((text) => { clipTexts.push(text); return Promise.resolve();
   controller.diagCopy();
   await new Promise((resolve) => setImmediate(resolve));
   if (controller.getSnapshot().diagManual !== true || controller.getSnapshot().revealErr !== true) fail("剪贴板被拒时必须降级为「手动复制」提示，不得谎报成功");
-  console.log("诊断页: 空态/有数据态/忙态 ✓ | report 原文入 nwReportPre ✓ | 窗口钳制 [1,90] ✓ | 剪贴板：写入成功 / 被拒降级 ✓");
+  console.log("诊断页: 空态/有数据态/忙态 ✓ | report 原文入 nwDiagReport ✓ | 窗口钳制 [1,90] ✓ | 剪贴板：写入成功 / 被拒降级 ✓");
 } else {
-  console.log("诊断页: 空态/有数据态/忙态 ✓ | report 原文入 nwReportPre ✓ | 窗口钳制 [1,90] ✓ | 本环境无法替换 navigator.clipboard，剪贴板分支只测降级");
+  console.log("诊断页: 空态/有数据态/忙态 ✓ | report 原文入 nwDiagReport ✓ | 窗口钳制 [1,90] ✓ | 本环境无法替换 navigator.clipboard，剪贴板分支只测降级");
 }
 removeClipboard();
 controller.set({ diagManual: false, revealErr: false, revealMsg: "" }, { silent: true });
@@ -665,42 +719,32 @@ if (cardRender.components < 1 || cardRender.nodes < 3) fail("设置卡片组件�
 console.log("设置卡片渲染: 组件数 " + cardRender.components + " | vnode 节点 " + cardRender.nodes + " ✓");
 
 // ---------------------------------------------------------------------------
-// v5.1.1 回归：提示词「场景」分段按钮必须始终可点（真机反馈：档位=off 时五个场景按钮全灰、点不动）
-// 旧实现把 disabled 绑在 systemPromptMode !== "full" 上，用户默认档位（off/brief）下场景被锁死且无任何提示。
-// ---------------------------------------------------------------------------
-// 先落到"档位=关闭 + 不在加载中"——这正是用户遇到问题的现场（默认档位 off，场景行整行点不动）
-controller.set({ view: "main", loading: false, systemPromptMode: "off", promptScene: "general" }, { silent: true });
-const featsRender = renderLog[renderLog.length - 1];
-// v5.5.0：分段控件可能是「回退实现」（带 nwSegBtn 类）或「官方 SegmentedControl」（tablist，role="tab"），
-// 两条路径都要能断言——否则官方路径下这段覆盖会静默失效。
+// v7：非完整档不渲染场景行；完整档可点且仍提交原 promptScene。
+// 这是 IA 规格替代 v5.1.1 的“非 full 场景恒可点”，不是删除行为覆盖。
 const segButtonsOf = (stats) => (stats.buttons || []).filter((b) => {
   const cls = String(b.props.className || "");
   return cls.includes("nwSegBtn") || b.props.role === "tab";
 });
-const segBtns = segButtonsOf(featsRender.stats);
-if (segBtns.length !== 8) fail("主面板分段按钮数量异常（档位 3 + 场景 5 应为 8，实际 " + segBtns.length + "）");
 const SCENE_LABELS = ["通用", "写新章", "改稿", "审计", "建资料"];
 const MODE_LABELS = ["关闭", "精简", "完整"];
-const sceneBtns = segBtns.filter((b) => SCENE_LABELS.includes(vnodeText(b).trim()));
-const modeBtns = segBtns.filter((b) => MODE_LABELS.includes(vnodeText(b).trim()));
-if (sceneBtns.length !== 5) fail("未按文案定位到 5 个场景按钮（实际 " + sceneBtns.length + "："
-  + segBtns.map((b) => vnodeText(b).trim()).join("/") + "）");
-if (modeBtns.length !== 3) fail("未按文案定位到 3 个档位按钮（实际 " + modeBtns.length + "）");
-// 关键回归断言：档位=off（非 full）时，场景按钮必须可点——旧实现把它们 disabled 了，用户"点不了"
-const lockedScene = sceneBtns.filter((b) => b.props.disabled === true);
-if (lockedScene.length > 0) {
-  fail("档位非 full 时场景按钮被 disabled 锁死（用户点不了）：" + lockedScene.map((b) => vnodeText(b).trim()).join("/")
-    + "｜loading=" + controller.getSnapshot().loading + " mode=" + controller.getSnapshot().systemPromptMode);
+for (const mode of ["off", "brief"]) {
+  controller.set({ view: "main", loading: false, systemPromptMode: mode, promptScene: "general" }, { silent: true });
+  const rendered = renderLog[renderLog.length - 1].stats;
+  const btns = segButtonsOf(rendered);
+  if (btns.length !== 3) fail("非完整档只应显示 3 个档位按钮：" + mode + " / " + btns.length);
+  if (rendered.text.includes("提示词场景")) fail("非完整档不应渲染场景行：" + mode);
+  for (const b of btns) if (b.props.disabled === true) fail("非加载态档位按钮不可禁用");
 }
-const lockedMode = modeBtns.filter((b) => b.props.disabled === true);
-if (lockedMode.length > 0) fail("loading=false 时档位按钮仍被禁用：" + lockedMode.map((b) => vnodeText(b).trim()).join("/"));
-for (const b of sceneBtns) if (typeof b.props.onClick !== "function") fail("场景按钮缺 onClick：" + vnodeText(b).trim());
-const hintNode = featsRender.stats.text.includes("暂不注入");
-if (!hintNode) fail("档位非 full 时未给出「场景暂不注入」的说明（用户不知道为何没生效）");
-// 点一个非当前场景：必须真的回调 toggle({ promptScene })（把面板的 toggle 换成探针后再渲染）
-// 点一个非当前场景：必须真的回调 toggle({ promptScene })。
-// 用探针 props 直接渲染面板组件（与上面设置卡片同一手法）——比改 props 对象更可靠：
-// 组件内部若把 toggle 解构进局部变量，改 props 就失效了。
+controller.set({ view: "main", systemPromptMode: "full", promptScene: "general", loading: false }, { silent: true });
+const fullRender = renderLog[renderLog.length - 1].stats;
+const fullBtns = segButtonsOf(fullRender);
+if (fullBtns.length !== 8) fail("完整档应显示 3+5 个分段按钮");
+const sceneBtns = fullBtns.filter((b) => SCENE_LABELS.includes(vnodeText(b).trim()));
+if (sceneBtns.length !== 5) fail("完整档缺少场景按钮");
+for (const b of fullBtns) {
+  if (b.props.disabled === true) fail("完整档非加载态分段按钮不应禁用");
+  if (typeof b.props.onClick !== "function") fail("完整档分段按钮缺少回调");
+}
 const probe = [];
 const probeRender = runRender(reactStub.createElement(panelRender.element.type, {
   controller,
@@ -717,7 +761,190 @@ if (probe.length !== 1 || probe[0].promptScene !== "writing") {
 // 选中态：回退实现用 nwSegBtnOn 类；官方控件用 aria-selected
 const currentBtn = probeSegs.find((b) => (String(b.props.className || "").includes("nwSegBtnOn") || b.props["aria-selected"] === "true") && SCENE_LABELS.includes(vnodeText(b).trim()));
 if (currentBtn && vnodeText(currentBtn).trim() !== "通用") fail("当前场景高亮错位：" + vnodeText(currentBtn).trim());
-console.log("场景按钮可点（v5.1.1）: 8 个分段按钮全部可点 | 点击「写新章」→ toggle({promptScene:\"writing\"}) ✓ | 档位非 full 时提示「暂不注入」✓");
+controller.set({ loading: true }, { silent: true });
+for (const b of segButtonsOf(renderLog[renderLog.length - 1].stats)) {
+  if (!b.props.disabled) fail("加载态分段按钮必须禁用");
+}
+controller.set({ loading: false }, { silent: true });
+console.log("v7 提示词场景：off/brief 隐藏 | full 8 个可用按钮 | 写新章提交原 promptScene | loading 禁用 ✓");
+
+// 主页 IA 与共享外壳：真实入口保留，纯 UI 折叠不增加 controller 状态/hook。
+const homeStats = renderLog[renderLog.length - 1].stats;
+const navButtons = homeStats.buttons.filter((b) => String(b.props.className || "").split(/\s+/).includes("nwNavEntry"));
+const expectedNav = ["原创设定", "必用词表", "风格基线", "功能开关", "工具开关", "语义模型", "报告历史", "诊断报告", "体验演示"];
+if (navButtons.length !== expectedNav.length) fail("主页应有 9 个导航/操作行");
+for (let i = 0; i < expectedNav.length; i++) {
+  if (!vnodeText(navButtons[i]).startsWith(expectedNav[i])) fail("主页入口顺序错误：" + i + " / " + vnodeText(navButtons[i]));
+}
+if (homeStats.classes.has("nwHero") || homeStats.classes.has("nwSwitchWrap")) fail("主页仍有 Hero 或开关状态徽章容器");
+if (!homeStats.classes.has("nwStorage") || !homeStats.classes.has("nwLibrary")) fail("主页缺少存储位置/书库折叠区");
+if (!homeStats.text.includes("18+")) fail("危险行必须有文字 18+ 标签");
+navButtons[5].props.onClick();
+if (controller.getSnapshot().view !== "model") fail("主页语义模型入口未打开 model");
+const modelRender = renderLog[renderLog.length - 1].stats;
+if (modelRender.classes.has("nwHero") || modelRender.classes.has("nwSectionTitle")) fail("子页仍有 Hero/重复胶囊标题");
+const headerBack = modelRender.buttons.filter((b) => String(b.props.className || "").includes("nwBackBtn"));
+if (headerBack.length !== 1 || !vnodeText(headerBack[0]).includes("写作助手")) fail("子页必须仅有一个标题栏返回入口");
+headerBack[0].props.onClick();
+if (controller.getSnapshot().view !== "main") fail("标题栏返回应回到主页");
+console.log("v7 主页：9 入口顺序/语义模型直达/存储与书库折叠/18+ 标签/子页标题栏返回 ✓");
+
+// ---------------------------------------------------------------------------
+// StorageDisclosure 只转发 controller 既有方法，不另建剪贴板或打开目录路径。
+const storageCalls = [];
+const storageController = Object.assign({}, controller, {
+  subscribe: () => () => {},
+  getSnapshot: () => Object.assign({}, controller.getSnapshot(), { view: "main", dirs: { dataDir: "/tmp/data", stateFile: "/tmp/state.json" }, revealing: false }),
+  openDir: (key) => storageCalls.push(["open", key]),
+  copyPath: (path) => storageCalls.push(["copy", path])
+});
+const storageRender = runRender(reactStub.createElement(panelRender.element.type, { controller: storageController, toggle: () => {} }));
+const storageBtns = storageRender.buttons.filter((b) => String(b.props.className || "").includes("nwStorageBtn"));
+if (storageBtns.length !== 4) fail("两条存储位置应提供打开/复制共 4 个按钮");
+for (const b of storageBtns) { if (b.props.disabled) fail("已有路径时存储操作不可禁用"); b.props.onClick(); }
+if (JSON.stringify(storageCalls) !== JSON.stringify([["open", "data-dir"], ["copy", "/tmp/data"], ["open", "state-file"], ["copy", "/tmp/state.json"]])) fail("存储位置未转发既有 controller 方法：" + JSON.stringify(storageCalls));
+const unknownStorage = Object.assign({}, storageController, { getSnapshot: () => Object.assign({}, storageController.getSnapshot(), { dirs: {}, dataDir: "", file: "" }) });
+const unknownStorageRender = runRender(reactStub.createElement(panelRender.element.type, { controller: unknownStorage, toggle: () => {} }));
+if (unknownStorageRender.buttons.filter((b) => String(b.props.className || "").includes("nwStorageBtn")).some((b) => !b.props.disabled)) fail("路径未知时存储操作必须禁用");
+console.log("v7 存储位置：打开/复制调用既有 controller | 两条路径映射正确 | 未知路径禁用 ✓");
+
+// v7-A：只改呈现，不改默认开启、批量开关、loading 与导航行为。
+const aTools = {
+  analyze: ["novel_books", "novel_chapters", "novel_read", "novel_keywords", "novel_sentence_analysis", "novel_style_check", "novel_fix_plan", "novel_style_report", "novel_semantic_search", "novel_continuity_check", "novel_diagnose"],
+  settings: ["novel_settings", "novel_plot", "novel_summary", "novel_import"],
+  create: ["novel_chapter_brief", "novel_lexicon", "novel_new_chapter", "novel_outline"]
+};
+const aGroupLabels = { analyze: "分析作品", settings: "整理资料", create: "开始创作" };
+const aPatches = [], aActions = [];
+let aSnapshot = Object.assign({}, controller.getSnapshot(), {
+  view: "tools", loading: false, tools: {}, features: {},
+  rawModal: false, rawPromiseOpen: false,
+  toolGroupOpen: { analyze: true, settings: true, create: true },
+  dirs: { dataDir: "/tmp/data", analysisDir: "/tmp/data", auditsDir: "/tmp/audits", settingsDir: "/tmp/settings", plotsDir: "/tmp/plots", summariesDir: "/tmp/summaries", lexiconDir: "/tmp/lexicon", embeddingDir: "/tmp/embedding" }
+});
+const aController = Object.assign({}, controller, {
+  subscribe: () => () => {}, getSnapshot: () => aSnapshot,
+  openView: (view) => aActions.push(["view", view]),
+  setToolGroupOpen: (patch) => aActions.push(["groups", patch])
+});
+const aRender = (patch = {}) => {
+  aSnapshot = Object.assign({}, aSnapshot, patch);
+  return runRender(reactStub.createElement(panelRender.element.type, { controller: aController, toggle: (patch) => aPatches.push(patch) }));
+};
+const aSwitches = (stats) => stats.buttons.filter((b) => b.props.role === "switch");
+const aSwitch = (stats, label) => aSwitches(stats).find((b) => b.props["aria-label"] === label);
+const aChecked = (button) => String(button.props["aria-checked"]) === "true";
+let aStats = aRender();
+if (aSwitches(aStats).length !== 22) fail("工具页应有 19 个工具开关 + 3 个全部开关");
+if (aSwitches(aStats).some((b) => !aChecked(b))) fail("未配置的工具必须默认开启");
+if (aStats.classes.has("nwToolRowOn") || aStats.classes.has("nwToolGroupBadge") || aStats.classes.has("nwPlotBox")) fail("工具页仍有蓝底、关闭徽章或行内路径");
+if (!aStats.classes.has("nwGCard") || !aStats.classes.has("nwPref") || !aStats.classes.has("nwStorage")) fail("工具页未复用统一卡片、偏好行或存储折叠区");
+if (/tool\.novel_|novel_diagnose/.test(aStats.text) || !aStats.text.includes("生成可安全分享的插件诊断报告")) fail("诊断工具缺少人话文案");
+if (aStats.buttons.filter((b) => String(b.props.className || "").includes("nwStorageBtn")).length !== 12) fail("工具页存储路径未按实际路径去重");
+for (const [group, names] of Object.entries(aTools)) {
+  for (const mode of ["on", "off", "partial"]) {
+    const states = Object.fromEntries(names.map((name, i) => [name, mode === "on" || (mode === "partial" && i > 0)]));
+    aStats = aRender({ tools: states });
+    const all = aSwitch(aStats, aGroupLabels[group] + " · 全部");
+    if (!all || aChecked(all) !== (mode === "on")) fail("全部开关状态错误：" + group + "/" + mode);
+    all.props.onClick();
+    const expected = { tools: Object.fromEntries(names.map((name) => [name, mode !== "on"])) };
+    if (JSON.stringify(aPatches.at(-1)) !== JSON.stringify(expected)) fail("批量开关范围/目标改变：" + group + "/" + mode);
+  }
+}
+aStats = aRender({ tools: { novel_diagnose: false } });
+aSwitch(aStats, "诊断报告").props.onClick();
+if (JSON.stringify(aPatches.at(-1)) !== JSON.stringify({ tools: { novel_diagnose: true } })) fail("单工具开关未提交原 tools patch");
+const aFold = aStats.buttons.find((b) => String(b.props.className || "").includes("nwToolGroupHeadBtn"));
+if (aFold.props["aria-expanded"] !== true) fail("分类折叠按钮缺少展开状态");
+aFold.props.onClick();
+if (aActions.at(-1)[1].analyze !== false || aActions.at(-1)[1].settings !== true) fail("分类展开动作不应修改其它分类");
+aStats = aRender({ loading: true });
+if (aSwitches(aStats).some((b) => !b.props.disabled)) fail("loading 时工具和全部开关必须禁用");
+aStats = aRender({ view: "features", loading: false, features: { semanticEmbedding: false } });
+if (aSwitches(aStats).length !== 6 || aStats.classes.has("nwSwitchWrap")) fail("功能页开关数或多余状态徽章错误");
+const aModelLink = aStats.buttons.find((b) => vnodeText(b) === "模型设置 ›");
+if (!aModelLink) fail("功能页缺少行尾模型设置按钮");
+aModelLink.props.onClick({ stopPropagation() {} });
+if (aActions.at(-1)[1] !== "model") fail("模型设置未打开 model 视图");
+aSwitch(aStats, "语义增强").props.onClick();
+if (JSON.stringify(aPatches.at(-1)) !== JSON.stringify({ features: { semanticEmbedding: true } })) fail("功能开关未提交原 features patch");
+aStats = aRender({ loading: true });
+if (aSwitches(aStats).some((b) => !b.props.disabled)) fail("loading 时功能开关必须禁用");
+aStats = aRender({ view: "model", loading: false, features: { semanticEmbedding: false, semanticStyle: false }, embeddingStatus: { modelPresent: true, loaded: true } });
+if (aSwitches(aStats).length !== 3 || !aStats.classes.has("nwStorage") || !aStats.text.includes("可用 · 模型已加载")) fail("模型页缺少状态卡、三个子功能或存储折叠区");
+if (aSwitches(aStats).some((b) => b.props.disabled)) fail("模型总开关关闭不应改变原子开关可编辑行为");
+aSwitch(aStats, "语义风格对比").props.onClick();
+if (JSON.stringify(aPatches.at(-1)) !== JSON.stringify({ features: { semanticStyle: true } })) fail("模型子功能开关 patch 改变");
+console.log("v7-A：工具默认值/三组全开全关混合态/单工具 patch/分类折叠/loading/路径去重/模型设置/子功能行为 ✓");
+
+// v7-C：只友好化展示，文件读取名不变；基线空态与唯一主按钮。
+const cViewSnapshot = Object.assign({}, controller.getSnapshot(), {
+  view: "baseline", loading: false, baselineBook: "", baselineErr: true,
+  revealErr: true, revealMsg: "book is required", books: ["测试书"],
+  dirs: { dataDir: "/tmp/data", stateFile: "/tmp/state.json", analysisDir: "/tmp/analysis" }
+});
+const cViewController = Object.assign({}, controller, { subscribe: () => () => {}, getSnapshot: () => cViewSnapshot });
+const cRender = () => runRender(reactStub.createElement(panelRender.element.type, { controller: cViewController, toggle: () => {} }));
+const cBase = cRender();
+if (!cBase.text.includes("先选择一本书") || cBase.text.includes("book is required") || cBase.text.includes("v3.0.0-UI3")) fail("基线未选书必须显示人话空态，不能泄露原始错误或调试版本");
+if (cBase.buttons.filter((b) => /nwBtnPrimary/.test(b.props.className || "")).length !== 1) fail("基线必须只有一个主按钮");
+if (!cBase.classes.has("nwBaseTolRow") || cBase.classes.has("nwTolSep") || cBase.classes.has("nwTolSign")) fail("基线容差应使用对齐网格，不再显示游离正负号和波浪号");
+Object.assign(cViewSnapshot, { view: "reports", revealMsg: "", revealErr: false, reportContent: null, reportsGroups: [
+  { name: "句式分析", files: [
+    { file: "测试书__base-full.json", label: "测试书__base-full" },
+    { file: "测试书-chapters-metrics.json", label: "测试书-chapters-metrics" },
+    { file: "测试书-full.json", label: "测试书-full" },
+    { file: "测试书-keywords-1234.json", label: "测试书-keywords-1234" }
+  ] },
+  { name: "风格判断", files: [{ file: "abcdef0123456789.json", label: "abcdef0123456789" }, { file: "unknown-format.json", label: "unknown-format" }] }
+] });
+const cReports = cRender();
+for (const text of ["测试书", "全书基线", "逐章指标", "全书分析", "关键词", "单段分析", "abcdef", "unknown-format"]) {
+  if (!cReports.text.includes(text)) fail("报告展示缺少：" + text);
+}
+if (!cReports.text.includes("测试书4") || cReports.text.includes("风格判断")) fail("报告必须跨目录合并为按书分组并显示报告数");
+const cFiles = cReports.buttons.filter((b) => /nwReportsFile/.test(b.props.className || ""));
+if (cFiles.length !== 6 || cFiles[0].props.title !== "测试书__base-full.json") fail("报告行应保留原始文件身份");
+const cSavedFetch = globalThis.fetch;
+const cReadPending = [];
+cViewController.set = (patch) => Object.assign(cViewSnapshot, patch);
+globalThis.fetch = (url) => new Promise((resolve) => cReadPending.push({ url: String(url), resolve }));
+try {
+  cFiles[0].props.onClick();
+  cFiles[2].props.onClick();
+  if (cReadPending[0].url !== "/api/dsh-novel-writer/reports?read=" + encodeURIComponent("测试书__base-full.json")) fail("友好报告名改变了原文件请求");
+  cReadPending[1].resolve({ ok: true, json: () => Promise.resolve({ ok: true, content: { id: "new" } }) });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  cReadPending[0].resolve({ ok: true, json: () => Promise.resolve({ ok: true, content: { id: "old" } }) });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  if (cViewSnapshot.reportContent !== JSON.stringify({ id: "new" }, null, 2)) fail("旧报告响应覆盖了新报告，reqId 过期丢弃失效");
+} finally { globalThis.fetch = cSavedFetch; }
+console.log("v7-C：基线空态/唯一主按钮/网格 | 报告按书分组/名称映射/原文件请求/reqId 过期丢弃 ✓");
+
+// 导航行重排不能丢掉 reports 入口加载、demo 的不落盘与 finally 复位行为。
+const homeFetch = globalThis.fetch;
+const homeRequests = [];
+globalThis.fetch = (url) => {
+  homeRequests.push(String(url));
+  return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(String(url).endsWith("/reports") ? { groups: [{ book: "测试书", files: [{ file: "r.json" }] }] } : { ok: true, report: "演示报告" }) });
+};
+try {
+  controller.set({ view: "main", demoLoading: false, reportsGroups: null }, { silent: true });
+  let currentHome = renderLog[renderLog.length - 1].stats;
+  currentHome.buttons.find((b) => String(b.props.className || "").includes("nwNavEntry") && vnodeText(b).startsWith("报告历史")).props.onClick();
+  if (controller.getSnapshot().view !== "reports") fail("报告历史入口未进入 reports");
+  await new Promise((resolve) => setImmediate(resolve));
+  if (!controller.getSnapshot().reportsGroups || controller.getSnapshot().reportsGroups.length !== 1) fail("报告历史入口未保存读取结果");
+  controller.set({ view: "main" }, { silent: true });
+  currentHome = renderLog[renderLog.length - 1].stats;
+  currentHome.buttons.find((b) => String(b.props.className || "").includes("nwNavEntry") && vnodeText(b).startsWith("体验演示")).props.onClick();
+  if (!controller.getSnapshot().demoLoading) fail("演示入口未设置加载状态");
+  await new Promise((resolve) => setImmediate(resolve));
+  if (controller.getSnapshot().demoLoading || controller.getSnapshot().demoReport !== "演示报告") fail("演示未显示结果/复位 loading");
+  if (JSON.stringify(homeRequests) !== JSON.stringify(["/api/dsh-novel-writer/reports", "/api/dsh-novel-writer/demo"])) fail("主页入口请求发生变化或增加了计数请求：" + JSON.stringify(homeRequests));
+} finally { globalThis.fetch = homeFetch; }
+console.log("v7 主页加载：报告真实入口读取 | 演示结果与 loading 复位 | 不新增计数请求 ✓");
 
 // ---------------------------------------------------------------------------
 // v5.2.0：官方席位 = 侧栏一行（sidebar.panellist）+ 主栏页面（main，同一个 id）

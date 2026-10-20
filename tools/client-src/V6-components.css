@@ -41,3 +41,150 @@
 .nwDiagIssues{margin:12px 0}
 .nwDiagIssueList{display:flex;flex-direction:column;gap:8px;margin-top:6px}
 .nwDiagIssue{background:var(--dsw-alias-bg-layer-2);border-radius:var(--dsw-radius-xl);box-shadow:var(--dsw-elevation-soft);padding:9px 12px}
+/* v7 Foundation：安静的默认态，标题栏承担导航。 */
+.nwPanelHeader{gap:12px;align-items:center;margin-bottom:8px}
+.nwHeaderIdentity{display:flex;align-items:center;gap:12px;min-width:0;flex:1;flex-wrap:wrap}
+.nwPanelTitle{font-size:18px;line-height:26px;font-weight:600}
+.nwHeaderPage{font-size:15px;line-height:22px;font-weight:600;border-left:0.5px solid var(--dsw-alias-border-l2);padding-left:12px}
+.nwPanelHeader .nwBackBtn{margin:0;padding:4px 0;border:0;background:none;box-shadow:none;font-size:14px;line-height:22px;color:var(--dsw-alias-label-secondary);white-space:nowrap}
+.nwHeaderStatus{font-size:12px;line-height:18px;white-space:nowrap;border-radius:999px;corner-shape:round;background:var(--dsw-alias-bg-layer-3);padding:3px 8px;color:var(--dsw-alias-label-tertiary)}
+.nwHeaderStatusOn{color:var(--dsw-alias-state-success-primary);background:var(--dsw-alias-state-success-tertiary)}
+.nwRefresh{display:flex;align-items:center;justify-content:center;width:32px;height:32px;padding:6px;flex:none}
+.nwIco svg{width:20px;height:20px}
+.nwHomeSubtitle{font-size:12.5px;line-height:18px;color:var(--dsw-alias-label-tertiary);margin:0 0 20px}
+.nwSection{gap:0;margin:0}
+.nwKickerRow{margin:24px 0 8px;padding:0 16px}
+.nwKicker{background:none;border:0;border-radius:0;padding:0;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px;font-weight:600;letter-spacing:0}
+.nwKickerRule{display:none}
+.nwPref{min-height:56px;box-sizing:border-box;gap:12px;flex-wrap:wrap}
+.nwPrefIcon,.nwIconSlot{width:32px;height:32px;border:0;border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-secondary);flex:none;display:flex;align-items:center;justify-content:center}
+.nwPrefGlyph{color:inherit}
+.nwPrefTitle,.nwNavEntryTitle{font-size:14px;line-height:22px;font-weight:500}
+.nwPrefSummary,.nwNavEntryHint{font-size:12.5px;line-height:18px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;color:var(--dsw-alias-label-secondary)}
+.nwPrefBottom{flex-basis:100%;padding:0 0 0 44px;min-width:0}
+.nwPref.nwPrefDanger{background:none}
+.nwRowDiv{margin:0 16px 0 60px}
+.nwCountBadge{color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-layer-3);border:0;white-space:nowrap;font-size:12px;line-height:18px;flex:none}
+.nwNote,.nwPlotMsg,.nwWarnBanner{border:0;border-radius:var(--dsw-radius-md);padding:10px 12px;font-size:12.5px;line-height:18px;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-layer-3)}
+.nwNoteAccent{color:var(--dsw-alias-state-business-primary);background:var(--dsw-alias-state-business-tertiary)}
+.nwNoteWarn,.nwWarnBanner{color:var(--dsw-alias-state-warn-primary);background:var(--dsw-alias-state-warn-tertiary)}
+.nwNoteDanger,.nwPlotErr{color:var(--dsw-alias-state-error-primary);background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 8%,var(--dsw-alias-bg-layer-2))}
+.nwErrorDetails{font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary);margin-top:4px;overflow-wrap:anywhere}
+.nwAgeTag{display:inline-block;margin-right:8px;padding:0 4px;border:1px solid var(--dsw-alias-state-error-primary);border-radius:var(--dsw-radius-xs);color:var(--dsw-alias-state-error-primary);font-size:12px;line-height:18px;white-space:nowrap}
+.nwStorage{margin-top:24px}
+.nwDisclosureTitle{display:flex;align-items:center;justify-content:space-between;gap:12px;cursor:pointer;list-style:none;padding:16px;font-size:13px;line-height:20px;font-weight:500}
+.nwDisclosureTitle::-webkit-details-marker{display:none}
+.nwDisclosureArrow{font-size:18px;line-height:20px;color:var(--dsw-alias-label-tertiary);transition:transform .15s}
+details[open]>.nwDisclosureTitle .nwDisclosureArrow{transform:rotate(90deg)}
+.nwStorageBody{padding:0 16px 8px}
+.nwStorageItem{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;padding:12px 0;border-top:0.5px solid var(--dsw-alias-border-l2)}
+.nwStorageMeta{flex:1;min-width:160px}
+.nwStorageLabel{font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}
+.nwStoragePath{font-family:monospace;font-size:12px;line-height:18px;overflow-wrap:anywhere;user-select:text;color:var(--dsw-alias-label-secondary)}
+.nwStorageActions{display:flex;gap:8px;flex:none}
+.nwBtn.nwStorageBtn{display:inline-flex;align-items:center;gap:4px;height:28px;padding:0 6px;border:0;background:none;box-shadow:none;font-size:12px;line-height:18px;white-space:nowrap;transform:none}
+.nwStorageBtn svg{width:14px;height:14px}
+.nwUpdateStale{margin:16px 0 0;padding:0;border:0;background:none;font-size:12px;line-height:18px}
+@media(max-width:480px){.nwPrefText{min-width:150px}.nwPrefTrail{max-width:100%;white-space:nowrap}.nwPrefTrail:has(.nwSeg){width:calc(100% - 44px);margin-left:44px;white-space:normal}.nwPrefTrail .nwSeg{flex-wrap:wrap;max-width:100%}.nwPrefTrail .nwSegBtn{white-space:nowrap;flex:none}.nwHeaderIdentity{gap:8px}.nwHeaderPage{padding-left:8px}.nwPrefBottom{padding:0}}
+@media(prefers-reduced-motion:reduce){.nwDisclosureArrow{transition:none}}
+.nwHeaderIdentity .nwPanelTitle{flex:none}
+.nwHome .nwNavEntry{min-height:56px;gap:12px}
+.nwHome .nwNavEntryText{padding-right:0}
+.nwHome .nwNavEntry:disabled{cursor:wait;opacity:.65}
+.nwHome .nwIconGlyph{color:var(--dsw-alias-label-secondary)}
+.nwHome .nwPrefText{min-width:0}
+.nwHome .nwPrefTrail{white-space:nowrap}
+.nwLibrary{border-top:0.5px solid var(--dsw-alias-border-l2);margin:0 16px}
+.nwLibrary>.nwDisclosureTitle{padding:12px 0;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px;font-weight:400}
+.nwLibraryBooks{padding:0 0 12px}
+.nwLibraryBook{display:flex;align-items:center;flex-wrap:wrap;gap:4px 12px;padding:8px 0;font-size:12px;line-height:18px}
+.nwLibraryName{flex:1;min-width:80px;overflow-wrap:anywhere;color:var(--dsw-alias-label-secondary)}
+.nwLibraryMeta,.nwLibraryIdle{color:var(--dsw-alias-label-tertiary)}
+.nwDemoReport{margin:0 16px 16px;max-height:260px;overflow:auto}
+.nwGlobalNote{margin-bottom:12px;white-space:pre-wrap}
+.nwUpdateBar.nwNoteAccent{border:0;margin:0 0 12px;padding:10px 12px;font-size:12.5px;line-height:18px;background:var(--dsw-alias-state-business-tertiary);color:var(--dsw-alias-state-business-primary)}
+.nwPromptRow{min-width:0}
+@media(max-width:480px){.nwPromptRow .nwPrefTrail{flex-basis:calc(100% - 44px);width:calc(100% - 44px);margin-left:44px;white-space:normal}.nwPromptRow .nwPrefTrail>*{max-width:100%;flex-wrap:wrap}.nwPromptRow .nwPrefTrail [role="tablist"]{max-width:100%;flex-wrap:wrap}.nwPromptRow .nwPrefTrail button{white-space:nowrap;flex:none}}
+/* v7 共享：小号按钮与危险文字按钮（合并时统一） */
+.nwBtn.nwBtnSm{height:28px;padding:0 10px;font-size:12.5px;line-height:18px;display:inline-flex;align-items:center;white-space:nowrap}
+.nwBtn.nwBtnDangerText{color:var(--dsw-alias-state-error-primary)}
+/* ==== v7-A: features / tools / model ==== */
+.nwFeaturesPage,.nwToolsPage,.nwModelPage{min-width:0}
+.nwFeatureActions{display:flex;align-items:center;gap:12px;white-space:nowrap}
+.nwBtn.nwFeatureModelLink{border:0;background:none;box-shadow:none;padding:4px 0;font-size:12.5px;line-height:18px;color:var(--dsw-alias-label-secondary);white-space:nowrap;transform:none}
+.nwToolCategory+.nwToolCategory{margin-top:12px}
+.nwToolsPage .nwToolGroupHead{box-sizing:border-box;padding:16px 16px 0;gap:16px;background:none;font-size:14px;line-height:22px}
+.nwToolsPage .nwToolGroupHead:hover{background:none}
+.nwToolsPage .nwToolGroupHeadBtn{min-width:0;gap:8px;font-size:14px;line-height:22px}
+.nwToolsPage .nwToolGroupName{font-weight:500;white-space:nowrap}
+.nwToolCategoryArrow{display:inline-flex;align-items:center;justify-content:center;flex:none;color:var(--dsw-alias-label-tertiary)}
+.nwToolCategoryArrow svg{width:14px;height:14px}
+.nwToolCategoryArrowOpen{transform:rotate(90deg)}
+.nwToolAll{display:flex;align-items:center;gap:8px;flex:none;white-space:nowrap;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary)}
+.nwToolCategoryHint{padding:6px 16px 14px;font-size:12.5px;line-height:18px;color:var(--dsw-alias-label-tertiary)}
+.nwToolCategoryBody .nwRowDiv:first-child{margin-left:16px}
+.nwModelSubHint{padding:14px 16px 0;font-size:12.5px;line-height:18px;color:var(--dsw-alias-label-tertiary)}
+@media(max-width:480px){.nwFeaturesPage .nwFeatureModelRow .nwPrefTrail{flex-basis:calc(100% - 44px);margin-left:44px}.nwFeatureModelRow .nwFeatureActions{width:100%;justify-content:space-between}.nwToolsPage .nwToolGroupHead{gap:8px}.nwToolsPage .nwPrefText,.nwModelPage .nwPrefText{min-width:0}}
+/* ==== end v7-A ==== */
+/* ==== v7-B: lexicon / creation / edit ==== */
+.nwLexPage .nwRowDiv,.nwCreationPage .nwRowDiv{margin-left:16px}
+.nwLexPage .nwPrefText,.nwCreationPage .nwPrefText{min-width:120px}
+.nwLexPage .nwPrefBottom,.nwCreationPage .nwPrefBottom{padding-left:0;font-size:12.5px;line-height:18px;color:var(--dsw-alias-label-secondary)}
+.nwLexToolbar{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:16px;border-bottom:0.5px solid var(--dsw-alias-border-l2)}
+.nwLexToolbar .nwTextInput{flex:1;min-width:150px;width:0}
+.nwLexToolbar .nwBtn,.nwCreationNew .nwBtn{flex:none;white-space:nowrap}
+.nwLexForm{margin-top:16px;scroll-margin-top:16px}
+.nwLexForm .nwField{flex-wrap:wrap;gap:8px 16px;min-width:0}
+.nwLexForm .nwRowText{flex:1;min-width:150px}
+.nwLexForm .nwFieldCtl{max-width:100%;flex-wrap:wrap}
+.nwLexForm .nwTextInput{width:240px;max-width:100%;box-sizing:border-box}
+.nwLexImport{margin-top:12px}
+.nwLexImport>.nwGCard{margin-top:8px}
+.nwLexImportBody{padding:16px;display:flex;flex-direction:column;gap:12px}
+.nwLexImportBody .nwTextArea{width:100%;box-sizing:border-box;min-height:120px}
+.nwLexActions,.nwCreationActions{display:flex;align-items:center;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+.nwLexAudit{margin-top:16px}
+.nwLexAdvanced{margin-top:24px}
+.nwLexPage .nwStoragePath{white-space:pre-line}
+.nwLexPage .nwPrefTrail:has(.nwSeg){max-width:100%}
+.nwCreationNew{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}
+.nwCreationNew .nwTextInput{flex:1;min-width:150px;width:0;box-sizing:border-box}
+.nwCreationPage .nwPrefTitle{overflow-wrap:anywhere}
+.nwCreationPage .nwChip{white-space:nowrap;border:0;background:none;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:20px}
+.nwCreationBack{display:inline-flex;align-items:center;min-height:36px;margin:0 0 8px;padding:0;border:0;background:none;color:var(--dsw-alias-label-secondary);font:inherit;font-size:13px;line-height:20px;cursor:pointer}
+.nwCreationField{padding:16px;display:flex;flex-direction:column;gap:4px}
+.nwCreationField+.nwCreationField{border-top:0.5px solid var(--dsw-alias-border-l2)}
+.nwCreationField .nwTextArea{margin-top:4px;width:100%;box-sizing:border-box;resize:vertical}
+.nwCreationActions{justify-content:flex-start;margin-top:16px}
+@media(max-width:480px){.nwLexPage .nwPrefTrail:has(.nwSeg){width:100%;margin-left:0}.nwLexForm .nwFieldCtl{width:100%;margin-left:0}.nwLexForm .nwTextInput{width:100%}.nwLexForm .nwFieldCtl .nwTextInput{flex:1;min-width:0}.nwLexPage .nwPrefTrail:has(.nwSelWrap),.nwCreationPage .nwPrefTrail:has(.nwSelWrap){max-width:100%}.nwLexToolbar .nwTextInput{flex-basis:100%;width:100%}.nwLexToolbar .nwBtn{margin-left:auto}}
+
+/* ==== end v7-B ==== */
+/* ==== v7-C: baseline / reports / diagnose ==== */
+/* C: aligned tolerance fields and quiet report groups */
+.nwBasePick .nwBaseItemText{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
+.nwBaseTolRow{display:grid;grid-template-columns:minmax(160px,1fr) minmax(120px,160px) minmax(120px,160px);align-items:center;gap:16px;padding:16px}
+.nwBaseTolRow+.nwBaseTolRow{border-top:0.5px solid var(--dsw-alias-border-l2)}
+.nwBaseTolName{display:flex;align-items:center;gap:8px;font-size:14px;line-height:22px;font-weight:500;color:var(--dsw-alias-label-primary)}
+.nwBaseHelp{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;padding:0;border:0.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);background:transparent;color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px;cursor:help}
+.nwBaseTolField{display:flex;align-items:center;gap:8px;min-width:0}
+.nwBaseTolLabel{flex-shrink:0;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary)}
+.nwBaseTolControl{display:flex;align-items:center;gap:4px;min-width:0;flex:1}
+.nwBaseTolControl .nwTolInput{width:100%;min-width:0;max-width:88px;height:36px;padding:6px;font-size:13px;line-height:20px}
+.nwBaseTolUnit{font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}
+.nwBaseActions{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;margin:16px 0}
+.nwBaseRaw{color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px;overflow-wrap:anywhere}
+.nwReportsGroup+.nwReportsGroup{margin-top:12px}
+.nwReportsHead{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px;font-size:14px;line-height:22px;font-weight:600}
+.nwReportsFile{display:flex;align-items:center;justify-content:space-between;width:100%;gap:16px;padding:14px 16px;border:0;border-top:0.5px solid var(--dsw-alias-border-l2);background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:14px;line-height:22px;text-align:left;cursor:pointer}
+.nwReportsFile:hover{background:var(--dsw-alias-bg-layer-1)}
+.nwReportsLabel{min-width:0;overflow-wrap:anywhere}
+.nwReportsHash{margin-left:8px;color:var(--dsw-alias-label-tertiary);font-family:monospace;font-size:12px;line-height:18px}
+.nwReportsDate{flex-shrink:0;margin-left:auto;color:var(--dsw-alias-label-tertiary);font-size:12px;line-height:18px;text-align:right}
+.nwReportsBody,.nwDiagReport{margin:12px 0 0;padding:16px;max-height:440px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;user-select:text;font-family:monospace;font-size:12.5px;line-height:20px;border:0;border-radius:var(--dsw-radius-xl);background:var(--dsw-alias-bg-layer-2);box-shadow:var(--dsw-elevation-soft);color:var(--dsw-alias-label-primary)}
+.nwDiagHeading{padding:16px 16px 8px;font-size:14px;line-height:22px;font-weight:600;color:var(--dsw-alias-label-primary)}
+.nwDiagAttentionList{padding:0 16px 16px;display:flex;flex-direction:column;gap:12px}
+.nwDiagAttentionItem{min-width:0}
+.nwDiagAttentionItem .nwNote{margin:0;color:var(--dsw-alias-label-primary)}
+.nwDiagDetail{margin-top:6px;color:var(--dsw-alias-label-secondary);font-size:12.5px;line-height:20px;overflow-wrap:anywhere}
+@media(max-width:540px){.nwBaseTolRow{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px 16px}.nwBaseTolName{grid-column:1 / -1}.nwBaseTolControl .nwTolInput{max-width:none}.nwReportsFile{flex-wrap:wrap;gap:6px}.nwReportsLabel{flex-basis:100%}.nwReportsDate{font-size:12px;line-height:18px}}
+/* ==== end v7-C ==== */
