@@ -136,7 +136,7 @@ distribution 桶 = 1-10 / 11-24 / 25-40 / 41+</div>
       <p>短 / 中 / 长三档与 distribution 四桶在 10 与 24 处对齐，按 distribution 复算 ratio 必然一致。</p>
 
       <h3>5 · 情感词扫描</h3>
-      <p>三张表叠加使用：强情绪词 50 条（深层情感，进 clean）、弱情绪词 52 条（生理 / 爽感反应，只进 raw）、大连理工七类词表 27413 条（懒加载 gzip，兜底；只进 raw）。</p>
+      <p>三张表叠加使用：强情绪词 50 条（深层情感，进 clean）、弱情绪词 52 条（感官 / 爽感反应，只进 raw）、大连理工七类词表 27413 条（懒加载 gzip，兜底；只进 raw）。</p>
       <div class="formula">scanEmotionHits(text, table)：
   收集词表全部出现 → 按「词长降序 → 表内情绪序 → 表内词序 → 起点」排序
   → 逐项做区间消费，落在已消费区间内的短词不再命中
@@ -201,9 +201,9 @@ emotionComplexity：
   chapterDrift.swinging = entropies 的方差 &gt; 0.03
   chapterDrift.basis = 有 chapterTexts 时 "chapter"，单章分析回退段级 "paragraph"</div>
       <p><code>explicitImplicitCompare</code> 以显性效价均值 ±0.15 与隐性方向占比 0.6 判定「表里不一」，双向冲突（显正隐负、显负隐正）都会置位 <code>explicitImplicitConflict</code>。复合情感共现按段落内共现的情感类对统计，输出前 5 组并补中文标签（悲喜交加 / 又爱又恨 等）。</p>
-      <p><strong>v6.6.5：复杂度与置信度联动。</strong>此前 <code>emotionComplexity</code> 只看计数、<strong>与 <code>confidence</code> 完全脱钩</strong>：同一份返回体里一边是 <code>confidence: "low"</code> 与「检测到高密度 R18/生理描写…请勿采信」的 <code>caveat</code>，另一边<strong>照样</strong>给出 <code>complexity: { score: 0.6, level: "high" }</code>——下游只要读 <code>level</code> 就会得出「情感复杂度高」，而这个结论已被工具自己否定。现在 <code>emotionComplexity(perChapter, reliability)</code> 接收第二个可选参数 <code>reliability</code>（<code>{ polluted, pollutedBy, noData }</code>），由 <code>analyzeText</code> 在算完污染与零命中判定后传入（经 <code>emotionalQuantification</code> 的第 4 个参数透传）。判定不可采信有<strong>三条路径</strong>，都与「结论是否可采信」直接相关：</p>
+      <p><strong>v6.6.5：复杂度与置信度联动。</strong>此前 <code>emotionComplexity</code> 只看计数、<strong>与 <code>confidence</code> 完全脱钩</strong>：同一份返回体里一边是 <code>confidence: "low"</code> 与「检测到高密度成人向内容 / 感官描写…请勿采信」的 <code>caveat</code>，另一边<strong>照样</strong>给出 <code>complexity: { score: 0.6, level: "high" }</code>——下游只要读 <code>level</code> 就会得出「情感复杂度高」，而这个结论已被工具自己否定。现在 <code>emotionComplexity(perChapter, reliability)</code> 接收第二个可选参数 <code>reliability</code>（<code>{ polluted, pollutedBy, noData }</code>），由 <code>analyzeText</code> 在算完污染与零命中判定后传入（经 <code>emotionalQuantification</code> 的第 4 个参数透传）。判定不可采信有<strong>三条路径</strong>，都与「结论是否可采信」直接相关：</p>
       <ul>
-        <li><strong>污染</strong>：<code>polluted</code> 为真，即 R18/生理描写 ≥ <strong>1.5‰</strong>、或战斗/爽文 ≥ <strong>3‰</strong>、或恐怖/疯狂 ≥ <strong>3‰</strong>（阈值与 <code>EMOTION_POLLUTION</code> 词表都是既有实现，本版<strong>未改</strong>）。</li>
+        <li><strong>污染</strong>：<code>polluted</code> 为真，即成人向内容 / 感官描写 ≥ <strong>1.5‰</strong>、或战斗/爽文 ≥ <strong>3‰</strong>、或恐怖/疯狂 ≥ <strong>3‰</strong>（阈值与 <code>EMOTION_POLLUTION</code> 词表都是既有实现，本版<strong>未改</strong>）。</li>
         <li><strong>无数据</strong>：全文零情感词命中（<code>noData</code>，判据是 <strong>raw</strong> 计数为零）。</li>
         <li><strong>无 clean 数据</strong>：<code>stats.length === 0</code>——复杂度用的是 <strong>clean</strong> 计数，走到这个早退分支说明<strong>没有可用的 clean 计数</strong>。这一条覆盖了「raw 命中了弱词、clean 一个强词都没有」的情形（例如只有「微笑」「眼泪」「发抖」这类弱情绪词），note 会明写「未检出可用的情感计数（clean 计数为空）」。<strong>三条路径的 <code>score 0</code> 都表示「没测到」，不是「情感简单」。</strong></li>
       </ul>
@@ -243,7 +243,7 @@ reportFile = &lt;root&gt;/.novel-writer/analysis/&lt;book&gt;-&lt;cacheKey&gt;.j
         <li><strong>情感复杂度新增取值 <code>level: "unknown"</code>（v6.6.5）</strong>：它表示「本项不可采信」，不是第四档复杂度。按 <code>low / medium / high</code> 三值穷举的读取方需要补这个分支；跨版本比较时，旧版本的 <code>level</code> 不会出现该值，也不应把两者当作同一把尺子。</li>
         <li><strong>语义隐性情感受独立门控</strong>：仅当 <code>semanticImplicit</code>（含 <code>semanticEmbedding</code> 总开关）开启且本地引擎可用时才会补充 <code>emotion.quantification.semanticImplicit</code>。「用户明确关闭」与「引擎瞬时不可用」被区分对待——后者不会把缓存里已算好的 <code>semanticImplicit</code> 抹成空。单章分析时命中范围被约束在本章内，越界的旧缓存结果会被重算并写回。</li>
         <li><strong>情感字段可能被裁剪</strong>：<code>emotionCaveat</code> 关闭时 <code>emotion</code> 只保留 <code>dominant</code> / <code>scores</code> / <code>intensity</code> / <code>topWords</code> / <code>curve</code>；<code>emotionComplexity</code> 关闭时删除 <code>quantification</code>。两个开关各自独立生效，关闭其一不会连带剥掉另一个。</li>
-        <li><strong>R18 / 高生理描写文本，情感维度本就不适用（v6.6.5 明确写出）</strong>：本版做的是「<strong>别在不适用的语料上硬给一个高置信度的数字</strong>」，<strong>不是</strong>「让插件准确判断 R18 的情感」。这类文本请改用<strong>节奏 / 爽点 / 对话密度</strong>等维度——本页的 <code>lengths</code> / <code>style</code> / <code>paragraphs</code> 与 <code>density</code> 仍然可用，情感项读到 <code>level: "unknown"</code> 与 <code>reliable: false</code> 时<strong>不要拿 <code>score</code> 下结论</strong>。</li>
+        <li><strong>成人向内容 / 感官描写密集的文本，情感维度本就不适用（v6.6.5 明确写出）</strong>：本版做的是「<strong>别在不适用的语料上硬给一个高置信度的数字</strong>」，<strong>不是</strong>「让插件准确判断成人向内容的情感」。这类文本请改用<strong>节奏 / 爽点 / 对话密度</strong>等维度——本页的 <code>lengths</code> / <code>style</code> / <code>paragraphs</code> 与 <code>density</code> 仍然可用，情感项读到 <code>level: "unknown"</code> 与 <code>reliable: false</code> 时<strong>不要拿 <code>score</code> 下结论</strong>。</li>
         <li><strong>静默降级点</strong>：DUTIR 词表加载失败时跳过兜底（不影响主词表结果）；语义裁决与语义隐性情感失败不阻塞规则结果；缓存写盘失败不影响本次返回值；<code>cleanOutput</code> 统一消除 <code>-0</code>、把 <code>NaN</code> 归一为 <code>null</code>、剔除 <code>undefined</code> 键。</li>
         <li><strong>跨版本不可横比</strong>：v4.3.0 起，句末符口径统一（省略号单独成句）、密度分母统一为句子拼接样本、情感命中改为区间消费、Valence 的 <code>adjVariance</code> 与 <code>deltaRobust</code> 改口径、隐性情感三项比率共用三分分母。同一本书在旧版本下产生的报告数值不可与新版本直接比较。</li>
       </ul>
