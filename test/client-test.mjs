@@ -1019,10 +1019,16 @@ for (const text of ["测试书", "全书基线", "逐章指标", "全书分析",
 }
 if (!cReports.text.includes("测试书4") || cReports.text.includes("风格判断")) fail("报告必须跨目录合并为按书分组并显示报告数");
 const cOpenBtns = cReports.buttons.filter((b) => /nwReportsOpen/.test(b.props.className || ""));
-const cDelBtns = cReports.buttons.filter((b) => /nwRowAction/.test(b.props.className || ""));
+const cDelBtns = cReports.buttons.filter((b) => /nwBtnDangerText/.test(b.props.className || ""));
 if (cOpenBtns.length !== 6 || cOpenBtns[0].props.title !== "测试书__base-full.json") fail("报告行应保留原始文件身份");
 if (cDelBtns.length !== 6) fail("每份报告都应有一个「删除」动作，实际 " + cDelBtns.length);
-for (const b of cDelBtns) if (typeof b.props.onClick !== "function") fail("报告删除按钮缺少回调");
+for (const b of cDelBtns) {
+  if (typeof b.props.onClick !== "function") fail("报告删除按钮缺少回调");
+  // v6.8.0 回归：删除按钮必须是面板既有的小号按钮（带尺寸与不换行兜底），
+  // 曾用自造纯文字按钮 → 在宿主 button reset 下被压成一字一行、还把整行撑高
+  if (!/nwBtnSm/.test(b.props.className || "")) fail("报告删除按钮必须带 nwBtnSm（否则会被 flex 压成竖排）");
+  if (b.props.title === undefined || !String(b.props.title).includes(".json")) fail("删除按钮的 title 应带上文件名，避免删错相邻行");
+}
 const cSavedFetch = globalThis.fetch;
 const cReadPending = [];
 cViewController.set = (patch) => Object.assign(cViewSnapshot, patch);
