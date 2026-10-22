@@ -719,7 +719,8 @@ const delPlanFixture = {
   targets: [
     { key: "chapters", label: "章节正文", kind: "dir", path: "C:\\lib\\novels\\试书", rel: "novels/试书", exists: true, files: 3, bytes: 2048, sample: ["第01章.md"] },
     { key: "creation", label: "创作资料", kind: "dir", path: "C:\\lib\\novels\\创作资料\\试书", rel: "novels/创作资料/试书", exists: true, files: 6, bytes: 1024, sample: ["创作设定.md"] },
-    { key: "profile", label: "设定库条目（仅本书）", kind: "state", path: "C:\\state.json", rel: "_state.json", exists: true, files: 1, bytes: 0, sample: [] }
+    { key: "profile", label: "设定库条目（仅本书）", kind: "state", path: "C:\\state.json", rel: "_state.json", exists: true, files: 1, bytes: 0, sample: [] },
+    { key: "data:audits", label: "改稿/审计报告", kind: "files", path: "C:\\lib\\.novel-writer\\audits", rel: ".novel-writer/audits", exists: true, files: 2, bytes: 512, sample: ["fix-plan-试书-第01章.json"] }
   ],
   totals: { files: 10, bytes: 3072 },
   warnings: ["本书没有正文目录（novels/试书 不存在），只会清理关联资料"],
@@ -727,13 +728,17 @@ const delPlanFixture = {
   trash: [], trashId: "", trashDir: "", moved: 0, profileRemoved: false, profileRestored: false,
   restored: 0, conflicts: [], failed: [], remaining: { files: 0, bytes: 0 }, purged: false, message: "预览"
 };
-controller.set({ view: "main", rawModal: false, rawPromiseOpen: false, delOpen: true, delBook: "试书", delPlan: delPlanFixture, delLoading: false, delError: "", delAck: false, delResult: null }, { silent: true });
+controller.set({ view: "main", rawModal: false, rawPromiseOpen: false, delOpen: true, delBook: "试书", delPlan: delPlanFixture, delSel: { chapters: true, creation: true, profile: true, "data:audits": true }, delLoading: false, delError: "", delAck: false, delResult: null }, { silent: true });
 const delPreviewRender = renderLog[renderLog.length - 1];
 if (!delPreviewRender.stats.text.includes("删除整本书")) fail("删除弹窗标题缺失");
 if (!delPreviewRender.stats.text.includes("章节正文") || !delPreviewRender.stats.text.includes("创作资料")) fail("删除弹窗应列出待清理位置，实际：" + delPreviewRender.stats.text.slice(0, 200));
 if (!delPreviewRender.stats.text.includes("不会动")) fail("删除弹窗应写明不会动什么（notTouched）");
 if (!delPreviewRender.stats.text.includes("本书没有正文目录")) fail("删除弹窗应显示 warnings");
 if (!delPreviewRender.stats.classes.has("nwDelRow") || !delPreviewRender.stats.classes.has("nwDelAck")) fail("删除弹窗应使用 nwDelRow / nwDelAck");
+// v6.8.0：每处位置一个勾选行（可只清其中几处，例如只清报告/缓存）
+if (!delPreviewRender.stats.classes.has("nwDelRowPick")) fail("每处位置应有一个勾选行（nwDelRowPick）");
+if (!delPreviewRender.stats.text.includes("已选 4 处 / 共 4 处")) fail("应显示已选/总数，实际：" + delPreviewRender.stats.text.slice(0, 240));
+if (!delPreviewRender.stats.text.includes("全选") || !delPreviewRender.stats.text.includes("全不选")) fail("应有全选 / 全不选");
 const delDangerBtn = () => {
   const stats = renderLog[renderLog.length - 1].stats;
   return stats.buttons.find((b) => String(b.props.className || "").includes("nwBtnDanger"));
@@ -741,8 +746,18 @@ const delDangerBtn = () => {
 if (!delDangerBtn()) fail("删除弹窗必须有危险动作按钮（移入回收站）");
 if (!delDangerBtn().props.disabled) fail("未勾选确认时「移入回收站」必须禁用");
 
+// 全不选 → 什么都不选时不可执行（否则会拖一个空动作到宿主）
+controller.deleteSelectAll(false);
+if (!renderLog[renderLog.length - 1].stats.text.includes("已选 0 处")) fail("全不选后计数应归零");
+if (!delDangerBtn().props.disabled) fail("一处都没选时「移入回收站」必须禁用");
+// 只勾一处 + 确认 → 可执行（这就是"只删报告历史/缓存"的路径）
+controller.deleteToggleKey("data:audits", true);
+if (!renderLog[renderLog.length - 1].stats.text.includes("已选 1 处")) fail("勾选一处后计数应为 1");
+if (!delDangerBtn().props.disabled) fail("未确认时仍应禁用");
 controller.set({ delAck: true }, { silent: true });
 if (!delDangerBtn() || delDangerBtn().props.disabled) fail("勾选确认后「移入回收站」应可点");
+controller.deleteSelectAll(true);
+if (!renderLog[renderLog.length - 1].stats.text.includes("已选 4 处")) fail("全选应勾回全部位置");
 
 // 执行完成态：结果 + 失败项 + 回收站 id 都要显示
 controller.set({
@@ -770,14 +785,15 @@ if (typeof pickBtns[0].props.onClick !== "function") fail("书目行的删除按
 // 回收站小节与条目：没有 manifest 的那条必须禁用恢复
 if (!pickRender.stats.text.includes("回收站")) fail("删除页下方应有回收站小节");
 if (!pickRender.stats.text.includes("无清单")) fail("没有 manifest 的条目必须标注「无清单，不能一键恢复」");
-if (!pickRender.stats.classes.has("nwTrashRow")) fail("书目/回收站条目应使用 nwTrashRow");
+if (!pickRender.stats.classes.has("nwPref")) fail("书目/回收站条目应复用 .nwPref 行（与全站同一套行样式）");
+if (pickRender.stats.classes.has("nwTrashRow")) fail("不应再自造 .nwTrashRow 行样式（已与全站统一）");
 const restoreBtns = pickRender.stats.buttons.filter((b) => vnodeText(b).trim() === "恢复");
 if (restoreBtns.length !== 2) fail("每条回收站条目各有一个恢复按钮，实际 " + restoreBtns.length);
 if (restoreBtns[0].props.disabled) fail("可恢复条目的恢复按钮不该禁用");
 if (!restoreBtns[1].props.disabled) fail("无清单条目的恢复按钮必须禁用");
 
 // 选中一本书 → 页面内联预览（不是弹窗），并给出「返回书目」
-controller.set({ delBook: "试书", delPlan: delPlanFixture, delLoading: false, delError: "", delAck: false, delResult: null }, { silent: true });
+controller.set({ delBook: "试书", delPlan: delPlanFixture, delSel: { chapters: true, creation: true, profile: true, "data:audits": true }, delLoading: false, delError: "", delAck: false, delResult: null }, { silent: true });
 const pagePreview = renderLog[renderLog.length - 1];
 if (!pagePreview.stats.text.includes("确认清理范围")) fail("选中书后删除页应切到「确认清理范围」");
 if (!pagePreview.stats.text.includes("返回书目")) fail("预览态应提供「返回书目」");

@@ -335,6 +335,50 @@ test("⑦ 彻底删除：回收站条目消失且不可恢复", async () => {
 });
 
 // ===========================================================================
+// ⑦-b 选择性清理（只删某几类数据）—— "只清报告历史/缓存，正文留着"
+// ===========================================================================
+
+test("⑦-b 选择性清理：只清报告与缓存，正文/创作资料/设定条目原样保留", async () => {
+  const root = freshLib("partial");
+  seedBook(root, "分书");
+  seedState({ 分书: { genre: "悬疑" } });
+  const result = await bd.applyBookDelete({ root, book: "分书", keys: ["data:analysis", "data:audits", "data:style-reports"] });
+  assert.equal(result.partial, true, "只清一部分时 partial 必须为 true");
+  assert.deepEqual([...result.keys].sort(), ["data:analysis", "data:audits", "data:style-reports"]);
+  assert.ok(result.skipped.includes("chapters"), "正文应被列为保留：" + JSON.stringify(result.skipped));
+  assert.ok(result.skipped.includes("creation"));
+  assert.ok(result.skipped.includes("profile"));
+  assert.ok(result.moved >= 3, "moved=" + result.moved);
+  // 保留侧：正文 / 创作资料 / 设定库条目 / 其他类别都还在
+  assert.equal(existsSync(join(root, "novels", "分书", "第01章.md")), true);
+  assert.equal(existsSync(join(root, "novels", "创作资料", "分书", "创作设定.md")), true);
+  assert.equal((await readState()).creationProfiles.分书.genre, "悬疑");
+  assert.equal(existsSync(join(root, ".novel-writer", "summaries", "分书.json")), true);
+  assert.equal(existsSync(join(root, ".novel-writer", "plots", "分书.json")), true);
+  // 清理侧：报告与缓存没了
+  assert.equal(existsSync(join(root, ".novel-writer", "analysis", "分书-chapters-metrics.json")), false);
+  assert.equal(existsSync(join(root, ".novel-writer", "audits", "fix-plan-分书-第01章.json")), false);
+  assert.equal(existsSync(join(root, ".novel-writer", "style-reports", "分书.json")), false);
+  // 提示必须说清"是有意保留"，而不是"还有残留"
+  assert.ok(result.warnings.some((w) => w.includes("按选择保留")), JSON.stringify(result.warnings));
+
+  // 清单只记录实际搬走的项，恢复只把那些移回
+  const manifest = JSON.parse(readFileSync(join(result.trashDir, "manifest.json"), "utf8"));
+  assert.equal(manifest.items.length, result.moved);
+  const back = await bd.restoreTrash({ root, trashId: result.trashId });
+  assert.equal(back.restored, result.moved);
+  assert.equal(existsSync(join(root, ".novel-writer", "analysis", "分书-chapters-metrics.json")), true);
+
+  // 三种非法 keys 都要报错（未知位置 / 空选择 / 不是数组）
+  await assert.rejects(() => bd.applyBookDelete({ root, book: "分书", keys: ["data:nope"] }), /未知位置/);
+  await assert.rejects(() => bd.applyBookDelete({ root, book: "分书", keys: [] }), /至少要选中/);
+  await assert.rejects(() => bd.applyBookDelete({ root, book: "分书", keys: "chapters" }), /必须是数组/);
+  // 全选 == 不传 keys（回放既有语义）
+  const all = bd.selectTargets(await bd.planBookDelete({ root, book: "分书" }), undefined);
+  assert.ok(all.has("chapters") && all.has("data:summaries") && all.has("profile"), JSON.stringify([...all]));
+});
+
+// ===========================================================================
 // ⑧ 拒绝：保留名 / 路径穿越 / 不存在的书
 // ===========================================================================
 

@@ -50,12 +50,13 @@
           <tr><th><code>action</code></th><td>string</td><td>否</td><td><code>preview</code>（默认，只算不写盘）/ <code>apply</code>（执行删除，移入回收站）/ <code>list</code>（列出回收站条目）/ <code>restore</code>（从回收站恢复，需 <code>trashId</code>）/ <code>purge</code>（彻底删除某个回收站条目，需 <code>trashId</code>，不可恢复）。五个合法取值由参数 schema 的 <code>enum</code> 约束；执行链路对枚举外的值一律按 <code>preview</code> 处理。</td></tr>
           <tr><th><code>trashId</code></th><td>string</td><td><code>restore</code> / <code>purge</code> 必填</td><td>回收站条目 id，取自 <code>apply</code> 返回的 <code>trashId</code> 或 <code>action: "list"</code> 的条目 <code>id</code>。<strong>只接受单段名</strong>：首尾空格会先被去掉（<code>requiredString</code> 的常规 trim），随后含路径分隔符（<code>/</code>、<code>\</code>）、含 <code>..</code>、以点号开头、或为空则报错；校验通过后还会确认解析结果确实落在回收站目录内。</td></tr>
           <tr><th><code>root</code></th><td>string</td><td>否</td><td>章节库根目录（含 <code>novels</code> 子目录）。省略时按插件既有的根解析顺序回退（面板路由走 <code>config.root</code> → <code>lastRoot</code> 同一套口径，不另起一套）。</td></tr>
+          <tr><th><code>keys</code></th><td>array&lt;string&gt;</td><td>否</td><td><strong>只清理这些位置</strong>，元素取自 <code>preview</code> 返回的 <code>targets[].key</code>（如 <code>["data:audits","data:style-reports","data:analysis"]</code> 就是「只删报告历史与缓存，正文留着」）。省略 = 全选 = 删整本书（既有行为）。只在 <code>apply</code> 时生效；含未知 key、空数组、非数组都会报错</td></tr>
         </tbody>
       </table>
-      <p>参数 schema 声明 <code>additionalProperties: false</code>，只接受以上四项。工具与面板路由共用<strong>同一条执行链路</strong>（<code>deleteBookDispatch</code>），因此面板上看到的清单与 AI 调工具得到的清单必然同源。与 <a href="novel-diagnose.html">novel_diagnose</a> 不同，本工具<strong>会</strong>调用 <code>assertToolEnabled</code>：被关掉时按普通工具处理（抛错并提示去 UI 开启）。</p>
+      <p>参数 schema 声明 <code>additionalProperties: false</code>，只接受以上五项。工具与面板路由共用<strong>同一条执行链路</strong>（<code>deleteBookDispatch</code>），因此面板上看到的清单与 AI 调工具得到的清单必然同源。与 <a href="novel-diagnose.html">novel_diagnose</a> 不同，本工具<strong>会</strong>调用 <code>assertToolEnabled</code>：被关掉时按普通工具处理（抛错并提示去 UI 开启）。</p>
 
       <h2>输出结构</h2>
-      <p>输出 schema 为 <code>additionalProperties: false</code>，下列字段<strong>每个 action 都常驻</strong>（无内容的字段给空数组 / 零值 / 空串），避免调用方按 action 拿不到键：<code>action</code>、<code>book</code>、<code>safeBook</code>、<code>found</code>、<code>blocked</code>、<code>blockedReason</code>、<code>targets</code>、<code>totals</code>、<code>warnings</code>、<code>notTouched</code>、<code>trash</code>、<code>trashId</code>、<code>trashDir</code>、<code>moved</code>、<code>profileRemoved</code>、<code>profileRestored</code>、<code>restored</code>、<code>conflicts</code>、<code>failed</code>、<code>remaining</code>、<code>purged</code>、<code>message</code>。</p>
+      <p>输出 schema 为 <code>additionalProperties: false</code>，下列字段<strong>每个 action 都常驻</strong>（无内容的字段给空数组 / 零值 / 空串），避免调用方按 action 拿不到键：<code>action</code>、<code>book</code>、<code>safeBook</code>、<code>found</code>、<code>blocked</code>、<code>blockedReason</code>、<code>targets</code>、<code>totals</code>、<code>warnings</code>、<code>notTouched</code>、<code>trash</code>、<code>trashId</code>、<code>trashDir</code>、<code>moved</code>、<code>keys</code>、<code>skipped</code>、<code>partial</code>、<code>profileRemoved</code>、<code>profileRestored</code>、<code>restored</code>、<code>conflicts</code>、<code>failed</code>、<code>remaining</code>、<code>purged</code>、<code>message</code>。</p>
       <table>
         <thead><tr><th>字段</th><th>类型</th><th>内容</th></tr></thead>
         <tbody>
@@ -90,7 +91,7 @@
         <thead><tr><th>action</th><th>必填</th><th>行为</th><th>写盘</th></tr></thead>
         <tbody>
           <tr><th><code>preview</code></th><td><code>book</code></td><td>计算清单：13 类目标（12 个位置 + 旧位置）逐个判断存在性、文件数、体积与样例，并根据书名产出 <code>blocked</code> / <code>warnings</code> / <code>notTouched</code></td><td><strong>否</strong></td></tr>
-          <tr><th><code>apply</code></th><td><code>book</code></td><td>先算一遍清单（与预览同一套 <code>planBookDelete</code>），再逐项移入回收站、摘掉设定库条目、写 <code>manifest.json</code>，最后再算一遍残留</td><td>是</td></tr>
+          <tr><th><code>apply</code></th><td><code>book</code></td><td>先算一遍清单（与预览同一套 <code>planBookDelete</code>），按 <code>keys</code>（省略＝全选）决定处理哪些位置，再逐项移入回收站、摘掉设定库条目、写 <code>manifest.json</code>，最后再算一遍残留</td><td>是</td></tr>
           <tr><th><code>list</code></th><td>—</td><td>读取 <code>trash/</code>，按清单或目录时间倒序列出条目；无清单的条目标 <code>restorable:false</code></td><td>否</td></tr>
           <tr><th><code>restore</code></th><td><code>trashId</code></td><td>按清单把内容移回原路径；目标已存在则<strong>逐文件跳过</strong>并记入 <code>conflicts</code>；全部恢复完才删除回收站条目</td><td>是</td></tr>
           <tr><th><code>purge</code></th><td><code>trashId</code></td><td>彻底删除一个回收站条目（<code>rm -rf</code>），删后仍存在则报错（多半被占用）</td><td>是，<strong>不可恢复</strong></td></tr>
@@ -119,6 +120,7 @@
         </tbody>
       </table>
       <p><code>targets[].key</code> 的取值就是上表的 <code>key</code> 列（数据目录 9 项为 <code>data:&lt;子目录&gt;</code>），<code>label</code> 为中文位置名（如「分析缓存」「旧位置伏笔表」「设定库条目（仅本书）」），<code>rel</code> 为相对书库根的路径，便于面板与 AI 直接引用。9 个子目录走<strong>白名单</strong>（<code>DELETE_DATA_SUBDIRS</code>）而不是遍历数据目录：<code>trash/</code> 与将来新增的目录不该被当成「书的资料」，漏登记会由测试盯住。</p>
+      <p><strong>只清其中几类（选择性清理）</strong>：<code>apply</code> 传 <code>keys</code> 就只处理这几处，其余原样保留。最常见的用法是<strong>只清报告与缓存</strong>——<code>keys: ["data:analysis","data:audits","data:style-reports"]</code>（分析缓存 / 改稿与审计报告 / 风格画像，也就是面板「报告历史」里的那些文件），正文、创作资料、伏笔、设定、摘要、词表全部留着。返回体的 <code>keys</code> 是本次实际处理的位置、<code>skipped</code> 是被保留的位置、<code>partial:true</code> 表示这是部分清理；此时 <code>warnings</code> 写的是「按选择保留」而不是「还有残留」——两者语义完全不同，别混读。面板里就是逐个勾选框 + 「全选 / 全不选」，默认全选（＝删整本书）。</p>
 
       <h3>3 · 为什么需要边界匹配：不能只删 <code>&lt;书&gt;.json</code></h3>
       <p>按书命名的文件<strong>不止一种写法</strong>。真实盘面上出现过：<code>&lt;书&gt;-chapters-metrics.json</code>、<code>&lt;书&gt;-&lt;hash16&gt;.json</code>、<code>&lt;书&gt;-keywords-&lt;hash12&gt;.json</code>、<code>&lt;书&gt;__base-full.json</code>、<code>&lt;书&gt;__styleproto.json</code>、<code>&lt;书&gt;__style_2.json</code>、<code>&lt;书&gt;__style_第02章.md.json</code>、audits 下的 <code>&lt;书&gt;-&lt;hash16&gt;.json</code>、改稿台的 <code>fix-plan-&lt;书&gt;-第01章.json</code>，以及旧位置的 <code>&lt;书&gt;.json</code>。所以「删掉 <code>&lt;书&gt;.json</code>」必然漏。</p>
@@ -202,7 +204,7 @@ keys = 去重后的 [原始书名, novels/ 下真实目录名, sanitizeSegment �
       <p><code>notTouched</code> 会把上述内容逐条写进返回体，预览时就能看到「删除不会影响什么」——这不是装饰：删书是破坏性操作，用户最需要确认的恰是「别的书没事」。</p>
 
       <h3>7 · 面板入口（与工具同一实现）</h3>
-      <p><strong>首页第一个分区（写作资料）里的一行「删除整本书」</strong>是主入口，点进去是<strong>独立页面</strong>，顺序就是操作顺序：① 列出书库里的书（书名 / 章数 / 字数），每本右侧「删除整本书…」；② 选中后在同一页显示预览清单（位置 / 文件数 / 体积 / 样例文件名）与「不会动」说明，<strong>勾选确认</strong>后才可点「移入回收站」；③ 执行后在同一页显示结果、失败项与回收站条目。<strong>页面下方常驻「回收站」小节</strong>：条目可<strong>恢复</strong>或<strong>彻底删除</strong>（后者需二次确认），不用再记「回收站在哪个分区里」。<br>「书库概况」折叠区里每本书旁也保留了一个「删除整本书…」<strong>快捷按钮</strong>（直接弹出同一份预览），但它是补充入口，不是唯一入口。</p>
+      <p><strong>首页第一个分区（写作资料）里的一行「删除整本书」</strong>是主入口，点进去是<strong>独立页面</strong>，顺序就是操作顺序：① 列出书库里的书（书名 / 章数 / 字数），每本右侧「删除整本书…」；② 选中后在同一页显示预览清单（位置 / 文件数 / 体积 / 样例文件名）与「不会动」说明，<strong>每处位置一个勾选框</strong>（默认全选，另有「全选 / 全不选」——取消正文与创作资料、只留报告类，就是面板上的「只清这一类」），勾选确认后才可点「移入回收站」；③ 执行后在同一页显示结果、失败项与回收站条目。<strong>页面下方常驻「回收站」小节</strong>：条目可<strong>恢复</strong>或<strong>彻底删除</strong>（后者需二次确认），不用再记「回收站在哪个分区里」。<br>「书库概况」折叠区里每本书旁也保留了一个「删除整本书…」<strong>快捷按钮</strong>（直接弹出同一份预览），但它是补充入口，不是唯一入口。列表外观与全站一致：复用同一个 <code>PreferenceRow</code>（图标 + 标题 + 副标题 + 行尾文字动作），行尾动作用 <code>.nwRowAction</code> 文字链而不是带边框的按钮。</p>
       <p>面板按钮与 AI 调工具走<strong>同一条函数链路</strong>（<code>deleteBookDispatch</code>）与同一份根解析口径，不是面板另写一套预览逻辑——否则两边对「什么算这本书的文件」迟早会分叉。面板侧的入口与动作：页面 <code>deletePick</code> 选书、弹窗 <code>deleteOpen</code> 快捷入口，两者共用 <code>loadDeletePlan</code>（含陈旧响应守卫）；执行 <code>deleteApply</code>，回收站 <code>trashLoad</code> / <code>trashRestore</code> / <code>trashPurge</code>；都经 <code>deleteBookRoute</code> 打到宿主路由。</p>
 
       <h3>8 · 宿主路由与错误码</h3>
@@ -231,6 +233,7 @@ GET  /api/dsh-novel-writer/delete-book?action=&amp;book=&amp;trashId=
         <li><strong>恢复是文件粒度的「移回」，不是版本合并</strong>：目标已存在就跳过并记入 <code>conflicts</code>，<strong>绝不覆盖</strong>；目录已被重建时逐文件合并恢复，同名文件一律跳过。恢复不会做任何内容合并或改写。</li>
         <li><strong>没有清单就不能一键恢复</strong>：若 <code>manifest.json</code> 写入失败（或目录是手动放进回收站的），文件确实在回收站里，但 <code>restore</code> 会报错并给出目录路径，只能手动移回。</li>
         <li><strong>逐项失败不中断</strong>：某一项被占用 / 无权限时，其余项照常搬走，失败项进 <code>failed</code>，并用 <code>remaining</code> 报告清理后残留——也就是<strong>可能出现「删了一部分」</strong>。预览清单与执行后的残留要一起看。</li>
+        <li><strong>选择性清理后 <code>remaining</code> 不再是「残留」</strong>：传了 <code>keys</code> 时，没选中的位置本来就该留着，所以 <code>remaining.files &gt; 0</code> 属正常——判断"是不是出了意外"要看 <code>partial</code> 与 <code>skipped</code>，不要看到 <code>remaining</code> 非零就以为失败。</li>
         <li><strong>同名清洗冲突会牵连另一本书</strong>：两本书名清洗后相同（例如只差非法字符）时，插件按清洗后的名字落盘，两者的数据文件本来就共用；删除一本会一并清掉，<code>warnings</code> 会点名另一本书。这是命名层面的既有约束，不是本工具新增的行为。</li>
         <li><strong>跨卷时会更慢，且期间占双份空间</strong>：同卷 <code>rename</code> 是瞬时的；回收站与书库不在同一卷时退化为「复制 + 删除」（<code>EXDEV</code>），复制期间源与目标同时存在。</li>
         <li><strong>书名会被 <code>trim</code> 与清洗</strong>：前后空格会被去掉，非法字符会被 <code>sanitizeSegment</code> 处理；参数书名与盘上目录名不一致时，以解析出的真实目录名为准，并在 <code>warnings</code> 里说明。</li>

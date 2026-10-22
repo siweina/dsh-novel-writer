@@ -189,19 +189,30 @@ details[open]>.nwDisclosureTitle .nwDisclosureArrow{transform:rotate(90deg)}
 @media(max-width:540px){.nwBaseTolRow{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px 16px}.nwBaseTolName{grid-column:1 / -1}.nwBaseTolControl .nwTolInput{max-width:none}.nwReportsFile{flex-wrap:wrap;gap:6px}.nwReportsLabel{flex-basis:100%}.nwReportsDate{font-size:12px;line-height:18px}}
 /* ==== end v7-C ==== */
 /* ==== v7-D: 按书删除 / 回收站（issue #2） ====
-   三个新积木：书库行上的删除入口、弹窗内的位置清单、回收站条目行。
+   列表本身复用 .nwPref（图标+标题+副标题+右侧动作），这里只补三样小件：
+   ① 行尾的"文字动作"（恢复 / 彻底删除 / 删除整本书…）——不用带边框的按钮，
+      否则一行里最扎眼的是那个红框，与全站的"安静默认态"不一致；
+   ② 卡片内的文字块（提示 / 空态）需要 16px 内边距，否则文字顶到卡片边缘；
+   ③ 位置清单的勾选行与"全选/全不选"。
    颜色只用语义 token；边框一律 0.5px；有阴影就不加边框（R05）。 */
 .nwLibraryDel{flex:none;margin-left:auto;white-space:nowrap}
+.nwRowAction{border:0;background:none;box-shadow:none;padding:4px 0;margin:0;font:inherit;font-size:12.5px;line-height:18px;color:var(--dsw-alias-label-secondary);white-space:nowrap;cursor:pointer;transform:none}
+.nwRowAction:hover{color:var(--dsw-alias-label-primary)}
+.nwRowAction:disabled{color:var(--dsw-alias-label-dimmed);cursor:not-allowed}
+.nwRowAction.nwRowActionDanger{color:var(--dsw-alias-state-error-primary)}
+.nwRowAction.nwRowActionDanger:disabled{color:var(--dsw-alias-label-dimmed)}
+.nwPageBlock{padding:0 16px 4px}
+.nwCardHint{padding:14px 16px;font-size:12.5px;line-height:18px;color:var(--dsw-alias-label-tertiary)}
+.nwCardHint:first-child{padding-top:12px}
+.nwWarnText{color:var(--dsw-alias-state-error-primary)}
 .nwDelList{display:flex;flex-direction:column;gap:2px;margin:12px 0 0}
 .nwDelRow{display:flex;align-items:baseline;justify-content:space-between;gap:12px;font-size:12.5px;line-height:18px}
 .nwDelRowLabel{flex:1;min-width:0;overflow-wrap:anywhere;color:var(--dsw-alias-label-secondary)}
 .nwDelRowMeta{flex:none;white-space:nowrap;color:var(--dsw-alias-label-tertiary)}
+.nwDelRowPick{align-items:center;gap:8px;cursor:pointer}
+.nwDelRowPick input{flex:none;margin:0}
+.nwDelSelActions{display:flex;align-items:center;gap:16px;margin-top:10px}
 .nwDelPath{margin-top:10px;font-family:monospace;font-size:11.5px;line-height:17px;overflow-wrap:anywhere;color:var(--dsw-alias-label-tertiary)}
 .nwDelAck{display:flex;align-items:flex-start;gap:8px;margin-top:14px;font-size:12.5px;line-height:18px;color:var(--dsw-alias-label-secondary)}
 .nwDelAck input{margin:2px 0 0;flex:none}
-.nwTrashRow{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 0;border-top:0.5px solid var(--dsw-alias-border-l2)}
-.nwTrashRow:first-of-type{border-top:0}
-.nwTrashText{flex:1;min-width:120px}
-.nwTrashName{font-size:13px;line-height:20px;overflow-wrap:anywhere;color:var(--dsw-alias-label-primary)}
-.nwTrashMeta{font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary)}
 
