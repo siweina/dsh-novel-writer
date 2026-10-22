@@ -438,7 +438,7 @@ const panelProps = panelRender.element.props;
 const controller = panelProps.controller;
 if (controller.getSnapshot().lexiconFormOpen !== false) fail("词表表单展开状态必须初始化为 false");
 if (!controller || typeof controller.getSnapshot !== "function") fail("PanelView 未拿到可用的 controller");
-for (const view of ["features", "tools", "baseline", "creation", "reports", "model", "lexicon", "diagnose"]) {
+for (const view of ["features", "tools", "baseline", "creation", "reports", "model", "lexicon", "diagnose", "trash"]) {
   controller.set({ view }, { silent: true });
   if (controller.getSnapshot().view !== view) fail("controller.set 未生效：view=" + view);
 }
@@ -755,25 +755,46 @@ if (!delDoneRender.stats.text.includes("试书-20261022-163631")) fail("结果�
 if (!delDoneRender.stats.text.includes("没搬动")) fail("结果态应显示失败项提示");
 if (delDangerBtn()) fail("结果态不应再有「移入回收站」按钮");
 
-// 回收站弹窗
-controller.set({ delOpen: false, delPlan: null, delResult: null, delBook: "", trashOpen: true, trashLoading: false, trashError: "", trashNote: "", trashBusyId: "", trashList: [
+// v6.8.1：删除入口改成**独立页面**（v6.8.0 藏在书库折叠区里，用户实测找不到按钮）。
+// 页面顺序 = 操作顺序：选书 → 看清清单 → 勾选执行；下方常驻回收站。
+controller.set({ view: "trash", delOpen: false, delBook: "", delPlan: null, delResult: null, delAck: false, delLoading: false, delError: "", trashLoading: false, trashError: "", trashNote: "", trashBusyId: "", trashList: [
   { id: "试书-20261022-163631", book: "试书", createdAt: "2026-10-22T08:00:00.000Z", files: 12, bytes: 2048, items: 12, restorable: true, path: "C:\\lib\\.novel-writer\\trash\\试书-20261022-163631" },
   { id: "旧条目-20260101", book: "", createdAt: "2026-01-01T08:00:00.000Z", files: 3, bytes: 100, items: 0, restorable: false, path: "C:\\lib\\.novel-writer\\trash\\旧条目-20260101" }
-] }, { silent: true });
-const trashRender = renderLog[renderLog.length - 1];
-if (!trashRender.stats.text.includes("回收站")) fail("回收站弹窗标题缺失");
-if (!trashRender.stats.text.includes("恢复")) fail("回收站应提供「恢复」");
-if (!trashRender.stats.text.includes("彻底删除")) fail("回收站应提供「彻底删除」");
-if (!trashRender.stats.text.includes("无清单")) fail("没有 manifest 的条目必须标注「无清单，不能一键恢复」");
-if (!trashRender.stats.classes.has("nwTrashRow")) fail("回收站条目应使用 nwTrashRow");
-// 没有 manifest 的那条：恢复按钮必须禁用（清单都没有，恢复不了）
-const restoreBtns = trashRender.stats.buttons.filter((b) => vnodeText(b).trim() === "恢复");
+], booksStats: [{ name: "试书", chapters: 3, chars: 4096, recent7Chars: 100 }, { name: "另一本", chapters: 2, chars: 2048, recent7Chars: 0 }] }, { silent: true });
+const pickRender = renderLog[renderLog.length - 1];
+if (!pickRender.stats.text.includes("选择要删除的书")) fail("删除页应显示「选择要删除的书」分区");
+if (!pickRender.stats.text.includes("试书") || !pickRender.stats.text.includes("另一本")) fail("删除页应列出书库里的书");
+const pickBtns = pickRender.stats.buttons.filter((b) => vnodeText(b).trim() === "删除整本书…");
+if (pickBtns.length !== 2) fail("每本书一行「删除整本书…」，实际 " + pickBtns.length);
+if (typeof pickBtns[0].props.onClick !== "function") fail("书目行的删除按钮缺少回调");
+// 回收站小节与条目：没有 manifest 的那条必须禁用恢复
+if (!pickRender.stats.text.includes("回收站")) fail("删除页下方应有回收站小节");
+if (!pickRender.stats.text.includes("无清单")) fail("没有 manifest 的条目必须标注「无清单，不能一键恢复」");
+if (!pickRender.stats.classes.has("nwTrashRow")) fail("书目/回收站条目应使用 nwTrashRow");
+const restoreBtns = pickRender.stats.buttons.filter((b) => vnodeText(b).trim() === "恢复");
 if (restoreBtns.length !== 2) fail("每条回收站条目各有一个恢复按钮，实际 " + restoreBtns.length);
 if (restoreBtns[0].props.disabled) fail("可恢复条目的恢复按钮不该禁用");
 if (!restoreBtns[1].props.disabled) fail("无清单条目的恢复按钮必须禁用");
-controller.set({ trashOpen: false, trashList: null, trashNote: "" }, { silent: true });
 
-console.log("视图/弹窗分支渲染: 共 " + renderLog.length + " 次渲染（main/features/tools/baseline/creation/reports/model/rawModal/rawPromiseOpen/delOpen/delResult/trashOpen）✓");
+// 选中一本书 → 页面内联预览（不是弹窗），并给出「返回书目」
+controller.set({ delBook: "试书", delPlan: delPlanFixture, delLoading: false, delError: "", delAck: false, delResult: null }, { silent: true });
+const pagePreview = renderLog[renderLog.length - 1];
+if (!pagePreview.stats.text.includes("确认清理范围")) fail("选中书后删除页应切到「确认清理范围」");
+if (!pagePreview.stats.text.includes("返回书目")) fail("预览态应提供「返回书目」");
+if (!pagePreview.stats.text.includes("章节正文") || !pagePreview.stats.text.includes("不会动")) fail("页面预览应列出位置与「不会动」");
+if (!pagePreview.stats.classes.has("nwDelAck")) fail("页面预览应有确认勾选框");
+const pageDangerBtn = () => renderLog[renderLog.length - 1].stats.buttons.find((b) => String(b.props.className || "").includes("nwBtnDanger"));
+if (!pageDangerBtn()) fail("页面预览缺少「移入回收站」危险按钮");
+if (!pageDangerBtn().props.disabled) fail("未勾选确认时页面里的「移入回收站」必须禁用");
+controller.set({ delAck: true }, { silent: true });
+if (!pageDangerBtn() || pageDangerBtn().props.disabled) fail("勾选后页面里的「移入回收站」应可点");
+controller.set({ delAck: false, delResult: { action: "apply", book: "试书", moved: 12, totals: { files: 20, bytes: 4096 }, failed: [], remaining: { files: 0, bytes: 0 }, trashDir: "C:\\lib\\.novel-writer\\trash\\试书-20261022-163631", trashId: "试书-20261022-163631" } }, { silent: true });
+const pageDone = renderLog[renderLog.length - 1];
+if (!pageDone.stats.text.includes("已移入回收站")) fail("页面结果态应显示「已移入回收站」");
+if (!pageDone.stats.text.includes("试书-20261022-163631")) fail("页面结果态应给出回收站条目");
+controller.set({ view: "main", delBook: "", delPlan: null, delResult: null, trashList: null, trashNote: "" }, { silent: true });
+
+console.log("视图/弹窗分支渲染: 共 " + renderLog.length + " 次渲染（main/features/tools/baseline/creation/reports/model/trash/rawModal/rawPromiseOpen/delOpen/delResult）✓");
 
 // 设置页卡片组件体同样必须可执行（槽位注册的 component）
 const cardRender = runRender(reactStub.createElement(slotRegistered.component, { controller, toggle: () => {}, onOpenPanel: () => {} }));
@@ -833,15 +854,30 @@ console.log("v7 提示词场景：off/brief 隐藏 | full 8 个可用按钮 | �
 // 主页 IA 与共享外壳：真实入口保留，纯 UI 折叠不增加 controller 状态/hook。
 const homeStats = renderLog[renderLog.length - 1].stats;
 const navButtons = homeStats.buttons.filter((b) => String(b.props.className || "").split(/\s+/).includes("nwNavEntry"));
-const expectedNav = ["原创设定", "必用词表", "风格基线", "功能开关", "工具开关", "语义模型", "报告历史", "诊断报告", "回收站", "体验演示"];
-if (navButtons.length !== expectedNav.length) fail("主页应有 " + expectedNav.length + " 个导航/操作行（v6.8.0 起新增「回收站」）");
+/** 子页标题栏的「‹ 写作助手」返回：主页入口断言之间需要先回主页 */
+const headerBackToMain = () => {
+  const stats = renderLog[renderLog.length - 1].stats;
+  const back = stats.buttons.find((b) => String(b.props.className || "").includes("nwBackBtn"));
+  if (!back) fail("子页缺少标题栏返回入口");
+  back.props.onClick();
+  if (controller.getSnapshot().view !== "main") fail("标题栏返回应回到主页");
+};
+const expectedNav = ["原创设定", "必用词表", "风格基线", "删除整本书", "功能开关", "工具开关", "语义模型", "报告历史", "诊断报告", "体验演示"];
+if (navButtons.length !== expectedNav.length) fail("主页应有 " + expectedNav.length + " 个导航/操作行（v6.8.1 起删书入口提到第一分区「删除整本书」）");
 for (let i = 0; i < expectedNav.length; i++) {
   if (!vnodeText(navButtons[i]).startsWith(expectedNav[i])) fail("主页入口顺序错误：" + i + " / " + vnodeText(navButtons[i]));
 }
 if (homeStats.classes.has("nwHero") || homeStats.classes.has("nwSwitchWrap")) fail("主页仍有 Hero 或开关状态徽章容器");
 if (!homeStats.classes.has("nwStorage") || !homeStats.classes.has("nwLibrary")) fail("主页缺少存储位置/书库折叠区");
 if (!homeStats.text.includes("18+")) fail("危险行必须有文字 18+ 标签");
-navButtons[5].props.onClick();
+// v6.8.1：删书入口必须在**第一分区**（用户实测原来藏在书库折叠区里找不到）
+const trashNav = navButtons.find((b) => vnodeText(b).startsWith("删除整本书"));
+if (!trashNav) fail("主页第一分区缺少「删除整本书」入口");
+trashNav.props.onClick();
+if (controller.getSnapshot().view !== "trash") fail("「删除整本书」入口未打开 trash 视图");
+headerBackToMain();  // 回到主页再做下面的入口断言
+const navModel = navButtons.find((b) => vnodeText(b).startsWith("语义模型"));
+navModel.props.onClick();
 if (controller.getSnapshot().view !== "model") fail("主页语义模型入口未打开 model");
 const modelRender = renderLog[renderLog.length - 1].stats;
 if (modelRender.classes.has("nwHero") || modelRender.classes.has("nwSectionTitle")) fail("子页仍有 Hero/重复胶囊标题");
