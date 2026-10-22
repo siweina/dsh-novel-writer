@@ -60,7 +60,7 @@ for (const name of ['package.json', 'server.json', 'package-lock.json']) {
 // 于是 ALL_TOOLS 已是 20、文案却长期停在 18。这里以 lib/core.js 的 ALL_TOOLS 为单一事实源
 // 做一致性校验，新增工具时改一处即可，文案漂移会被挡在这里。
 const { ALL_TOOLS } = await import(new URL('../lib/core.js', import.meta.url).href);
-assert.equal(ALL_TOOLS.length, 20, `ALL_TOOLS 数量（lib/core.js 声明 ${ALL_TOOLS.length} 个；用户可见文案写的是 20 个）`);
+assert.equal(ALL_TOOLS.length, 21, `ALL_TOOLS 数量（lib/core.js 声明 ${ALL_TOOLS.length} 个；用户可见文案写的是 21 个）`);
 
 const pkg = JSON.parse(read('package.json'));
 const lock = JSON.parse(read('package-lock.json'));

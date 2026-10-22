@@ -1,4 +1,4 @@
-# dsh-novel-writer bundle patch: 20 tools (incl. novel_semantic_search, novel_lexicon, novel_diagnose) + local embedding engine.
+# dsh-novel-writer bundle patch: 21 tools (incl. novel_semantic_search, novel_lexicon, novel_diagnose, novel_delete_book) + local embedding engine.
 # dsh-novel-writer bundle patch: mounts the novel-writing assistant plugin
 # into the profile's loader tree. The entry's name is the plugin package
 # itself, resolved from the profile's node_modules.

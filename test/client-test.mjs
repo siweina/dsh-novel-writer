@@ -711,7 +711,69 @@ controller.set({ view: "main", rawModal: true, rawCountdown: 3 }, { silent: true
 controller.set({ rawModal: false, rawPromiseOpen: true, rawPromiseText: "我承诺" }, { silent: true });
 controller.set({ rawPromiseOpen: false }, { silent: true });
 if (renderLog.length <= modalRenders) fail("弹窗状态变更未触发重渲染");
-console.log("视图/弹窗分支渲染: 共 " + renderLog.length + " 次渲染（main/features/tools/baseline/creation/reports/model/rawModal/rawPromiseOpen）✓");
+
+// v6.8.0：「按书删除」与「回收站」两个弹窗是面板里最重的两条新路径——
+// 它们只在真实点击后才出现，静态结构断言看不见，所以这里逐个状态真渲染一遍。
+const delPlanFixture = {
+  action: "preview", book: "试书", safeBook: "试书", found: true, blocked: false, blockedReason: "",
+  targets: [
+    { key: "chapters", label: "章节正文", kind: "dir", path: "C:\\lib\\novels\\试书", rel: "novels/试书", exists: true, files: 3, bytes: 2048, sample: ["第01章.md"] },
+    { key: "creation", label: "创作资料", kind: "dir", path: "C:\\lib\\novels\\创作资料\\试书", rel: "novels/创作资料/试书", exists: true, files: 6, bytes: 1024, sample: ["创作设定.md"] },
+    { key: "profile", label: "设定库条目（仅本书）", kind: "state", path: "C:\\state.json", rel: "_state.json", exists: true, files: 1, bytes: 0, sample: [] }
+  ],
+  totals: { files: 10, bytes: 3072 },
+  warnings: ["本书没有正文目录（novels/试书 不存在），只会清理关联资料"],
+  notTouched: ["全局词表", "插件通用设置"],
+  trash: [], trashId: "", trashDir: "", moved: 0, profileRemoved: false, profileRestored: false,
+  restored: 0, conflicts: [], failed: [], remaining: { files: 0, bytes: 0 }, purged: false, message: "预览"
+};
+controller.set({ view: "main", rawModal: false, rawPromiseOpen: false, delOpen: true, delBook: "试书", delPlan: delPlanFixture, delLoading: false, delError: "", delAck: false, delResult: null }, { silent: true });
+const delPreviewRender = renderLog[renderLog.length - 1];
+if (!delPreviewRender.stats.text.includes("删除整本书")) fail("删除弹窗标题缺失");
+if (!delPreviewRender.stats.text.includes("章节正文") || !delPreviewRender.stats.text.includes("创作资料")) fail("删除弹窗应列出待清理位置，实际：" + delPreviewRender.stats.text.slice(0, 200));
+if (!delPreviewRender.stats.text.includes("不会动")) fail("删除弹窗应写明不会动什么（notTouched）");
+if (!delPreviewRender.stats.text.includes("本书没有正文目录")) fail("删除弹窗应显示 warnings");
+if (!delPreviewRender.stats.classes.has("nwDelRow") || !delPreviewRender.stats.classes.has("nwDelAck")) fail("删除弹窗应使用 nwDelRow / nwDelAck");
+const delDangerBtn = () => {
+  const stats = renderLog[renderLog.length - 1].stats;
+  return stats.buttons.find((b) => String(b.props.className || "").includes("nwBtnDanger"));
+};
+if (!delDangerBtn()) fail("删除弹窗必须有危险动作按钮（移入回收站）");
+if (!delDangerBtn().props.disabled) fail("未勾选确认时「移入回收站」必须禁用");
+
+controller.set({ delAck: true }, { silent: true });
+if (!delDangerBtn() || delDangerBtn().props.disabled) fail("勾选确认后「移入回收站」应可点");
+
+// 执行完成态：结果 + 失败项 + 回收站 id 都要显示
+controller.set({
+  delAck: false,
+  delResult: { action: "apply", book: "试书", moved: 12, totals: { files: 20, bytes: 4096 }, failed: [{ path: "C:\\lib\\.novel-writer\\settings\\试书.json", code: "EBUSY", error: "EBUSY 被占用" }], remaining: { files: 1, bytes: 10 }, trashDir: "C:\\lib\\.novel-writer\\trash\\试书-20261022-163631", trashId: "试书-20261022-163631" }
+}, { silent: true });
+const delDoneRender = renderLog[renderLog.length - 1];
+if (!delDoneRender.stats.text.includes("已移入回收站")) fail("结果态应显示「已移入回收站」");
+if (!delDoneRender.stats.text.includes("试书-20261022-163631")) fail("结果态应给出回收站条目/目录");
+if (!delDoneRender.stats.text.includes("没搬动")) fail("结果态应显示失败项提示");
+if (delDangerBtn()) fail("结果态不应再有「移入回收站」按钮");
+
+// 回收站弹窗
+controller.set({ delOpen: false, delPlan: null, delResult: null, delBook: "", trashOpen: true, trashLoading: false, trashError: "", trashNote: "", trashBusyId: "", trashList: [
+  { id: "试书-20261022-163631", book: "试书", createdAt: "2026-10-22T08:00:00.000Z", files: 12, bytes: 2048, items: 12, restorable: true, path: "C:\\lib\\.novel-writer\\trash\\试书-20261022-163631" },
+  { id: "旧条目-20260101", book: "", createdAt: "2026-01-01T08:00:00.000Z", files: 3, bytes: 100, items: 0, restorable: false, path: "C:\\lib\\.novel-writer\\trash\\旧条目-20260101" }
+] }, { silent: true });
+const trashRender = renderLog[renderLog.length - 1];
+if (!trashRender.stats.text.includes("回收站")) fail("回收站弹窗标题缺失");
+if (!trashRender.stats.text.includes("恢复")) fail("回收站应提供「恢复」");
+if (!trashRender.stats.text.includes("彻底删除")) fail("回收站应提供「彻底删除」");
+if (!trashRender.stats.text.includes("无清单")) fail("没有 manifest 的条目必须标注「无清单，不能一键恢复」");
+if (!trashRender.stats.classes.has("nwTrashRow")) fail("回收站条目应使用 nwTrashRow");
+// 没有 manifest 的那条：恢复按钮必须禁用（清单都没有，恢复不了）
+const restoreBtns = trashRender.stats.buttons.filter((b) => vnodeText(b).trim() === "恢复");
+if (restoreBtns.length !== 2) fail("每条回收站条目各有一个恢复按钮，实际 " + restoreBtns.length);
+if (restoreBtns[0].props.disabled) fail("可恢复条目的恢复按钮不该禁用");
+if (!restoreBtns[1].props.disabled) fail("无清单条目的恢复按钮必须禁用");
+controller.set({ trashOpen: false, trashList: null, trashNote: "" }, { silent: true });
+
+console.log("视图/弹窗分支渲染: 共 " + renderLog.length + " 次渲染（main/features/tools/baseline/creation/reports/model/rawModal/rawPromiseOpen/delOpen/delResult/trashOpen）✓");
 
 // 设置页卡片组件体同样必须可执行（槽位注册的 component）
 const cardRender = runRender(reactStub.createElement(slotRegistered.component, { controller, toggle: () => {}, onOpenPanel: () => {} }));
@@ -771,8 +833,8 @@ console.log("v7 提示词场景：off/brief 隐藏 | full 8 个可用按钮 | �
 // 主页 IA 与共享外壳：真实入口保留，纯 UI 折叠不增加 controller 状态/hook。
 const homeStats = renderLog[renderLog.length - 1].stats;
 const navButtons = homeStats.buttons.filter((b) => String(b.props.className || "").split(/\s+/).includes("nwNavEntry"));
-const expectedNav = ["原创设定", "必用词表", "风格基线", "功能开关", "工具开关", "语义模型", "报告历史", "诊断报告", "体验演示"];
-if (navButtons.length !== expectedNav.length) fail("主页应有 9 个导航/操作行");
+const expectedNav = ["原创设定", "必用词表", "风格基线", "功能开关", "工具开关", "语义模型", "报告历史", "诊断报告", "回收站", "体验演示"];
+if (navButtons.length !== expectedNav.length) fail("主页应有 " + expectedNav.length + " 个导航/操作行（v6.8.0 起新增「回收站」）");
 for (let i = 0; i < expectedNav.length; i++) {
   if (!vnodeText(navButtons[i]).startsWith(expectedNav[i])) fail("主页入口顺序错误：" + i + " / " + vnodeText(navButtons[i]));
 }
@@ -787,7 +849,7 @@ const headerBack = modelRender.buttons.filter((b) => String(b.props.className ||
 if (headerBack.length !== 1 || !vnodeText(headerBack[0]).includes("写作助手")) fail("子页必须仅有一个标题栏返回入口");
 headerBack[0].props.onClick();
 if (controller.getSnapshot().view !== "main") fail("标题栏返回应回到主页");
-console.log("v7 主页：9 入口顺序/语义模型直达/存储与书库折叠/18+ 标签/子页标题栏返回 ✓");
+console.log("v7 主页：" + expectedNav.length + " 入口顺序/语义模型直达/存储与书库折叠/18+ 标签/子页标题栏返回 ✓");
 
 // ---------------------------------------------------------------------------
 // StorageDisclosure 只转发 controller 既有方法，不另建剪贴板或打开目录路径。
@@ -811,7 +873,7 @@ console.log("v7 存储位置：打开/复制调用既有 controller | 两条路�
 // v7-A：只改呈现，不改默认开启、批量开关、loading 与导航行为。
 const aTools = {
   analyze: ["novel_books", "novel_chapters", "novel_read", "novel_keywords", "novel_sentence_analysis", "novel_style_check", "novel_fix_plan", "novel_style_report", "novel_semantic_search", "novel_continuity_check", "novel_diagnose"],
-  settings: ["novel_settings", "novel_plot", "novel_summary", "novel_import"],
+  settings: ["novel_settings", "novel_plot", "novel_summary", "novel_import", "novel_delete_book"],
   create: ["novel_chapter_brief", "novel_lexicon", "novel_new_chapter", "novel_outline"]
 };
 const aGroupLabels = { analyze: "分析作品", settings: "整理资料", create: "开始创作" };
@@ -835,7 +897,7 @@ const aSwitches = (stats) => stats.buttons.filter((b) => b.props.role === "switc
 const aSwitch = (stats, label) => aSwitches(stats).find((b) => b.props["aria-label"] === label);
 const aChecked = (button) => String(button.props["aria-checked"]) === "true";
 let aStats = aRender();
-if (aSwitches(aStats).length !== 22) fail("工具页应有 19 个工具开关 + 3 个全部开关");
+if (aSwitches(aStats).length !== 23) fail("工具页应有 20 个工具开关 + 3 个全部开关（v6.8.0 起新增 novel_delete_book）");
 if (aSwitches(aStats).some((b) => !aChecked(b))) fail("未配置的工具必须默认开启");
 if (aStats.classes.has("nwToolRowOn") || aStats.classes.has("nwToolGroupBadge") || aStats.classes.has("nwPlotBox")) fail("工具页仍有蓝底、关闭徽章或行内路径");
 if (!aStats.classes.has("nwGCard") || !aStats.classes.has("nwPref") || !aStats.classes.has("nwStorage")) fail("工具页未复用统一卡片、偏好行或存储折叠区");

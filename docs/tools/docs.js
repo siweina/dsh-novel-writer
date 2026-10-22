@@ -28,7 +28,8 @@
 
     { g: '审计与配置', file: 'novel-continuity-check', name: 'novel_continuity_check', title: '连贯性审计' },
     { g: '审计与配置', file: 'novel-sentence-config',  name: 'novel_sentence_config',  title: '开关配置' },
-    { g: '审计与配置', file: 'novel-diagnose',         name: 'novel_diagnose',         title: '诊断报告' }
+    { g: '审计与配置', file: 'novel-diagnose',         name: 'novel_diagnose',         title: '诊断报告' },
+    { g: '审计与配置', file: 'novel-delete-book',      name: 'novel_delete_book',      title: '按书删除' }
   ];
 
   var here = (location.pathname.split('/').pop() || 'index.html').replace(/\.html$/, '');

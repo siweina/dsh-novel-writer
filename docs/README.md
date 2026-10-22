@@ -14,10 +14,10 @@ styles.css                 宣传页设计系统（配色 / 排版 / 响应式 /
 script.js                  宣传页交互（滚动进场 / 能力卡展开 / 复制 / 分页 / 移动端菜单）
 README.md                  本文件
 tools/
-  index.html               技术文档总览（20 个工具的分组索引 + 该调哪个工具 + 共同约定）
+  index.html               技术文档总览（21 个工具的分组索引 + 该调哪个工具 + 共同约定）
   docs.css                 文档三栏布局（侧栏 / 正文 / 右侧目录）
   docs.js                  侧栏、目录、上下页的渲染（工具清单唯一数据源）
-  novel-books.html         以下 20 个为工具子页面，文件名即 docs.js 中的 file 字段
+  novel-books.html         以下 21 个为工具子页面，文件名即 docs.js 中的 file 字段
   novel-chapters.html
   novel-read.html
   novel-new-chapter.html
@@ -37,6 +37,7 @@ tools/
   novel-continuity-check.html
   novel-sentence-config.html
   novel-diagnose.html
+  novel-delete-book.html
 ```
 
 没有构建步骤、没有 npm 依赖、没有外链字体或脚本。唯一的远程资源是页脚那三枚徽章图片（npm 版本、Glama 评分、MIT 协议），离线打开只会缺图，不影响页面。
@@ -133,7 +134,7 @@ python -m http.server 8080
 
 ## 数据来源
 
-页面数字与链接取自**本地源码的实际状态**：20 个工具、`bge-small-zh-v1.5` 量化模型约 24MB、Node ≥ 22.3。**外部平台的数字可能滞后**——Glama 的收录与 npm `latest` 反映的是**已发布版本**。发新版后需同步首屏版本号与胶囊链接、`#trust` 区块、页脚链接。
+页面数字与链接取自**本地源码的实际状态**：21 个工具、`bge-small-zh-v1.5` 量化模型约 24MB、Node ≥ 22.3。**外部平台的数字可能滞后**——Glama 的收录与 npm `latest` 反映的是**已发布版本**。发新版后需同步首屏版本号与胶囊链接、`#trust` 区块、页脚链接。
 
 技术文档子页面的参数与公式均取自插件源码（`lib/index.js`、`lib/analysis.js`、`lib/style-metrics.js`、`lib/embedding.js`、`lib/core.js`、`lib/brief.js`、`lib/fixplan.js`、`lib/graph.js`、`lib/prompts.js`、`lib/log.js`、`lib/diagnose.js`、`mcp/server.mjs`），改动实现后请同步更新对应页面。
 

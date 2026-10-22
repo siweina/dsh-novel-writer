@@ -4,21 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>技术文档总览｜dsh-novel-writer</title>
-<meta name="description" content="dsh-novel-writer 的 20 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
+<meta name="description" content="dsh-novel-writer 的 21 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
 <link rel="stylesheet" href="../styles.css">
 <link rel="stylesheet" href="docs.css">
 <link rel="canonical" href="https://siweina.github.io/dsh-novel-writer/tools/index.html">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="dsh-novel-writer">
 <meta property="og:title" content="技术文档总览｜dsh-novel-writer">
-<meta property="og:description" content="dsh-novel-writer 的 20 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
+<meta property="og:description" content="dsh-novel-writer 的 21 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
 <meta property="og:url" content="https://siweina.github.io/dsh-novel-writer/tools/index.html">
 <meta property="og:locale" content="zh_CN">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="技术文档总览｜dsh-novel-writer">
-<meta name="twitter:description" content="dsh-novel-writer 的 20 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
+<meta name="twitter:description" content="dsh-novel-writer 的 21 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","name":"技术文档总览｜dsh-novel-writer","description":"dsh-novel-writer 的 20 个工具实现细节：参数契约、计算原理、约束边界与源码位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/index.html","inLanguage":"zh-CN","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.7.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer","url":"https://siweina.github.io/dsh-novel-writer/"}}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","name":"技术文档总览｜dsh-novel-writer","description":"dsh-novel-writer 的 21 个工具实现细节：参数契约、计算原理、约束边界与源码位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/index.html","inLanguage":"zh-CN","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.8.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer","url":"https://siweina.github.io/dsh-novel-writer/"}}</script>
 </head>
 <body class="docs">
 
@@ -33,9 +33,9 @@
   <main class="docs__main">
     <article class="doc">
       <h1>技术文档</h1>
-      <p class="doc__version">当前版本 <code>6.7.0</code> · 更新记录见 <a href="https://github.com/siweina/dsh-novel-writer/blob/main/CHANGELOG.md">CHANGELOG</a>（下方「版本说明」）</p>
+      <p class="doc__version">当前版本 <code>6.8.0</code> · 更新记录见 <a href="https://github.com/siweina/dsh-novel-writer/blob/main/CHANGELOG.md">CHANGELOG</a>（下方「版本说明」）</p>
       <p class="doc__lead">
-        <code>dsh-novel-writer</code> 的 20 个工具全部在本地运行，<strong>不使用在线大模型</strong>：所有指标由规则统计与本地 ONNX 推理得出。本组页面面向二次开发与集成方，逐工具说明参数契约、计算原理、约束边界与源码位置。
+        <code>dsh-novel-writer</code> 的 21 个工具全部在本地运行，<strong>不使用在线大模型</strong>：所有指标由规则统计与本地 ONNX 推理得出。本组页面面向二次开发与集成方，逐工具说明参数契约、计算原理、约束边界与源码位置。
       </p>
 
       <h2>阅读约定</h2>
@@ -55,6 +55,12 @@
       <ul class="doc__releases">
         <li>
           <details open>
+            <summary><code>6.8.0</code> · 2026-10-22 <span class="doc__rel-sum">按书删除与回收站：删一本书不必再翻 12 个位置（issue #2）</span></summary>
+            <p>回应 <a href="https://github.com/siweina/dsh-novel-writer/issues/2">issue #2</a>「删不干净」：一本书的资料散在 <b>12 个位置</b>——正文、创作资料、数据目录 9 个按书子目录与 <code>state.json</code> 的设定库条目，另有 v0.8.0 前留在数据目录根上的<b>旧位置伏笔表</b>。本版新增第 <b>21</b> 个工具 <a href="novel-delete-book.html">novel_delete_book</a>（按书删除）：一次列出全部待清理位置、文件数、体积与样例，<b>默认只预览</b>，<code>action:"apply"</code> 才执行。匹配改为<b>前缀 + 分隔符边界</b>（书名后必须紧跟 <code>.</code> / <code>-</code> / <code>_</code> 或到此结束，另加 <code>fix-plan-&lt;书&gt;-</code> 与旧位置两条规则），因此删《孤舟》不会碰到《孤舟子》；只删 <code>&lt;书&gt;.json</code> 必然漏掉 <code>&lt;书&gt;-&lt;hash&gt;.json</code>、<code>&lt;书&gt;__style_2.json</code> 这类文件。执行时内容<b>移入回收站</b>（<code>.novel-writer/trash/&lt;书&gt;-&lt;时间戳&gt;/</code>）并写 <code>manifest.json</code>，<code>restore</code> 原样移回（目标已存在则逐文件跳过、<b>绝不覆盖</b>），<code>purge</code> 才彻底删除；书名撞上 <code>_global</code> / <code>创作资料</code> / 点号目录时直接拒绝。面板同样可用：书库概况每本书旁新增「删除整本书…」，「记录与维护」新增「回收站」（恢复 / 彻底删除），并新增宿主路由 <code>POST /api/dsh-novel-writer/delete-book</code>（仅回环），与工具共用同一执行链路。<b>已知边界</b>：移入回收站<b>不释放磁盘空间</b>，<code>trash/</code> 不自动清理（面板数据目录体积会把回收站算进去）；恢复按文件粒度、不做合并改写，同名文件一律跳过。工具数 20 → 21，参数契约与书库格式其余部分不变。</p>
+          </details>
+        </li>
+        <li>
+          <details>
             <summary><code>6.7.0</code> · 2026-10-20 <span class="doc__rel-sum">面板视觉全面改版：只改长相与说法，功能面不动</span></summary>
             <p>起因是三条用户反馈：<b>① 不好看 ② 太杂、功能难找 ③ 描述看得半懂不懂</b>。本版只改<b>网页端面板</b>——<code>lib/client.js</code> 的渲染层、<code>tools/client-src/V6-components.css</code>（4.6 KB → 19.4 KB 的视觉系统）、图标源，以及同步更新断言的 <code>test/client-test.mjs</code>。<b>功能面完全不变</b>：8 个视图一个不少（<code>features</code> / <code>tools</code> / <code>baseline</code> / <code>creation</code> / <code>reports</code> / <code>model</code> / <code>lexicon</code> / <code>diagnose</code>），<code>ALL_TOOLS</code> 仍为 <b>20</b>，controller 的 <code>api.*</code> 语义与后端路由零改动。<b>五条设计原则</b>：① <b>一个页面只讲一件事</b>（标题告诉你在哪，正文只放这一页的内容，不重复全局状态）；② <b>安静的默认态</b>（开着的开关不再整行变蓝、也不再贴「已开启」——开关本身就是状态；颜色只留给「需要注意」与唯一主操作）；③ <b>说人话</b>（描述写「对你有什么用」，工具 ID <code>novel_xxx</code>、参数 <code>action=audit</code> 与内部术语不进主文案，最多收进「说明」展开区或 tooltip）；④ <b>一种卡片、一种行、一种分区标题</b>（全面板只用这三种积木，不再出现虚线框、无阴影框、蓝色胶囊标题等第 N 种容器）；⑤ <b>路径与维护信息往下沉</b>（文件路径、数据目录、<code>state.json</code> 统一收进页面底部的「存储位置」折叠区，一个页面只出现一次）。<b>具体变化</b>：删掉每页的大 Hero 卡与子页的蓝色胶囊标题，主页只在标题下留一行副标题，分区标题改为 12px 灰色小标签；首页按「写作资料 / AI 行为 / 功能与工具 / 记录与维护 / 高级」分区，原来独立的「书库统计」卡并进「写作资料」卡底部的一行书库概况（「书库 N 部 · M 章 · X 字」，点开是每本书一行，含「7 天未动」）；工具行统一由 <code>PreferenceRow</code> 承载，导航行行尾是「计数 + ›」；标题、按钮与分组名不再使用彩色 emoji，改为线性图标（图标源 52 个键、每个工具行一枚专属图标）；阈值行的 slider 辅助输入一并移除，每维只留「低于 / 高于」两个百分比输入框。<b>升级须知</b>：无需迁移——不新增配置文件、不改书库格式、不改任何工具的参数契约；面板布局与导航有调整，如果你依赖旧的操作路径，按新界面的中文标签找一次即可。所有既有行为断言（剪贴板三条降级路径、<code>reqId</code> 过期丢弃、破坏性操作二次确认、hook 稳定性）<b>一条没删</b>。设计规格全文见仓库内 <a href="https://github.com/siweina/dsh-novel-writer/blob/main/tools/UI-REDESIGN.md">tools/UI-REDESIGN.md</a>（16 KB：工作纪律、设计原则、视觉系统、信息架构、文案风格）。</p>
           </details>
@@ -153,10 +159,11 @@
         <a class="tools__card" href="novel-continuity-check.html"><b>novel_continuity_check</b><span>三路审计：衔接、OOC 与大纲走偏，输出带原文引用的问题清单。</span></a>
         <a class="tools__card" href="novel-sentence-config.html"><b>novel_sentence_config</b><span>查看与修改工具开关、功能开关、系统提示词档位与场景、风格基线容差。</span></a>
         <a class="tools__card" href="novel-diagnose.html"><b>novel_diagnose</b><span>诊断报告：读本地事件日志 + 五处体检（书库根 / 书库内容 / 数据目录损坏 / 语义引擎 / 开关快照），聚合「工具 × 书名」反复出问题的组合、高频失败类型与可执行建议；报告只含元数据，可安全分享。</span></a>
+        <a class="tools__card" href="novel-delete-book.html"><b>novel_delete_book</b><span>按书删除：预览一本书散在 12 个位置的资料（正文、创作资料、数据目录 9 个子目录、设定库条目，外加旧版本遗留的平铺伏笔表），确认后整体移入回收站，可恢复或彻底删除。</span></a>
       </div>
 
       <h2>该调哪个工具</h2>
-      <p>工具数到 20 之后，「选对工具」本身也有了成本。下表按<strong>你想回答的问题</strong>给出口径；其中三个分析类工具名字最像，一并说明区别。</p>
+      <p>工具数到 21 之后，「选对工具」本身也有了成本。下表按<strong>你想回答的问题</strong>给出口径；其中三个分析类工具名字最像，一并说明区别。</p>
       <table>
         <thead><tr><th>你想回答的问题</th><th>用哪个</th><th>主要输出</th></tr></thead>
         <tbody>
@@ -186,7 +193,7 @@
       <p>语义检索、语义风格距离与语义隐性情感依赖随包分发的 <code>bge-small-zh-v1.5</code> 量化模型（约 24MB）与 <code>onnxruntime-web</code>（WASM）。引擎不可用时这些能力自动降级为纯规则模式，其余功能不受影响；返回体会以 <code>skippedDims</code> 或专用文案说明降级原因，而非返回空结果。引擎相关的降级同样会记入事件日志，可由 <a href="novel-diagnose.html">novel_diagnose</a> 聚合查看（本工具只聚合已记录到的事件，<strong>不会主动跑一次推理去探测</strong>）。</p>
 
       <h3>MCP 形态的边界</h3>
-      <p>包内 <code>mcp/server.mjs</code> 把同样 20 个工具暴露为 stdio MCP 服务器（可用 Streamable HTTP 传输）。协议侧：未知工具返回 <code>-32602</code>（Protocol Error）；支持 2025-11-25 / 2025-06-18 / 2025-03-26 / 2024-11-05 版本协商并原样回显；JSON-RPC 批量请求自 2025-06-18 起按规范拒绝；单行报文上限 4 MiB；<code>novel_import</code> 的 <code>src</code> 默认限制在书库根内，需显式加 <code>--allow-external-src</code> 才能放开。</p>
+      <p>包内 <code>mcp/server.mjs</code> 把同样 21 个工具暴露为 stdio MCP 服务器（可用 Streamable HTTP 传输）。协议侧：未知工具返回 <code>-32602</code>（Protocol Error）；支持 2025-11-25 / 2025-06-18 / 2025-03-26 / 2024-11-05 版本协商并原样回显；JSON-RPC 批量请求自 2025-06-18 起按规范拒绝；单行报文上限 4 MiB；<code>novel_import</code> 的 <code>src</code> 默认限制在书库根内，需显式加 <code>--allow-external-src</code> 才能放开。</p>
     </article>
 
     <nav class="docs__pager" id="docsPager"></nav>

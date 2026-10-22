@@ -865,7 +865,7 @@ test("⑨-f 辅助事件是有意的：写操作记 lastRoot 轨迹（首次记�
   assert.equal(rep.root.path, LIB2);
   assert.equal(rep.root.lastRoot, LIB2, "diagnose 报告的 lastRoot 应等于刚记录的值");
   assert.equal(rep.root.lastRootLooksLikeLibraryRoot, true);
-  assert.equal(rep.tools.registered, 20);
+  assert.equal(rep.tools.registered, ALL_TOOLS.length, "报告的工具数应等于 ALL_TOOLS（v6.8.0 起 21）");
   await log.clearLogs();
 });
 
@@ -1027,9 +1027,10 @@ test("⑤-d F1 边界：34 字无标点原句完整落在**本机**日志；分�
 // ⑩ novel_diagnose 工具契约
 // ===========================================================================
 
-test("⑩ ALL_TOOLS=20 且与注册表一致；schema 是 additionalProperties:false 且 required ⊆ properties", () => {
-  assert.equal(ALL_TOOLS.length, 20, "v6.6.0 起第 20 个工具是 novel_diagnose");
+test("⑩ ALL_TOOLS=21 且与注册表一致；schema 是 additionalProperties:false 且 required ⊆ properties", () => {
+  assert.equal(ALL_TOOLS.length, 21, "v6.8.0 起第 21 个工具是 novel_delete_book（第 20 个是 v6.6.0 的 novel_diagnose）");
   assert.ok(ALL_TOOLS.includes("novel_diagnose"));
+  assert.ok(ALL_TOOLS.includes("novel_delete_book"));
   assert.deepEqual([...toolDefs.map((d) => d.name)].sort(), [...ALL_TOOLS].sort(), "注册表与 ALL_TOOLS 单一事实源必须一致");
 
   const def = defs.novel_diagnose;
@@ -1069,8 +1070,8 @@ test("⑩-c report：中文报告含「诊断报告」；issues 每条有 level/
   assert.equal(rep.root.source, "调用参数 root");
   assert.equal(rep.root.looksLikeLibraryRoot, true);
   assert.ok(rep.log.dir.startsWith(STATE_DIR), "报告里的日志目录应是状态目录旁那个");
-  assert.equal(rep.tools.registered, 20);
-  assert.equal(rep.tools.enabled, 20);
+  assert.equal(rep.tools.registered, ALL_TOOLS.length, "报告的工具数应等于 ALL_TOOLS（v6.8.0 起 21）");
+  assert.equal(rep.tools.enabled, ALL_TOOLS.length, "默认全开：启用数应等于 ALL_TOOLS");
 
   assert.ok(Array.isArray(rep.issues) && rep.issues.length > 0);
   for (const issue of rep.issues) {
@@ -1204,11 +1205,14 @@ function mockReq({ method = "GET", url, host = "127.0.0.1:19387", origin, secFet
 }
 
 test("⑪ 诊断路由已注册（由 registerStyleConfigRoute 在 makeStateRoutes 之后 push）", () => {
-  assert.ok(routes.length > 1, "应有 makeStateRoutes 的多条路由 + 诊断路由");
+  assert.ok(routes.length > 1, "应有 makeStateRoutes 的多条路由 + 诊断/删除路由");
   const route = diagRoute();
   assert.equal(route.kind, "exact");
-  assert.equal(routes[routes.length - 1].path, route.path, "诊断路由应是最后 push 的那条");
   assert.equal(typeof route.handler, "function");
+  // v6.8.0：删除路由排在诊断路由之后 push——顺序本身不是契约，但"两条自定路由都在"是。
+  const paths = routes.map((r) => r.path);
+  assert.ok(paths.includes("/api/dsh-novel-writer/diagnose"), "诊断路由必须在 routes 里");
+  assert.ok(paths.includes("/api/dsh-novel-writer/delete-book"), "v6.8.0 的按书删除路由必须在 routes 里");
 });
 
 test("⑪-b GET 200 {ok:true,report}；?events=1 带 events；?days&book 生效；POST 405；非回环 403", async () => {

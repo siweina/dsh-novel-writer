@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_diagnose — 诊断报告｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_diagnose 的实现细节：本地事件日志的字段白名单与两级隐私设计、错误文本一律归类成固定 code、五处体检（书库根 / 书库内容 / 数据目录损坏 / 语义引擎惰性探测 / 开关快照）、「工具 × 书名」反复失败聚合、512 KB 轮转与落点、调用审计的注册层包装、诊断路由与面板入口，以及读取预算与「不减少 bug、只加快定位」的边界。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_diagnose","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-diagnose.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_diagnose — 诊断报告｜dsh-novel-writer 技术文档","description":"novel_diagnose 的实现细节：本地事件日志的字段白名单与两级隐私设计、错误文本一律归类成固定 code、五处体检（书库根 / 书库内容 / 数据目录损坏 / 语义引擎惰性探测 / 开关快照）、「工具 × 书名」反复失败聚合、512 KB 轮转与落点、调用审计的注册层包装、诊断路由与面板入口，以及读取预算与「不减少 bug、只加快定位」的边界。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-diagnose.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.7.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_diagnose, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_diagnose — 诊断报告｜dsh-novel-writer 技术文档","description":"novel_diagnose 的实现细节：本地事件日志的字段白名单与两级隐私设计、错误文本一律归类成固定 code、五处体检（书库根 / 书库内容 / 数据目录损坏 / 语义引擎惰性探测 / 开关快照）、「工具 × 书名」反复失败聚合、512 KB 轮转与落点、调用审计的注册层包装、诊断路由与面板入口，以及读取预算与「不减少 bug、只加快定位」的边界。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-diagnose.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.8.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_diagnose, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -220,7 +220,7 @@ noteRoot（写操作之后记 lastRoot）另有三类留痕：
       <p>写入刻意用<strong>同步</strong> <code>appendFileSync</code>：一次 append 只有几十字节，代价远小于「异步队列在进程退出时丢事件」的风险（本插件没有常驻进程的生命周期钩子）。<strong>任何写入失败都被吞掉</strong>——写日志绝不能让工具调用失败（那才是本末倒置）；唯一的例外是<strong>首次</strong>失败时往 stderr 打一行提示，且只打一次，否则连「日志本身坏了」都无从知晓。</p>
 
       <h3>8 · 工具调用审计：注册层统一包一层</h3>
-      <p>审计不是散落在 20 个工具体内的埋点，而是在<strong>注册层</strong>临时替换 <code>ctx.tools.register</code>，对每个工具定义包一层 <code>execute</code>，注册完立刻还原。理由是「体内埋点迟早会漏，而且新加的工具必然忘」，而 <code>register</code> 是唯一必经之路。</p>
+      <p>审计不是散落在各个工具体内的埋点，而是在<strong>注册层</strong>临时替换 <code>ctx.tools.register</code>，对每个工具定义包一层 <code>execute</code>，注册完立刻还原。理由是「体内埋点迟早会漏，而且新加的工具必然忘」，而 <code>register</code> 是唯一必经之路。</p>
       <div class="formula">每次调用记录（kind: "tool_call"）：
   tool / status（ok | degraded | failed）/ ms / degradedCount / code / detail
   + summarizeArgs(args)  ← 安全参数摘要

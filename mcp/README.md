@@ -1,6 +1,6 @@
 # dsh-novel-writer — stdio MCP 服务器
 
-把 **dsh-novel-writer** 插件的 20 个 `novel_*` 小说写作工具，以标准 **MCP（Model Context Protocol）stdio 服务器**暴露给
+把 **dsh-novel-writer** 插件的 21 个 `novel_*` 小说写作工具，以标准 **MCP（Model Context Protocol）stdio 服务器**暴露给
 Claude Desktop、Cursor 等任何 MCP 客户端。
 
 - **零业务复制**：服务器不重写任何逻辑，而是用 stub ctx 启动插件（`lib/index.js` 的 `apply()`），捕获它注册的
@@ -141,7 +141,7 @@ printf '%s\n' \
 
 ---
 
-## 4. 工具清单（20 个）
+## 4. 工具清单（21 个）
 
 | # | 工具 | 用途 |
 |---|---|---|
@@ -165,6 +165,7 @@ printf '%s\n' \
 | 18 | `novel_fix_plan` | 改稿台：把风格诊断变成按优先级排好的待办（带行号定位与锚段），`plan`/`verify`/`mark` 三态，只给方向不生成正文 |
 | 19 | `novel_lexicon` | 必用词表：专有词/作者惯用词的书级+全局两层登记、批量导入、开写包硬清单注入、成稿用词审计 |
 | 20 | `novel_diagnose` | 诊断报告（v6.6.0）：读本地事件日志 + 体检书库根与数据目录，聚合「工具 × 书名」反复出问题的组合、高频失败类型与可执行建议；`report`/`events`/`clear` 三态。**报告只含元数据（工具名/书名/章号/状态/耗时/计数），绝不含正文**——自由文本在分享层已被整体剔除，可安全贴进 issue |
+| 21 | `novel_delete_book` | 按书删除（v6.8.0）：一本书的资料散在 12 处，`preview`（默认，只算不写盘）/ `apply`（移入 `<数据目录>/trash/`，可恢复）/ `list` / `restore` / `purge` 五态；按「前缀 + 分隔符边界」匹配文件名，全局词表与插件设置不动 |
 
 每个工具的 `inputSchema` 就是插件注册时声明的 `parameters`（原样透传，未做任何改写）。
 
@@ -181,7 +182,7 @@ printf '%s\n' \
 | `initialize` | 返回协商后的 `protocolVersion`、`capabilities: { tools: {} }`、`serverInfo: { name: "dsh-novel-writer", version: <package.json version> }` |
 | `notifications/initialized` | 通知，无响应（`notifications/cancelled`、`notifications/progress` 等同样静默） |
 | `notifications/cancelled` | 通知，无响应；**会真的取消在途请求**：`params.requestId` 命中的 `tools/call` 会被 abort（服务器把 `exec.signal` 传给插件） |
-| `tools/list` | `{ tools: [{ name, description, inputSchema }] }`，共 20 个 |
+| `tools/list` | `{ tools: [{ name, description, inputSchema }] }`，共 21 个 |
 | `tools/call` | 参数 `{ name, arguments }`；成功 → `{ content: [{ type: "text", text }] }` |
 | `tools/call`（未知工具） | 回**协议错误 `-32602`**（`Unknown tool: <name>`），可读提示在 `error.data.hint`/`availableToolCount`（v4.3.0 起符合规范） |
 | `ping` | `{}` |
@@ -211,7 +212,7 @@ v4.3.0 曾有两处**刻意保留的偏差**，v4.3.0 已全部按规范修正�
 优先使用插件 `output.render(args, value)` 的返回值：
 
 - 返回**字符串** → 直接采用；
-- 返回 **`[{ type: "text", text }]` 数组**（DSH 宿主契约，本插件 20 个工具全部是这种）→ 过滤出 `type === "text"` 的
+- 返回 **`[{ type: "text", text }]` 数组**（DSH 宿主契约，本插件 21 个工具全部是这种）→ 过滤出 `type === "text"` 的
   `text` 后 `join("\n")` 作为 MCP 文本内容；
 - 两者都不是 / `render` 抛错 → 回退 `JSON.stringify(value, null, 2)`。
 
@@ -278,5 +279,5 @@ render 精修文本（非 JSON 兜底）、`novel_import` 的 src 越界拦截�
 | `错误：工具 … 当前已在「写作助手功能」UI 中关闭` | 用 `novel_sentence_config` 重新开启，或在 DSH 侧边栏面板打开。 |
 | 首次语义检索/风格分析较慢 | `novel_semantic_search` 会加载本地 embedding 模型并建索引，首次调用耗时较长属正常；中途不想等可发 `notifications/cancelled`（带 `requestId`）取消。 |
 | 正文乱码 | 章节文件需为 UTF-8；GBK 文件请先转码。 |
-| 客户端看不到工具 | 确认 `args` 中 `server.mjs` 为绝对路径、`node` 在 PATH；查看客户端 MCP 日志中的 stderr 输出（应能看到「已注册 20 个工具」）。用 `npx` 时必须写 `-p dsh-novel-writer dsh-novel-writer-mcp`（包名 ≠ bin 名）。 |
+| 客户端看不到工具 | 确认 `args` 中 `server.mjs` 为绝对路径、`node` 在 PATH；查看客户端 MCP 日志中的 stderr 输出（应能看到「已注册 21 个工具」）。用 `npx` 时必须写 `-p dsh-novel-writer dsh-novel-writer-mcp`（包名 ≠ bin 名）。 |
 | Windows 路径报错 | JSON 中反斜杠需转义 `\\`，或直接使用正斜杠 `/`。 |

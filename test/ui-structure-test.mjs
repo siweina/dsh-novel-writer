@@ -59,7 +59,7 @@ import { fileURLToPath } from "node:url";
 // ============================== 写死的基线与清单 ==============================
 
 const HOOK_BASELINE = 12;                       // 见头注释：实测命令与指纹
-const EXPECTED_ALL_TOOLS = 20;                  // v6.2.0 起：18 → 19（novel_lexicon 必用词表）；v6.6.0 起：19 → 20（novel_diagnose 诊断报告）
+const EXPECTED_ALL_TOOLS = 21;                  // v6.2.0 起 18→19（novel_lexicon）；v6.6.0 起 19→20（novel_diagnose）；v6.8.0 起 20→21（novel_delete_book）
 const PRIMITIVES_REQ = 'require("@deepseek-ai/dsh-client-ui-primitives")';
 
 // 契约 §4.2：5.5.0 新增类必须全部保留定义（逐字来自契约第 58 行冻结清单，共 34 个）

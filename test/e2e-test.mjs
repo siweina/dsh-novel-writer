@@ -171,7 +171,10 @@ await (async function outputContractCheck() {
     novel_lexicon: { action: "list", book: "测试", scope: "all", root: testRoot },
     // v6.6.0：诊断报告（第 20 个工具）。刻意**不用** action:"clear"——那会清空事件日志，
     // 影响后续断言；report 分支只读（日志写入落在 <状态目录>/logs/，即本套件的 tmpdir 隔离区）。
-    novel_diagnose: { days: 7, root: testRoot }
+    novel_diagnose: { days: 7, root: testRoot },
+    // v6.8.0：按书删除（第 21 个工具）。只用 preview 分支——它**只读不写盘**，
+    // 不会破坏本套件的夹具书；apply/restore/purge 的破坏性路径由 delete-book-test 覆盖。
+    novel_delete_book: { book: "测试", action: "preview", root: testRoot }
   };
   // v4.0.0：这 4 个工具没有"循环调用样例"（analysis 会写缓存与 miss 断言冲突），改为在各自调用点断言契约
   const CONTRACT_AT_CALLSITE = ["novel_new_chapter", "novel_import", "novel_sentence_analysis", "novel_semantic_search"];
