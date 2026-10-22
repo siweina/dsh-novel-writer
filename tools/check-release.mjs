@@ -65,6 +65,13 @@ assert.equal(ALL_TOOLS.length, 21, `ALL_TOOLS 数量（lib/core.js 声明 ${ALL_
 const pkg = JSON.parse(read('package.json'));
 const lock = JSON.parse(read('package-lock.json'));
 const server = JSON.parse(read('server.json'));
+// MCP Registry 的 server.schema.json 限制 description ≤ 100 字符，超长会被 422 拒绝。
+// v6.8.0 实测踩到：server.json 描述写到 136 字符 → npm 与 GitHub Release 都成功，
+// 只有 mcp-registry 那一步 422 失败（发布链路最后一段静默漏掉）。这里提前挡住。
+assert.ok(
+  String(server.description ?? '').length <= 100,
+  `server.json 的 description 必须 ≤ 100 字符（MCP Registry 的 server.schema.json 限制），实测 ${String(server.description ?? '').length} 字符`
+);
 assert.match(pkg.version, /^\d+\.\d+\.\d+$/);
 assert.equal(lock.version, pkg.version, 'lockfile version');
 assert.equal(lock.packages[''].version, pkg.version, 'lockfile root version');
