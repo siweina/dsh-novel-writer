@@ -519,6 +519,62 @@ test("⑩ 路由：GET/POST 同形、非 loopback 403、非法方法 405", async
 });
 
 // ===========================================================================
+// ⑫ 单份报告删除（面板「报告历史」逐条删）—— 同样走回收站
+// ===========================================================================
+
+test("⑫ 单份报告删除：走回收站可恢复，非法文件名一律拒绝", async () => {
+  const dataDir = join(toolRoot, ".novel-writer");
+  mkdirSync(join(dataDir, "analysis"), { recursive: true });
+  mkdirSync(join(dataDir, "style-reports"), { recursive: true });
+  writeFileSync(join(dataDir, "analysis", "报告书-full.json"), "{}", "utf8");
+  writeFileSync(join(dataDir, "style-reports", "报告书.json"), '{"judgment":"人工判断"}', "utf8");
+  const route = routes.find((r) => r.path === "/api/dsh-novel-writer/reports");
+  assert.ok(route, "报告路由必须已注册");
+  const makeRes = () => ({ status: 0, body: "", writeHead(status) { this.status = status; }, end(body) { this.body = body; } });
+  const makeReq = (body) => ({
+    socket: { remoteAddress: "127.0.0.1" },
+    headers: { host: "127.0.0.1:51783" },
+    method: "POST",
+    url: "/api/dsh-novel-writer/reports",
+    async *[Symbol.asyncIterator]() { yield Buffer.from(JSON.stringify(body)); }
+  });
+  // 非法文件名：带分隔符 / 非 .json / 空 / ..
+  for (const bad of ["../x.json", "a/b.json", "x.txt", "", ".."]) {
+    const r = makeRes();
+    await route.handler(makeReq({ action: "forget", file: bad }), r);
+    assert.equal(r.status, 400, "应拒绝文件名：" + JSON.stringify(bad));
+  }
+  // 未知 action / 不存在的报告
+  {
+    const r = makeRes();
+    await route.handler(makeReq({ action: "nope", file: "报告书-full.json" }), r);
+    assert.equal(r.status, 400);
+  }
+  {
+    const r = makeRes();
+    await route.handler(makeReq({ action: "forget", file: "查无.json" }), r);
+    assert.equal(r.status, 404);
+  }
+  // 正常删除：移入回收站（不是 rm），只动指定的那一份
+  const ok = makeRes();
+  await route.handler(makeReq({ action: "forget", file: "报告书-full.json" }), ok);
+  assert.equal(ok.status, 200, ok.body);
+  const body = JSON.parse(ok.body);
+  assert.equal(body.ok, true);
+  assert.notEqual(body.trashId, "", "必须给出回收站条目 id");
+  assert.equal(existsSync(join(dataDir, "analysis", "报告书-full.json")), false, "被删的文件应离开原位");
+  assert.equal(existsSync(join(dataDir, "style-reports", "报告书.json")), true, "不应牵扯其它报告");
+  const listed = await bd.listTrash({ root: toolRoot });
+  const entry = listed.find((e) => e.book === "（报告历史）");
+  assert.ok(entry, "回收站里应有一条报告条目，实际：" + JSON.stringify(listed.map((e) => e.book)));
+  assert.equal(entry.restorable, true);
+  // 可恢复：移回原路径
+  const back = await bd.restoreTrash({ root: toolRoot, trashId: body.trashId });
+  assert.equal(back.restored, 1);
+  assert.equal(existsSync(join(dataDir, "analysis", "报告书-full.json")), true);
+});
+
+// ===========================================================================
 // ⑪ 隔离守卫
 // ===========================================================================
 

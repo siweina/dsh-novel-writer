@@ -1018,23 +1018,33 @@ for (const text of ["测试书", "全书基线", "逐章指标", "全书分析",
   if (!cReports.text.includes(text)) fail("报告展示缺少：" + text);
 }
 if (!cReports.text.includes("测试书4") || cReports.text.includes("风格判断")) fail("报告必须跨目录合并为按书分组并显示报告数");
-const cFiles = cReports.buttons.filter((b) => /nwReportsFile/.test(b.props.className || ""));
-if (cFiles.length !== 6 || cFiles[0].props.title !== "测试书__base-full.json") fail("报告行应保留原始文件身份");
+const cOpenBtns = cReports.buttons.filter((b) => /nwReportsOpen/.test(b.props.className || ""));
+const cDelBtns = cReports.buttons.filter((b) => /nwRowAction/.test(b.props.className || ""));
+if (cOpenBtns.length !== 6 || cOpenBtns[0].props.title !== "测试书__base-full.json") fail("报告行应保留原始文件身份");
+if (cDelBtns.length !== 6) fail("每份报告都应有一个「删除」动作，实际 " + cDelBtns.length);
+for (const b of cDelBtns) if (typeof b.props.onClick !== "function") fail("报告删除按钮缺少回调");
 const cSavedFetch = globalThis.fetch;
 const cReadPending = [];
 cViewController.set = (patch) => Object.assign(cViewSnapshot, patch);
 globalThis.fetch = (url) => new Promise((resolve) => cReadPending.push({ url: String(url), resolve }));
 try {
-  cFiles[0].props.onClick();
-  cFiles[2].props.onClick();
+  cOpenBtns[0].props.onClick();
+  cOpenBtns[2].props.onClick();
   if (cReadPending[0].url !== "/api/dsh-novel-writer/reports?read=" + encodeURIComponent("测试书__base-full.json")) fail("友好报告名改变了原文件请求");
+  // v6.8.0：逐条删除要先过确认框；取消时不得发出任何请求
+  const cSavedConfirm = globalThis.confirm;
+  globalThis.confirm = () => false;
+  try {
+    cDelBtns[0].props.onClick();
+    if (cReadPending.length !== 2) fail("取消确认后不应发出删除请求，实际 " + cReadPending.length);
+  } finally { globalThis.confirm = cSavedConfirm; }
   cReadPending[1].resolve({ ok: true, json: () => Promise.resolve({ ok: true, content: { id: "new" } }) });
   await new Promise((resolve) => setTimeout(resolve, 0));
   cReadPending[0].resolve({ ok: true, json: () => Promise.resolve({ ok: true, content: { id: "old" } }) });
   await new Promise((resolve) => setTimeout(resolve, 0));
   if (cViewSnapshot.reportContent !== JSON.stringify({ id: "new" }, null, 2)) fail("旧报告响应覆盖了新报告，reqId 过期丢弃失效");
 } finally { globalThis.fetch = cSavedFetch; }
-console.log("v7-C：基线空态/唯一主按钮/网格 | 报告按书分组/名称映射/原文件请求/reqId 过期丢弃 ✓");
+console.log("v7-C：基线空态/唯一主按钮/网格 | 报告按书分组/名称映射/原文件请求/逐条删除（取消确认不发请求）/reqId 过期丢弃 ✓");
 
 // 导航行重排不能丢掉 reports 入口加载、demo 的不落盘与 finally 复位行为。
 const homeFetch = globalThis.fetch;
