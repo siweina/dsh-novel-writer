@@ -459,6 +459,14 @@ head("【B】断言 2~6 · 不变量与守卫（预期：现在就全绿）");
     (sty.errors.length ? `：${sty.errors.slice(0, 5).join("；")}${sty.errors.length > 5 ? " …" : ""}` : "") +
     `；全局关键字豁免 ${sty.warnings.length} 条` +
     (sty.warnings.length ? "（见下方 ⚠，不判红）" : ""));
+  // v6.8.0 回归（实测踩过）：.nwReportsFile 从 <button> 改成 <div> 后，UA 不再兜底 box-sizing，
+  // 规则里的 width:100% + 左右 padding 会让整行比卡片宽 32px，最右侧的删除按钮被 overflow:hidden 裁掉。
+  {
+    const rule = /\.nwReportsFile\{([^}]*)\}/.exec(css);
+    const hasBox = rule ? /box-sizing\s*:\s*border-box/.test(rule[1]) : false;
+    report("B", 6, "B6.5", ".nwReportsFile 规则声明 box-sizing:border-box（该行是 div，UA 不兜底）", hasBox,
+      rule ? (hasBox ? "已声明" : "缺 box-sizing:border-box（会溢出卡片并裁掉行尾按钮）") : "未找到 .nwReportsFile 规则");
+  }
 }
 
 // ---------- ⚠ 豁免警告（不判红，但必须让总负责人看见） ----------
