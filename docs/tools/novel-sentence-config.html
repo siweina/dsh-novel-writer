@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_sentence_config — 开关配置｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_sentence_config 的实现细节：get/set 参数白名单、状态文件字段与默认值、生效值优先级、工具开关与功能开关的语义、风格基线容差的钳制规则，以及 rawWriting 的写入位置。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_sentence_config","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-config.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_sentence_config — 开关配置｜dsh-novel-writer 技术文档","description":"novel_sentence_config 的实现细节：get/set 参数白名单、状态文件字段与默认值、生效值优先级、工具开关与功能开关的语义、风格基线容差的钳制规则，以及 rawWriting 的写入位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-config.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.8.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_sentence_config, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_sentence_config — 开关配置｜dsh-novel-writer 技术文档","description":"novel_sentence_config 的实现细节：get/set 参数白名单、状态文件字段与默认值、生效值优先级、工具开关与功能开关的语义、风格基线容差的钳制规则，以及 rawWriting 的写入位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-config.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.9.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_sentence_config, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -253,10 +253,13 @@ atomicWriteJson(file, obj):
 
       <h3>7 · <code>rawWriting</code> 的语义与写入位置</h3>
       <div class="formula">写入位置：state.json 的 features.rawWriting      （默认 false）
-生效位置：DSH 系统提示词 section "novel-writing:raw-writing"，order = 151
-    读 readSentenceStateSync().features.rawWriting === true 时注入 RAW_WRITING_PROMPT
-    否则返回空串（宿主丢弃空段落，等于不注入）</div>
-      <p><code>RAW_WRITING_PROMPT</code> 的文本为「非净化模式已开启（用户已确认）」加四条要求：照原文的细节密度与露骨程度描写血腥 / 暴力 / 成人场景、不回避不委婉化、保持原文用词与动作细节、仅限用户个人创作。GUI 中开启该开关需经过双重确认与承诺输入；<strong>通过本工具直接传 <code>{ features: { rawWriting: true } }</code> 会跳过这套确认流程</strong>，因此只应在用户明确要求时使用。</p>
+生效位置：① DSH 系统提示词 section "novel-writing:raw-writing"，order = 151
+              读 readSentenceStateSync().features.rawWriting === true 时注入 RAW_WRITING_PROMPT
+          ② v6.9.0：novel_chapter_brief 的 rawMode 分区 / novel_new_chapter 的 rawMode 提示
+          ③ v6.9.0：llm/stream 兜底层（三层闸门，见 lib/rawguard.js）
+          ④ v6.9.0：novel_style_check 的 explicitness 对照</div>
+      <p><code>RAW_WRITING_PROMPT</code>（v6.9.0 重写）的文本为「非净化模式已开启（用户已确认）」加逐条可检查的写法约束：留在场景里、细节密度对齐原著、该发生的场面直接写出来（不用省略号带过 / 不跳到事后 / 不用「不知过了多久」）、不用总结或代称代替场面、不插评论与免责；并写明「只改怎么写，不改写什么」，边界限定为用户自己的虚构作品。</p>
+      <p><strong>v6.9.0 起这个开关不只改提示词</strong>：开启后 ② 开写包与建章返回会带原著「淡化写法」基线（处/千字，启发式）与本章目标带；③ 模型若在输出开头自行刹车（明示跳过 / 跳出场景的评论 / 英文淡化），<code>llm/stream</code> 那一层会丢弃本次输出并<strong>只重试一次</strong>；④ 风格自检会给出「本章 vs 原著」的直白度对照。三层都只依赖开关本身（外加系统提示里的标记），开关一关即全部停用。GUI 中开启该开关需经过双重确认与承诺输入；<strong>通过本工具直接传 <code>{ features: { rawWriting: true } }</code> 会跳过这套确认流程</strong>，因此只应在用户明确要求时使用。</p>
       <p>与之相邻但属于<strong>独立维度</strong>的是系统提示词档位 <code>systemPromptMode</code>（<code>off</code> / <code>brief</code> / <code>full</code>）与场景 <code>promptScene</code>（<code>general</code> / <code>writing</code> / <code>revising</code> / <code>auditing</code> / <code>setup</code>）：两者同样落在状态文件里，但只影响「小说写作助手」这一段提示词的注入，与工具能力无关。详见下一节。</p>
 
       <h3>8 · 语义引擎状态（<code>embedding</code>）</h3>

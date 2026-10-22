@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_new_chapter — 新建章节｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_new_chapter 的实现细节：章号解析与文件名归一、wx 独占写入的防覆盖语义、标题与正文的合成文本口径、风格基线 μ 摘要（含取样范围披露）与风格锚包的生成规则、「基线怎么用」的非强制口径，以及对调用方模型的约束。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_new_chapter","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-new-chapter.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_new_chapter — 新建章节｜dsh-novel-writer 技术文档","description":"novel_new_chapter 的实现细节：章号解析与文件名归一、wx 独占写入的防覆盖语义、标题与正文的合成文本口径、风格基线 μ 摘要（含取样范围披露）与风格锚包的生成规则、「基线怎么用」的非强制口径，以及对调用方模型的约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-new-chapter.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.8.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_new_chapter, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_new_chapter — 新建章节｜dsh-novel-writer 技术文档","description":"novel_new_chapter 的实现细节：章号解析与文件名归一、wx 独占写入的防覆盖语义、标题与正文的合成文本口径、风格基线 μ 摘要（含取样范围披露）与风格锚包的生成规则、「基线怎么用」的非强制口径，以及对调用方模型的约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-new-chapter.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.9.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_new_chapter, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -67,6 +67,7 @@
           <tr><th><code>reminder</code></th><td>string</td><td>「<strong>基线怎么用</strong>」提示（v5.1.0 改口径：此前这段标题里带「强制」二字，现改为「基线怎么用」）：① <strong>锚段读一遍校准语感</strong>（<strong>不要照 <code>skeletons</code> 造句</strong>）② 写完<strong>建议</strong>跑一次 <code>novel_style_check</code> 自检，<strong>偏离明显时才逐句修正</strong>。当前实现下恒有值</td></tr>
           <tr><th><code>anchors</code></th><td>array</td><td>风格锚·代表性段落，元素 <code>{ label, text }</code>，<strong>最多 5 条</strong>。<strong>v6.5.5 起与基线同范围</strong>：语料先按面板「基线范围」筛选既有章节（新章本就不参与——它是刚创建的稿子，不能当「原著样例」）</td></tr>
           <tr><th><code>skeletons</code></th><td>array</td><td>句式骨架，元素 <code>{ type, text }</code>，<strong>最多 4 条</strong></td></tr>
+          <tr><th><code>rawMode</code></th><td>string</td><td><strong>v6.9.0，仅非净化模式（<code>features.rawWriting</code>）开启时出现</strong>：与开写包【非净化模式·目标带】同源的一段写作约束（留在场景里 / 细节密度对齐原著 / 不用省略号或跳场带过 / 不用总结代称代替场面 / 不插评论与免责）。开关关闭时该键<strong>不存在</strong>（不是空串）</td></tr>
         </tbody>
       </table>
 
