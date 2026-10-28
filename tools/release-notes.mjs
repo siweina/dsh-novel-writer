@@ -26,12 +26,21 @@ try {
   console.error("读不到 CHANGELOG.md");
 }
 
-/** 取 `## [x.y.z] ...` 到下一个 `## [` 之间的小节 */
+/**
+ * 取 `## [x.y.z] ...` 到下一个 `## [` 之间的小节。
+ *
+ * v6.9.0 起 CHANGELOG 的每个版本是「分类摘要 + 折叠的技术记录（原文）」：
+ * Release 正文只用前半段——折叠块是仓库里的历史留存，塞进 Release 会与页面上的
+ * 「Assets / 讨论」重复，而且里面的旧链接会自指。所以这里剥掉 <details> 与 Release 链接行。
+ */
 function sectionOf(md, ver) {
   const re = new RegExp("^## \\[" + ver.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\][^\\n]*\\n", "m");
   const m = re.exec(md);
   if (!m) return "";
-  return md.slice(m.index + m[0].length).split(/^## \[/m)[0].trim();
+  let out = md.slice(m.index + m[0].length).split(/^## \[/m)[0].trim();
+  out = out.replace(/<details>[\s\S]*?<\/details>/g, ""); // 技术记录（原文）不进 Release 正文
+  out = out.replace(/^\[GitHub Release\]\([^)]*\)\s*$/gm, ""); // 自指链接
+  return out.replace(/\n{3,}/g, "\n\n").trim();
 }
 
 const section = sectionOf(changelog, version);
