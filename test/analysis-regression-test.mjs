@@ -176,4 +176,12 @@ assert.equal(emotionComplexity([{ chapter: "a", counts: { sorrow: 5, joy: 3 } }]
 // 第 30 / 31 条（注释与命名，无行为断言，防回归）：DUTIR 上限仍为 8，长词表条目可命中
 assert.equal(joyCount("他久旱逢甘雨。"), 1); // 5 字 DUTIR 词（旧上限 4 时恒不命中）
 
+// v6.9.0 词表审查修复回归：
+// ① DUTIR_TO_EMOTION 不把「恶」映射为 anger
+assert.equal(emotionCount("这味道真令人恶心。", "anger"), 0);
+
+// ② negatedAt 单字否定词前缀防误判（淹没/苏莫）
+const suMo = analyzeText("苏莫大吃一惊。").emotion.scores.find((e) => e.emotion === "surprise")?.count ?? 0;
+assert.ok(suMo > 0, "苏莫中的「莫」不得把「大吃一惊」当成被否定情绪反转");
+
 console.log("Analysis regression tests passed");

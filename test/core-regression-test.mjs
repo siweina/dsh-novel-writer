@@ -4,10 +4,12 @@ import { tmpdir, homedir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import {
+  auditLexicon,
   createOutlineTool,
   decodeTextBuffer,
   detectChapterBridge,
   enrichSemanticImplicit,
+  extractKeywords,
   findChapter,
   internalRoot,
   isAbort,
@@ -29,6 +31,7 @@ import {
   resolveUiRootInfo,
   writeLexicon
 } from "../lib/core.js";
+import { measureStyleMetrics } from "../lib/style-metrics.js";
 import * as embedding from "../lib/embedding.js";
 import { apply } from "../lib/index.js";
 import { buildChapterBrief } from "../lib/brief.js";
@@ -575,4 +578,46 @@ test("v6.4.0：lastRoot 不记录显式 root 与 cwd 兜底，但配置根正常
     else process.env.DSH_NOVEL_WRITER_STATE = prev;
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("v6.9.0 词表审查修复回归：auditLexicon 不把专名自身含有的替身词算作违规命中", () => {
+  const result = auditLexicon(
+    [{ term: "魔导步枪", avoid: ["步枪"] }],
+    "战士手持魔导步枪冲锋。\n"
+  );
+  assert.equal(result.coveredCount, 1);
+  assert.equal(result.avoidHits.length, 0, "魔导步枪命中处不得因包含「步枪」而产生 avoid 误报");
+});
+
+test("v6.9.0 词表审查修复回归：extractKeywords 去重与候选规范", () => {
+  const text = "林风站在山崖上。林风看着远方。林风握紧了拳头。";
+  const kw = extractKeywords(text, 10);
+  const terms = kw.map((k) => k.word);
+  assert.equal(new Set(terms).size, terms.length, "提取的关键词不得有重复项");
+});
+
+test("v6.9.0 词表审查修复回归：measureStyleMetrics 的修饰词与抽象词判定", () => {
+  // 「天真的」与「所有的」必须计为真实修饰词（adjMods）
+  const m1 = measureStyleMetrics("他露出了天真的笑容。");
+  assert.ok(m1.detail.adjMods > 0, "天真的 应当被计入真实修饰词");
+  const m2 = measureStyleMetrics("他交出了所有的希望。");
+  assert.ok(m2.detail.adjMods > 0, "所有的 应当被计入真实修饰词");
+
+  // 假阳性停用词（如「认真」「写信」「方法」不再因末字为「真」「信」「法」而误计为抽象概念）
+  const m3 = measureStyleMetrics("他认真地写信。");
+  assert.equal(m3.detail.abstractCount, 0, "认真/写信 不得因末字为抽象后缀而误计为抽象概念");
+  const m4 = measureStyleMetrics("这个方法很管用。");
+  assert.equal(m4.detail.abstractCount, 0, "方法 不得因末字为「法」而误计为抽象概念");
+  const m5 = measureStyleMetrics("他心中涌起一阵孤独感。");
+  assert.ok(m5.detail.abstractCount > 0, "孤独感 应当被计入抽象概念");
+});
+
+test("v6.9.0 词表审查修复回归：未登记 worldview 时 brief 仍注入默认禁用词", async () => {
+  await withBook(async ({ root, book, chapterDir }) => {
+    await writeFile(join(chapterDir, "第01章.md"), "骑士推开大门。\n", "utf8");
+    const brief = await buildChapterBrief(root, book, "next", {});
+    assert.ok(brief.avoid.some((a) => a.kind === "禁词"), "未登记 worldview 时 brief.avoid 必须注入默认禁用词");
+    assert.ok(brief.worldview && brief.worldview.bannedWords.length > 0, "brief.worldview 必须注入默认禁用词列表");
+    assert.ok(brief.degraded.some((d) => d.includes("默认禁用词表")), "未登记 worldview 时 degraded 必须说明已注入默认禁用词表");
+  });
 });

@@ -138,4 +138,4 @@ python -m http.server 8080
 
 技术文档子页面的参数与公式均取自插件源码（`lib/index.js`、`lib/analysis.js`、`lib/style-metrics.js`、`lib/embedding.js`、`lib/core.js`、`lib/brief.js`、`lib/fixplan.js`、`lib/graph.js`、`lib/prompts.js`、`lib/log.js`、`lib/diagnose.js`、`mcp/server.mjs`），改动实现后请同步更新对应页面。
 
-> **发版提醒（v6.6.0 实测）**：`tools/bump-version.mjs` 只改 `docs/**` 的 `"softwareVersion"` 机器字段与 `docs/index.html` 的 `brand__ver` 徽章，**不改** `docs/tools/index.html` 顶部那句可见的「当前版本 `x.y.z`」，也不改本文件与 `docs/releasing.md` 里写死的工具数——这三处需随版本 / 工具数人工同步。
+> **发版提醒（v6.6.0 实测，v6.9.5 已补一处）**：`tools/bump-version.mjs` 改 `docs/**` 的 `"softwareVersion"` 机器字段、`docs/index.html` 的 `brand__ver` 徽章，以及（**v6.9.5 起**）`docs/tools/index.html` 顶部那句可见的「当前版本 `x.y.z`」；**仍不改**本文件与 `docs/releasing.md` 里写死的工具数——这两处需随工具数人工同步。改完请跑 `node tools/check-release.mjs` 复验。

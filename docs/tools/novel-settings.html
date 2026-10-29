@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_settings — 设定五张表｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_settings 的实现细节：五张设定表的 listKey 映射、category 与 action 的枚举回退、各动作返回体差异、worldview 语用规范自动推导、worldview 逐词静音 allowWords（v6.5.0：仅本书生效的静音，及其登记通道现状）、scan 候选提取正则与 detect 文化基准评分公式。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_settings","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-settings.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_settings — 设定五张表｜dsh-novel-writer 技术文档","description":"novel_settings 的实现细节：五张设定表的 listKey 映射、category 与 action 的枚举回退、各动作返回体差异、worldview 语用规范自动推导、worldview 逐词静音 allowWords（v6.5.0：仅本书生效的静音，及其登记通道现状）、scan 候选提取正则与 detect 文化基准评分公式。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-settings.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.9.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_settings, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_settings — 设定五张表｜dsh-novel-writer 技术文档","description":"novel_settings 的实现细节：五张设定表的 listKey 映射、category 与 action 的枚举回退、各动作返回体差异、worldview 语用规范自动推导、worldview 逐词静音 allowWords（v6.5.0：仅本书生效的静音，及其登记通道现状）、scan 候选提取正则与 detect 文化基准评分公式。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-settings.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.9.5","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_settings, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -115,15 +115,15 @@
   ],
   "worldview": [
     { "name": "东方/中式古代", "basis": "全篇出现客栈、掌柜、时辰",
-      "ritual": "中式宗教仪式=焚香/上香/跪拜；禁点烛/弥撒/礼拜",
+      "ritual": "中式宗教仪式=焚香/上香/跪拜；禁祭坛点烛/弥撒/做礼拜",
       "bannedWords": ["教堂", "神甫"],
       "recommended": { "教堂": "庙/寺" },
-      "speechStyle": { "title": "中式称谓：老爷/夫人/姑娘/小姐/官人可用；禁 Miss/Mr.+名式的西式称呼",
+      "speechStyle": { "title": "中式称谓：老爷/夫人/姑娘/小姐/官人/先生可用；禁 Miss/Mr.+名式的西式称呼",
                        "tone": "中式对话：可文言客套（老夫/在下/承蒙/赐教/小姐）；禁西式口语（Ah/well/我的上帝）",
-                       "honorBad": ["Miss", "先生", "阁下", "Thank you", "if you please"],
-                       "honorGood": { "先生": "老爷/相公" },
-                       "ritualBadPatterns": ["点烛", "蜡烛", "礼拜", "祈祷跪下?", "light candle"],
-                       "ritualGoodNote": "中式宗教仪式=焚香/上香/跪拜；禁点烛/弥撒/礼拜" } }
+                       "honorBad": ["Miss", "阁下", "Thank you", "if you please"],
+                       "honorGood": { "阁下": "大人/官人" },
+                       "ritualBadPatterns": ["祭坛点烛|点起?祈祷烛", "祭坛蜡烛|祷告蜡烛|献祭蜡烛", "做礼拜|礼拜日|礼拜天|主日礼拜|教堂礼拜", "祈祷跪下?", "light candle"],
+                       "ritualGoodNote": "中式宗教仪式=焚香/上香/跪拜；禁祭坛点烛/弥撒/做礼拜" } }
   ]
 }</code></pre>
       <p>字段结构取自 <code>normalizeSettingEntry</code> 的白名单；上例数值与文本为示意。</p>

@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="技术文档总览｜dsh-novel-writer">
 <meta name="twitter:description" content="dsh-novel-writer 的 21 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","name":"技术文档总览｜dsh-novel-writer","description":"dsh-novel-writer 的 21 个工具实现细节：参数契约、计算原理、约束边界与源码位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/index.html","inLanguage":"zh-CN","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.9.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer","url":"https://siweina.github.io/dsh-novel-writer/"}}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","name":"技术文档总览｜dsh-novel-writer","description":"dsh-novel-writer 的 21 个工具实现细节：参数契约、计算原理、约束边界与源码位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/index.html","inLanguage":"zh-CN","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.9.5","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer","url":"https://siweina.github.io/dsh-novel-writer/"}}</script>
 </head>
 <body class="docs">
 
@@ -33,7 +33,7 @@
   <main class="docs__main">
     <article class="doc">
       <h1>技术文档</h1>
-      <p class="doc__version">当前版本 <code>6.8.0</code> · 更新记录见 <a href="https://github.com/siweina/dsh-novel-writer/blob/main/CHANGELOG.md">CHANGELOG</a>（下方「版本说明」）</p>
+      <p class="doc__version">当前版本 <code>6.9.5</code> · 更新记录见 <a href="https://github.com/siweina/dsh-novel-writer/blob/main/CHANGELOG.md">CHANGELOG</a>（下方「版本说明」）</p>
       <p class="doc__lead">
         <code>dsh-novel-writer</code> 的 21 个工具全部在本地运行，<strong>不使用在线大模型</strong>：所有指标由规则统计与本地 ONNX 推理得出。本组页面面向二次开发与集成方，逐工具说明参数契约、计算原理、约束边界与源码位置。
       </p>
@@ -55,6 +55,12 @@
       <ul class="doc__releases">
         <li>
           <details open>
+            <summary><code>6.9.5</code> · 2026-10-29 <span class="doc__rel-sum">词表体系集中整修：修掉情绪虚高与六维失真，修「先生 / 蜡烛」误伤中式日常语境</span></summary>
+            <p>这一版只处理审查中已确认的问题，不发新功能。三处影响最大的修复：<b>① 愤怒情绪虚高</b>——<code>DUTIR_TO_EMOTION</code> 此前把大连理工词典的「恶」类（10,262 词，含无聊 / 尴尬 / 愚蠢 / 虚伪 / 啰嗦等贬义评价）全部映射成「愤怒」，导致表面主导情绪偏向 anger 并连带推高氛围轴；现在「恶」不再计入五类主情绪，只由效价词库承担负向。<b>② 开写包与审计口径分裂</b>——未登记 <code>worldview</code> 时开写包此前直接返回 <code>worldview: null</code>（不给禁词），写完后审计却按默认表报错；现在两边统一走同一裁决点，开写包按文化基准注入默认表并在降级说明里写明「哪套基准、共多少条」。<b>③ 东方语用误伤</b>——从东方禁用称谓移除「先生」（教书先生 / 账房先生 / 说书先生 属正常用法），并把「点烛 / 蜡烛 / 礼拜」三条<b>硬</b>规则收窄为「祭坛点烛 / 祭坛蜡烛·祷告蜡烛·献祭蜡烛 / 做礼拜·礼拜日·主日礼拜」，此前「点起蜡烛」「礼拜佛祖」会被判硬错误。<br>其余修复：单字否定词（没 / 莫 / 无 / 未）误吞角色名后的情绪词（「苏莫愤怒」「林未恐惧」）；修饰密度误杀「天真的 / 认真的 / 所有的 / 原有的」；动作密度混入 70 余个非动词与性质形容词导致虚高，且二字程度副词（十分 / 非常 / 格外）未豁免；抽象度按任意 2~4 字切片（「他很想」「天空」「认真」「她醒来」全部命中）；必用词审计在专名与替身词互相包含时（「魔导步枪」vs「步枪」）误报；关键词提取的停用字条件写反（<code>||</code> 应为 <code>&amp;&amp;</code>）导致「她的 / 着她」霸榜；大纲解析漏认「节」；幽默度扫描只看前 6000 字；对话占比把 ASCII 直引号数了两次；文化基准检测与「文化基准存疑」提示未接子串碰撞守卫。<br>词表扩充：西幻标记词补 28 个高信号词（子爵 / 大公 / 纹章 / 骑士团 / 告解室 / 魅魔 / 地下城 / 羊皮纸 / 先令 等），中式标记词补齐与禁用词表一致的 27 个市井与制度词，非净化模式的淡化特征库补时间跳跃 / 委婉总结 / 元评论三类，意象载荷补五组微表情与肢体反应。另为「失敬 / 银子 / 银两 / 铜钱 / 包袱」补上前后字守卫与实证反例。<br><b>升级须知</b>：缓存随版本号失效，首次分析会重建；动作密度、抽象度、修饰密度与愤怒占比在多数书上会<b>下降</b>（修掉虚高，不是退化），跨版本对照请用本版重取基线；词表扩张会让既有书<b>新出现</b>一些用语候选（覆盖变宽，不是新增误报）。工具数仍为 21，参数契约与书库格式不变。</p>
+          </details>
+        </li>
+        <li>
+          <details>
             <summary><code>6.9.0</code> · 2026-10-22 <span class="doc__rel-sum">非净化模式重做：动笔前给目标带、动笔时兜底、写完可核对（新增「直白度」度量）</span></summary>
             <p>起因是用户反馈「非净化模式开了跟没开一样」。核查结论：旧版只往系统提示里加 5 行抽象要求，<b>动笔那一刻模型拿到的材料里一个字都没有</b>——问题不在力度，在可执行性与位置。本版改成三层：① <b>动笔前</b>——<a href="novel-chapter-brief.html">novel_chapter_brief</a> 新增 <code>rawMode</code> 分区（原著「把场面绕过去」的写法密度、处/千字，启发式；本章目标带；一条硬约束同时进 <code>plan.checklist</code>），建章返回也带同一提示；② <b>动笔时</b>——新增 <code>llm/stream</code> 兜底层：三层闸门（开关 / 系统提示里的非净化模式标记 / 输出开头的自我刹车特征）全中时，丢弃本次输出<b>只重试一次</b>，重试只在系统消息尾部追加写作指令（不改用户消息，不用「你已获授权」这类话术），事件记 <code>raw</code> 日志且不记录任何正文；③ <b>写完后</b>——新增直白度度量（<code>lib/explicit.js</code>，纯规则、零 token）：六类淡化写法密度 + 对话段落占比，<a href="novel-style-check.html">novel_style_check</a> 在开关打开时给出「本章 X 处/千字 vs 原著 Y 处/千字」与一句结论（clean / new / similar / softer / much-softer / more-explicit）。<b>与同类「破甲」插件的取舍</b>：只借「注入位置 + 拒绝检测重试」的工程结构，不借去人格 / 宿主补丁 / 「永不拒绝」那套——那套会改变整个 agent 的行为边界，超出本插件职责。<b>已知边界</b>：直白度是启发式（只数明确的淡化写法，不数比喻多、句子长这类风格差异），不作为质量评分；重试只一次且只认三类自我刹车特征；兜底依赖宿主 <code>llm/stream</code>，缺失时安静跳过并留痕；效果取决于模型本身。工具数 21、参数契约与书库格式不变。</p>
           </details>

@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_sentence_analysis — 句式模式分析｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_sentence_analysis 的实现细节：九类句式的分类优先级与切句规则、句式转移与模板统计、句长分布、情感词扫描与净化、情感曲线与 Valence 量化、风格指纹、节奏建议，以及缓存键、上限与降级路径。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_sentence_analysis","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-analysis.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_sentence_analysis — 句式模式分析｜dsh-novel-writer 技术文档","description":"novel_sentence_analysis 的实现细节：九类句式的分类优先级与切句规则、句式转移与模板统计、句长分布、情感词扫描与净化、情感曲线与 Valence 量化、风格指纹、节奏建议，以及缓存键、上限与降级路径。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-analysis.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.9.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_sentence_analysis, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_sentence_analysis — 句式模式分析｜dsh-novel-writer 技术文档","description":"novel_sentence_analysis 的实现细节：九类句式的分类优先级与切句规则、句式转移与模板统计、句长分布、情感词扫描与净化、情感曲线与 Valence 量化、风格指纹、节奏建议，以及缓存键、上限与降级路径。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-analysis.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.9.5","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_sentence_analysis, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -143,7 +143,13 @@ distribution 桶 = 1-10 / 11-24 / 25-40 / 41+</div>
 
 逐次命中后：
   ① 否定过滤 negatedAt(text, idx)
-     单字否定：不 没 无 别 莫 未；「别」在 36 个构词前字之后（特别/别人/告别…）不算否定
+     单字否定：不 没 无 别 莫 未
+       · 「别」在构词前字之后（特别/别人/告别…）不算否定
+       · v6.9.5 起这四个单字各配构词反例表（原来只有「别」有）：
+         「没」淹/出/沉/埋/覆/辱/隐/吞/泯（淹没/出没…）
+         「莫」约/广/落/寂/冷/沙/淡 + 常见姓氏用字（苏莫/林莫…）
+         「无」虚/空/荒/苍 + 姓氏（虚无/苏无…）
+         「未」辛/丁/乙/己/癸/岁 + 姓氏（辛未/林未…）
      双 / 三字前缀 22 项：不要 不用 不必 不再 不是 并非 绝非 毫不 丝毫不 从不 从未
                           没有 没啥 未曾 无法 难以 不太 不很 不怎么 不算 算不上 谈不上
   ② 副词加权 adverbWeight(text, idx)
@@ -151,6 +157,7 @@ distribution 桶 = 1-10 / 11-24 / 25-40 / 41+</div>
      命中强副词 13 项 → ×1.5；命中弱副词 8 项 → ×0.6；其余 ×1
      单字副词（太 / 略 / 挺）必须紧邻情感词，且左邻 2 字不在 19 项同形非副词搭配内（太阳/策略/省略/挺拔…）</div>
       <p>「最长匹配 + 区间消费」消除了嵌套双计：「悲痛欲绝」不再被拆成「悲痛」＋「悲痛欲绝」两分。DUTIR 兜底同样按最长优先扫描，但将上限由 4 字提到 8 字（词表最长条目 7 字），使 853 条 ≥5 字的成语级情感词恢复可命中；v6.1.0 起兜底词与主词表共享已消费区间，避免“无比幸福”中的“幸福”再次计分。兜底词不做强弱分级，只进 <code>scores</code> 不进 <code>cleanScores</code>。</p>
+      <p><strong>v6.9.5：DUTIR 的「恶」类不再计入五类主情绪。</strong>大连理工词典的「恶」大类有 <strong>10,262 个词</strong>（占全表 37%，含憎恶 / 烦闷 / 羞愧 / 嫉妒 / 贬义评价如无聊 / 尴尬 / 愚蠢 / 虚伪 / 啰嗦），旧映射是 <code>恶: "anger"</code>，于是「他很无聊，场面尴尬」会被算成 4 分愤怒、「表面主导情绪」直接变成 anger，并连带推高氛围轴的暗黑 / 热血评分。现在「恶」<strong>不映射</strong>到 joy/anger/sorrow/fear/surprise，只由 <code>VALENCE_WORDS</code> 承担负向效价；同时强情绪词表补入狂喜 / 欢天喜地 / 怒发冲冠 / 心灰意冷 / 恐慌，「脸色铁青」「怒气」补进效价表。</p>
 
       <h3>6 · 情绪污染源与置信度</h3>
       <div class="formula">污染词表 52 条，分三类：r18 26 条 / battle 13 条 / horror 13 条

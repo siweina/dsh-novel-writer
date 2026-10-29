@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_lexicon — 必用词表｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_lexicon 的实现细节：两层存储与同名覆盖、九个 action、开写包硬清单注入与 60/200 截断、audit 的覆盖率与通用词顶替行号、与 worldview bannedWords 的分工。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_lexicon","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-lexicon.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_lexicon — 必用词表｜dsh-novel-writer 技术文档","description":"novel_lexicon 的实现细节：两层存储与同名覆盖、条目字段归一、批量录入行格式、九个 action、开写包硬清单注入与 60/200 截断、成稿 audit 的覆盖率与通用词顶替行号归因、与 novel_settings worldview bannedWords 的分工。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-lexicon.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.9.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_lexicon, 必用词表, 优先用词, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_lexicon — 必用词表｜dsh-novel-writer 技术文档","description":"novel_lexicon 的实现细节：两层存储与同名覆盖、条目字段归一、批量录入行格式、九个 action、开写包硬清单注入与 60/200 截断、成稿 audit 的覆盖率与通用词顶替行号归因、与 novel_settings worldview bannedWords 的分工。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-lexicon.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.9.5","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_lexicon, 必用词表, 优先用词, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -198,11 +198,14 @@ enabled  = 仅 <code>false</code> 落盘（true 不写这个键，即「默认�
 
       <h3>6 · 成稿审计 <code>audit</code>（只读）</h3>
       <div class="formula">对每一条启用词条（排序同开写包，上限 0 = 不限）：
-    forms = [term, ...aliases]
-    count = forms 在正文各行的<strong>子串命中次数合计</strong>（同一行可多次命中）
+    forms = [term, ...aliases]（去重，按词长降序匹配）
+    count = forms 在正文各行的<strong>子串命中次数合计</strong>，<strong>重叠区间只计一次</strong>
+            （v6.9.5：登记「圣殿骑士」+ 别名「骑士」时，一行 1 次不再算成 2 次）
     count &gt; 0 → covered  &#123; term, count, firstLine &#125;
     count = 0 → missing  &#123; term, kind, scene, priority &#125;
-    每条 avoid 词：正文任一行 <code>indexOf</code> 命中即记一行
+    每条 avoid 词：正文任一行 <code>indexOf</code> 命中即记一行，
+        但<strong>落在 term / aliases 命中区间内的一律跳过</strong>
+        （v6.9.5：登记「魔导步枪」+ 替身词「步枪」时，正文写对「魔导步枪」不再误报「用了通用替身词」）
         avoidHits &#123; term, word, line, snippet（该行前 46 字 + …） &#125;
 
 coverage = round(covered.length / total × 1000) / 10   ← 单位为 %

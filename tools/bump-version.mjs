@@ -147,6 +147,24 @@ if (pageMissing.length) changes.push(`⚠ 不存在的页面：${pageMissing.joi
   }
 }
 
+// 4c) docs/tools/index.html 的**可见**版本行（doc__version）
+// ⚠️ 它同样不在 JSON-LD 里：只改 softwareVersion 会让「技术文档」首页一直写着旧版本号
+//    （v6.9.5 实测踩到：页面还停在 6.8.0，用户一眼就看到了）。
+{
+  const p = join(docsDir, 'tools', 'index.html');
+  if (existsSync(p)) {
+    const t = readFileSync(p, 'utf8');
+    const re = /(<p class="doc__version">当前版本 <code>)(\d+\.\d+\.\d+)(<\/code>)/g;
+    const found = [...t.matchAll(re)];
+    if (found.length === 0) changes.push('⚠ docs/tools/index.html 未找到可见版本行（doc__version），请人工确认');
+    else if (found.every((m) => m[2] === NEW)) changes.push(`docs/tools/index.html 可见版本行已是 ${NEW} ✓`);
+    else {
+      changes.push(`docs/tools/index.html 可见版本行：${found.map((m) => m[2]).join(', ')} → ${NEW}`);
+      w(p, t.replace(re, `$1${NEW}$3`));
+    }
+  }
+}
+
 // 5) CHANGELOG 章节
 const clPath = join(REPO, 'CHANGELOG.md');
 if (existsSync(clPath)) {
