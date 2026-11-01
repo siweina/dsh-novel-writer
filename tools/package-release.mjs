@@ -26,11 +26,12 @@ const pkg = JSON.parse(readFileSync(join(REPO, 'package.json'), 'utf8'));
 const VER = pkg.version;
 const DESKTOP = join(process.env.USERPROFILE || 'C:\\Users\\zg', 'Desktop');
 
-const EXCLUDE_TOP = new Set(['.git', '.github', 'dist', 'docs', 'node_modules', 'tmp-route-book']);
+// v7.0.0 修正（审查实测）：`_v2probe/` 与 `tools/audit/` 是**开发期探针**，
+// 里面写死了本机绝对路径（F:/doment/...、C:\Users\...）——打进交付物既污染包体，也会泄露本机目录结构。
+// 产物目录同样排除：它们是可随时重跑的产物，不属于发布内容。
+const EXCLUDE_TOP = new Set(['.git', '.github', 'dist', 'docs', 'node_modules', 'tmp-route-book', '_v2probe']);
 const EXCLUDE_ANY = new Set(['node_modules', '.git', '.DS_Store', 'Thumbs.db']);
-// 生成物目录：截图是开发期前后对比的**产物**（6 个目录 × 30 张 ≈ 15 MB），不属于发布内容，
-// 且随时可由 tools/visual/capture.mjs 重新生成。工装脚本、宿主令牌与冻结基线**保留**。
-const EXCLUDE_DIR_RE = /[\\/]tools[\\/]visual[\\/]shots(-[a-z0-9]+)?[\\/]/;
+const EXCLUDE_DIR_RE = /[\\/]tools[\\/]visual[\\/]shots(-[a-z0-9]+)?[\\/]|[\\/]tools[\\/]audit[\\/]/;
 
 const problems = [];
 const log = (m) => console.log('  ' + m);

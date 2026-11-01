@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_sentence_config — 开关配置｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_sentence_config 的实现细节：get/set 参数白名单、状态文件字段与默认值、生效值优先级、工具开关与功能开关的语义、风格基线容差的钳制规则，以及 rawWriting 的写入位置。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_sentence_config","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-config.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_sentence_config — 开关配置｜dsh-novel-writer 技术文档","description":"novel_sentence_config 的实现细节：get/set 参数白名单、状态文件字段与默认值、生效值优先级、工具开关与功能开关的语义、风格基线容差的钳制规则，以及 rawWriting 的写入位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-config.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.9.5","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_sentence_config, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_sentence_config — 开关配置｜dsh-novel-writer 技术文档","description":"novel_sentence_config 的实现细节：get/set 参数白名单、状态文件字段与默认值、生效值优先级、工具开关与功能开关的语义、风格基线容差的钳制规则，以及 rawWriting 的写入位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-config.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.0.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_sentence_config, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -200,7 +200,7 @@ source 文案与之一一对应：
           <tr><th><code>emotionCaveat</code></th><td><code>true</code></td><td>情感净化预警</td></tr>
           <tr><th><code>genreTheme</code></th><td><code>true</code></td><td>题材与流派检测</td></tr>
           <tr><th><code>emotionComplexity</code></th><td><code>true</code></td><td>情感复杂度量化</td></tr>
-          <tr><th><code>semanticEmbedding</code></th><td><code>true</code></td><td>本地语义增强总闸；关闭后三个 <code>semantic*</code> 子开关一并失效</td></tr>
+          <tr><th><code>semanticEmbedding</code></th><td><code>true</code></td><td>本地语义增强总闸；关闭后三个 <code>semantic*</code> 子开关一并失效。<strong>v7.0.0 起它还是改稿台「向量审计」的唯一开关</strong>（原地打转 / 大纲漏写没有独立开关）：关掉它，这两类待办会一起消失，<code>novel_fix_plan</code> 的 <code>summary</code> 会写明「向量审计已跳过：语义嵌入功能已关闭」</td></tr>
           <tr><th><code>semanticSearch</code></th><td><code>true</code></td><td>语义检索（<code>novel_semantic_search</code>）</td></tr>
           <tr><th><code>semanticStyle</code></th><td><code>true</code></td><td>衔接检查里的语义距离一路</td></tr>
           <tr><th><code>semanticImplicit</code></th><td><code>true</code></td><td>隐性情感的语义检测</td></tr>

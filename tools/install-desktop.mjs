@@ -66,9 +66,9 @@ log(`${gate === 0 ? '✓' : '✗'} build:check`);
 if (gate !== 0) problems.push('产物与构建源不一致（先跑 npm run build）');
 
 // ---------- 2) 待复制清单（与 package-release.mjs 同口径） ----------
-const EXCLUDE_TOP = new Set(['.git', '.github', 'dist', 'docs', 'node_modules', 'tmp-route-book']);
+const EXCLUDE_TOP = new Set(['.git', '.github', 'dist', 'docs', 'node_modules', 'tmp-route-book', '_v2probe']);
 const EXCLUDE_ANY = new Set(['node_modules', '.git', '.DS_Store', 'Thumbs.db']);
-const EXCLUDE_DIR_RE = /[\\/]tools[\\/]visual[\\/]shots(-[a-z0-9]+)?[\\/]/;
+const EXCLUDE_DIR_RE = /[\\/]tools[\\/]visual[\\/]shots(-[a-z0-9]+)?[\\/]|[\\/]tools[\\/]audit[\\/]/;
 function walk(dir, acc = []) {
   if (EXCLUDE_DIR_RE.test(dir + '\\')) return acc;
   for (const e of readdirSync(dir)) {

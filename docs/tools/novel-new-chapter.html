@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_new_chapter — 新建章节｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_new_chapter 的实现细节：章号解析与文件名归一、wx 独占写入的防覆盖语义、标题与正文的合成文本口径、风格基线 μ 摘要（含取样范围披露）与风格锚包的生成规则、「基线怎么用」的非强制口径，以及对调用方模型的约束。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_new_chapter","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-new-chapter.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_new_chapter — 新建章节｜dsh-novel-writer 技术文档","description":"novel_new_chapter 的实现细节：章号解析与文件名归一、wx 独占写入的防覆盖语义、标题与正文的合成文本口径、风格基线 μ 摘要（含取样范围披露）与风格锚包的生成规则、「基线怎么用」的非强制口径，以及对调用方模型的约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-new-chapter.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"6.9.5","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_new_chapter, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_new_chapter — 新建章节｜dsh-novel-writer 技术文档","description":"novel_new_chapter 的实现细节：章号解析与文件名归一、wx 独占写入的防覆盖语义、标题与正文的合成文本口径、风格基线 μ 摘要（含取样范围披露）与风格锚包的生成规则、「基线怎么用」的非强制口径，以及对调用方模型的约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-new-chapter.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.0.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_new_chapter, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -33,9 +33,10 @@
   <main class="docs__main">
     <article class="doc">
       <h1>novel_new_chapter</h1>
+      <div class="note"><b>v7.0.0：</b>新增可选参数 <code>plan</code>（动笔前针对本章各事件子句的具象执行计划，<strong>不写入正文文件</strong>，只用于写盘后核对兑现）与返回字段 <code>postWriteAudit</code>（写盘即时体检，最多 5 条，按严重度降序：未兑现的 plan 子句 / 章末升华 / 连续站桩对话 / 高频套话）。体检<strong>只告警、不阻断保存</strong>——章已经写好了，它只告诉你哪几处值得回头改。</div>
       <div class="note"><b>v6.5.5：</b>建章时附的<strong>六维基线 μ 摘要与「风格锚包」改为按面板「基线范围」取样</strong>（<strong>按全书</strong> 默认，＝旧行为；<strong>按部分</strong> 只用勾选的章，<strong>按书存储</strong>），且<strong>始终排除刚创建的新章</strong>；返回体新增 <code>baselineScope</code>（文案）与 <code>baselineMode</code>（<code>all</code> / <code>custom</code>），<strong>渲染文本也带上取样范围</strong>。此前锚段仍取全书、与基线口径不一致（书越长 AI 续写占比越高，锚段就越像 AI 自己写的——正是 issue #1 描述的漂移），本版一并修正。</div>
       <p class="doc__lead">
-        新建章节。为指定作品创建一个章节文件，章号可显式指定或自动取下一个，可同时写入 Markdown 一级标题与初始正文。<strong>同号章节一律拒绝创建，绝不覆盖既有稿件</strong>；创建成功后返回体自带<strong>按面板「基线范围」取样</strong>的六维风格基线 μ 摘要（附 <code>baselineScope</code> / <code>baselineMode</code> 范围披露）与「风格锚包」（代表性段落 + 句式骨架，<strong>与基线同范围</strong>），使调用方模型在动笔前即可拿到测量数据与用于<strong>校准语感</strong>的样例，无需先调用风格报告工具。
+        新建章节。为指定作品创建一个章节文件，章号可显式指定或自动取下一个，可同时写入 Markdown 一级标题与初始正文。<strong>同号章节一律拒绝创建，绝不覆盖既有稿件</strong>；创建成功后返回体自带<strong>按面板「基线范围」取样</strong>的六维风格基线 μ 摘要（附 <code>baselineScope</code> / <code>baselineMode</code> 范围披露）与「风格锚包」（代表性段落 + 句式骨架，<strong>与基线同范围</strong>），使调用方模型在动笔前即可拿到测量数据与用于<strong>校准语感</strong>的样例，无需先调用风格报告工具。v7.0.0 起还可传入动笔前写下的 <code>plan</code>，写盘后立刻得到一份只告警、不阻断保存的体检结论（<code>postWriteAudit</code>）。
       </p>
 
       <h2>参数</h2>
@@ -45,6 +46,7 @@
           <tr><th><code>book</code></th><td>string</td><td>是</td><td>书名，即 <code>novels/</code> 下的子目录名。经 <code>sanitizeSegment</code> 清洗：剥离 <code>\ / : * ? " &lt; &gt; |</code>、首尾点与空白，Windows 保留名（CON / NUL 等）加下划线前缀；清洗后为空则报错。目录不存在时自动创建。</td></tr>
           <tr><th><code>chapter</code></th><td>integer</td><td>否</td><td>显式章号，须为 <strong>1–99999 的整数</strong>。省略时取现有最大可解析章号 + 1。</td></tr>
           <tr><th><code>title</code></th><td>string</td><td>否</td><td>章节标题，写为正文首行 <code># 标题</code>，并（v5.0.0 起）<strong>一并进文件名</strong>：<code>第NN章 标题.md</code>。空串或纯空白视为未提供。</td></tr>
+          <tr><th><code>plan</code></th><td>string</td><td>否</td><td><strong>v7.0.0</strong>：动笔前针对本章各事件子句的<strong>具象执行计划</strong>（每行对应一条子句，写明具体器物名词、肢体动作与这一幕停在哪）。<strong>绝不写入正文文件</strong>——它只用于写盘后核对「写没写出来」（结果进 <code>postWriteAudit</code>）。参数声明里它<strong>排在 <code>content</code> 之前</strong>，因为多数模型按 schema 顺序生成参数，计划先落笔会形成一层「自我承诺」；这只是<strong>经验做法、不是协议保证</strong>——模型把它生成在 <code>content</code> 之后时兑现核对照常工作，只是承诺效应弱一些，所以不要依赖顺序做逻辑判断。</td></tr>
           <tr><th><code>content</code></th><td>string</td><td>否</td><td>初始正文。空串或纯空白视为未提供。</td></tr>
           <tr><th><code>root</code></th><td>string</td><td>否</td><td>章节库根目录。缺省回退顺序：<code>args.root</code> → <code>config.root</code> → 会话工作目录。MCP 形态下必须落在启动参数 <code>--root</code> 之内。</td></tr>
         </tbody>
@@ -68,6 +70,7 @@
           <tr><th><code>anchors</code></th><td>array</td><td>风格锚·代表性段落，元素 <code>{ label, text }</code>，<strong>最多 5 条</strong>。<strong>v6.5.5 起与基线同范围</strong>：语料先按面板「基线范围」筛选既有章节（新章本就不参与——它是刚创建的稿子，不能当「原著样例」）</td></tr>
           <tr><th><code>skeletons</code></th><td>array</td><td>句式骨架，元素 <code>{ type, text }</code>，<strong>最多 4 条</strong></td></tr>
           <tr><th><code>rawMode</code></th><td>string</td><td><strong>v6.9.0，仅非净化模式（<code>features.rawWriting</code>）开启时出现</strong>：与开写包【非净化模式·目标带】同源的一段写作约束（留在场景里 / 细节密度对齐原著 / 不用省略号或跳场带过 / 不用总结代称代替场面 / 不插评论与免责）。开关关闭时该键<strong>不存在</strong>（不是空串）</td></tr>
+          <tr><th><code>postWriteAudit</code></th><td>array</td><td><strong>v7.0.0</strong>：写盘即时体检，<strong>最多 5 条、按严重度降序</strong>，元素 <code>&#123; key, severity, title, detail &#125;</code>。<code>key</code> 取值 <code>plan_unfulfilled</code>（plan 里写了、正文里找不到的物象 / 动作，severity 5）、<code>plan_unqualified</code>（整份 plan 没有一行含具体器物或动作 → 跳过兑现核对，severity 1 提示）、<code>duplicate_h1</code>（v7.0.0：<code>title</code> 与 <code>content</code> 开头都带一级标题 → 已自动合并，severity 2；正文里<strong>还剩</strong>多处一级标题时为 severity 3 的「正文含多个一级标题」且<strong>不做</strong>合并）、以及单章症状 <code>ending_preach</code> / <code>bare_dialogue</code> / <code>slop</code>。<strong>只告警、不阻断保存</strong>；本章体检为空（或体检本身失败）时该键<strong>不存在</strong>（体检失败会记 <code>silent_skip</code> 事件日志，章照常保存）</td></tr>
         </tbody>
       </table>
 
@@ -103,6 +106,20 @@ title 与 content  → "# 标题" + "\n" + "\n" + 正文 + "\n"
 
 chars = text.length        ← UTF-16 码元数，不是纯正文长度</div>
       <p>标题行与正文之间由数组 join 产生的空行是格式的一部分，会一并计入 <code>chars</code>。该字段用于核对「是否真的写入了内容」，不代表正文字数。</p>
+      <div class="note">
+        <b>v7.0.0：<code>title</code> 与 <code>content</code> 开头的重复 <code># 标题</code> 自动合并成一条 H1。</b>只在<strong>同时传了 <code>title</code></strong> 时才做：写盘时先落 <code># &lt;title&gt;</code>；若 <code>content</code> 以一级标题行开头，先剥掉<strong>第一行</strong>标题以及紧随其后的一个换行（或一个空行），其余正文原样写入。
+        <div class="formula">title 已提供 &amp;&amp; content 以 /^\s*#\s+[^\r\n]+/ 开头
+    cleanContent = content.replace(/^\s*#\s+[^\r\n]+(?:\r?\n[ \t]*\r?\n|\r?\n|$)/, "")
+    text         = "# " + title + "\n" + "\n" + cleanContent + "\n"
+
+随后在 postWriteAudit 里核对（以剥离后的正文为准；正文为空则整段体检不出任何项）：
+    extraH1 = 正文中 /^[ \t]*#\s+\S/m 的命中数
+    ( title 已提供 &amp;&amp; extraH1 &gt;= 1 ) || ( title 未提供 &amp;&amp; extraH1 &gt;= 2 )
+        → { key:"duplicate_h1", severity:3, title:"正文含多个一级标题" }        ← 不合并
+    否则若确实剥掉过开头标题
+        → { key:"duplicate_h1", severity:2, title:"正文开头含重复一级标题（已自动合并）" }</div>
+        为什么必须合并：正文出现两条 H1，之后的 <code>splitBlocks</code> 与 <code>extractChapterTitle</code> 会把标题行当成正文段落、或把章标题取到第二条，进而影响站桩对话、章末升华这类按段落判定的体检症状口径。<strong>两条告警互斥，且都只是格式提示</strong>：保存早已完成，没有任何一项能否决这次写入；它们同属 <code>postWriteAudit</code>（最多 5 条、按 severity 降序），可能被更高优先级的项（如 <code>plan</code> 未兑现的 severity 5）挤出。
+      </div>
 
       <h3>4 · 风格基线 μ 摘要</h3>
       <div class="formula">bTexts  = 重扫目录后的全部章节（含刚创建的新章，其文本直接复用内存中的 text）
@@ -154,7 +171,22 @@ scope = resolveBaselineScope( root, book, 语料, 新章文件名 )   ← v6.5.5
          [类型] 句子…
 reminder ← 【基线怎么用】块：① 锚段读一遍校准语感，不要照 skeletons 造句
                         ② 写完建议自检，偏离明显才逐句修正
+[可选] 【写盘即时体检·只告警不阻断】（v7.0.0，postWriteAudit 非空时）
+         - &lt;title&gt;：&lt;detail&gt;
+         说明：这是刚写入的这一章的自动体检结论；要改就逐处改，别整章重写
 &lt;/content&gt;</div>
+
+      <h3>7 · 写盘即时体检 <code>postWriteAudit</code>（v7.0.0）</h3>
+      <div class="formula">体检 = diagnoseChapterSymptoms( 本次写入的正文, null )     ← 与开写包同一实现
+    只跑<b>结构性</b>症状：章末升华 / 连续站桩对话 / 高频套话
+    相对分位类（抽象度、动作 / 物件 / 感官）不做——那需要参照集，是下一章开写包的事
+若传了 plan：
+    checkPlanFulfillment( plan, 正文 )
+      → 合格且有条目没兑现：unshift「计划里有 N 条没兑现」（severity 5，列出前 4 个片段）
+      → 整份 plan 没有一行含具体器物或动作：追加「plan 格式不合格，已跳过兑现核对」（severity 1）
+postWriteAudit = 取前 5 条 → 按 severity 降序</div>
+      <p>为什么放在建章返回里：事后审计（<code>novel_style_check</code> / <code>novel_fix_plan</code>）在默认工作流里很少被主动调用，而这一段是<strong>零额外调用的触点</strong>——章刚写完、材料还在模型手里。它<strong>只告警</strong>：写入早已完成，清单里没有任何一项能否决这次保存。</p>
+      <p><strong>plan 格式不合格不是错误</strong>：整份计划里连一行具体器物或动作都没有（例如全是「按大纲推进」这类元指令），就没有可核对的东西，此时只给一条 severity 1 的提示并<strong>跳过兑现核对</strong>，不产「未兑现」告警。要它真起作用，每行至少写一个具体器物或动作，例如「柜台上的铜钱：他数了三枚推过去」。</p>
 
       <h2>约束与边界</h2>
       <ul>
@@ -163,6 +195,7 @@ reminder ← 【基线怎么用】块：① 锚段读一遍校准语感，不要
         <li><strong>并发只报错不重试</strong>：独占创建失败时返回「刚被并发创建」，需调用方自行重试或改用其它章号。</li>
         <li><strong>建目录是前置副作用</strong>：即使后续因同号失败，书目录也已被创建。</li>
         <li><strong>基线/锚包均为可选增强</strong>：任一环节抛错都被吞掉，返回体中相应字段缺失或为空数组。调用方不应假定 <code>baseline</code> 恒有值——单章作品、基线计算失败、锚包抽取失败都会导致缺失。<strong>本工具没有 <code>degraded</code> 通道</strong>，所以这些失败对调用方是沉默的；v6.6.0 起它们会在<strong>事件日志</strong>里留痕（<code>silent_skip</code>：如「建章时的原著锚段/句式骨架不可用（返回空 anchors/skeletons）」），可用 <code>novel_diagnose</code> 区分「这本书抽不出锚段」与「生成过程失败了」——前者不是故障，后者要查日志。</li>
+        <li><strong><code>plan</code> 不落盘、不进正文（v7.0.0）</strong>：它只参与写盘后的兑现核对，正文文件里没有一个字来自它；核对结果同样不落盘，只出现在本次返回体的 <code>postWriteAudit</code> 里。<code>postWriteAudit</code> 同属沉默路径：体检失败时章照常保存、该键不出现，只在事件日志留一条 <code>silent_skip</code>。</li>
         <li><strong>取样范围与回退（v6.5.5）</strong>：<code>baseline</code> 与 <code>anchors</code> 的语料由面板「基线范围」决定（<strong>按全书</strong> 默认 / <strong>按部分</strong> 只用勾选的章，<strong>按书存储</strong>），并<strong>始终排除刚创建的新章</strong>；勾选的章若<strong>取不到</strong>（已删除 / 正文过短）会被跳过并如实计数（文案「…，其中 K 章未纳入基线（已删除、或正文过短无法测量）」），<strong>一章都取不到</strong>时回退「按全书」并<strong>按原因</strong>写进 <code>baselineScope</code>（「（自定义选择已失效，已回退全书）」或「（选中的章只有本章自身，不能作为自己的基线，已回退全书）」），<strong>不返回空基线</strong>。范围文案恒在渲染文本里（<code>【风格基线 μ】…（取样范围：…）</code>），读取方<strong>不要把失去范围说明的 μ 当作全书基线</strong>——按部分时它只代表那几章。</li>
         <li><strong>只统计顶层文件</strong>：<code>scanChapters</code> 不递归，放在子目录里的章节文件对本书「不可见」，既不计入章号也不参与基线。</li>
         <li><strong>自动章号依赖可解析章号</strong>：目录内若存在无法解析章号的文件（命名完全不含数字或中文数字），它们被排到末尾且不参与 <code>max</code>；此时「下一个章号」由可解析的最大值决定，可能与文件名视觉顺序不一致。</li>
@@ -178,11 +211,13 @@ reminder ← 【基线怎么用】块：① 锚段读一遍校准语感，不要
         <li><a href="novel-read.html">novel_read</a> —— 按章号或标题读回刚创建的正文。</li>
         <li><a href="novel-style-check.html">novel_style_check</a> —— <code>reminder</code> <strong>建议</strong>的写后自检，用同一套六维基线与目标章比对；偏离明显时才据其修正。</li>
         <li><a href="novel-import.html">novel_import</a> —— 已有整批原稿件时的入库入口，替代逐章创建。</li>
+        <li><a href="novel-chapter-brief.html">novel_chapter_brief</a> —— 动笔前的材料装配：它的 <code>clauseFrames</code> 就是本工具 <code>plan</code> 要逐条兑现的子句框架，<code>prevChapterIssues</code> 与本工具的 <code>postWriteAudit</code> 同源。</li>
       </ul>
 
       <h2>源码位置</h2>
       <ul>
-        <li><span class="src">lib/index.js</span> —— 工具注册与 <code>execute</code>：参数 schema、输出契约、基线摘要、提醒文案（<code>registerNovelNewChapter</code>，约 2879 行）</li>
+        <li><span class="src">lib/index.js</span> —— 工具注册与 <code>execute</code>：参数 schema、输出契约、基线摘要、提醒文案（<code>registerNovelNewChapter</code>，行号随版本变动，请按函数名检索；<code>plan</code> 参数与 <code>postWriteAudit</code> 的装配也在同一函数内）</li>
+        <li><span class="src">lib/chapter-diagnose.js</span> —— v7.0.0 写盘体检的实现：<code>diagnoseChapterSymptoms</code>（结构性症状，与开写包共用）与 <code>checkPlanFulfillment</code>（plan 兑现核对与 <code>qualified</code> 格式门）；套话词表在 <span class="src">lib/lexicons/slop.js</span></li>
         <li><span class="src">lib/core.js</span> —— <code>sanitizeSegment</code> 路径段清洗、<code>resolveRoot</code> 根目录回退、<code>bookDir</code> / <code>novelsDir</code> 路径拼接、<code>scanChapters</code> 章节扫描、<code>parseChapterNumber</code> 章号解析、<code>cleanOutput</code> 输出清理</li>
         <li><span class="src">lib/core.js</span> —— <code>buildStyleAnchorPackage</code> 风格锚包抽样与分类（约 2071 行）、<code>metricChaptersCached</code> 六维测量缓存（约 1864 行）、<code>resolveBaselineScope</code>（v6.5.5 基线范围的<strong>唯一裁决点</strong>，配套 <code>readBaselineScope</code> / <code>writeBaselineScope</code>，行号随版本变动，请按函数名检索）</li>
         <li><span class="src">lib/style-metrics.js</span> —— <code>computeBaselineFromPerChapter</code> / <code>METRIC_ORDER</code> / <code>METRIC_LABELS</code>，基线 μ 的计算与维度顺序</li>
