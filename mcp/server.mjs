@@ -42,7 +42,12 @@ const SERVER_VERSION = readPackageVersion();
 // 一条畸形超长行（或忘记换行的巨型 payload）会让缓冲区无界增长直到 OOM。
 const MAX_LINE_BYTES = 4 * 1024 * 1024;
 const MAX_PENDING_LINES = 32;
-const OUTPUT_TIMEOUT_MS = 2000;
+// v7.0.1（审查 #2）：单 chunk 写入超时。旧值 2000ms 对"数 MB 响应 + 宿主瞬时卡顿"太短，
+// 一次背压抖动就会让服务端自行退出。放宽到 20s，并在 drain 时重置计时（见 writeChunk）。
+const OUTPUT_TIMEOUT_MS = 20000;
+// 连续超时多少次才判定"客户端真的不读了"并致命退出。第一次超时只放弃当前响应的剩余部分
+// 并记 stderr，把连接留给后续请求——偶发卡顿不该杀掉整个 MCP 会话。
+const MAX_WRITE_TIMEOUTS = 3;
 // A pipe may accept a large amount of data on Windows even when the peer never
 // reads it. Cap one response before writing so a pathological tool result cannot
 // accumulate indefinitely in the transport or the host process.
@@ -337,20 +342,43 @@ function initFailedSummary(error) {
 /** src 越界时的标记（tools/call 时报错用，不下传给插件）。 */
 const SRC_OUT_OF_ROOT = Symbol("srcOutOfRoot");
 
-/** 解析已存在的最近祖先，连尚未创建的子路径也按真实目录校验。 */
+/** 参数类错误的标记：由 buildArgs 的调用方转成 JSON-RPC -32602（Invalid params）。 */
+const INVALID_PARAMS = "INVALID_PARAMS";
+
+function invalidParamsError(message) {
+  const error = new Error(message);
+  error.code = INVALID_PARAMS;
+  return error;
+}
+
+/**
+ * 解析已存在的最近祖先，连尚未创建的子路径也按真实目录校验。
+ *
+ * v7.0.1（审查 #6）：无法解析时**不再抛裸 Error**（会被 handleLine 兜底成 -32603
+ * Internal error）。改为带 `code=INVALID_PARAMS` 的错误，由 handleToolCall 转成 -32602——
+ * 客户端传 `Z:\novels` 这种不存在的盘符属于参数错误，不是服务器内部故障。
+ */
 function canonicalPath(target) {
   let current = resolve(target);
   const missing = [];
   while (!existsSync(current)) {
     const parent = dirname(current);
-    if (parent === current) throw new Error("无法解析路径的真实祖先");
+    if (parent === current) throw invalidParamsError("无法解析路径的真实祖先（路径或所在磁盘不存在）：" + current);
     missing.unshift(basename(current));
     current = parent;
   }
-  return resolve(realpathSync.native(current), ...missing);
+  try {
+    return resolve(realpathSync.native(current), ...missing);
+  } catch (error) {
+    throw invalidParamsError("无法解析路径的真实位置：" + current + "（" + (error?.code || error?.message || "unknown") + "）");
+  }
 }
 
-/** 判断路径是否落在 --root 指定的书库根内（含根本身）。 */
+/**
+ * 判断路径是否落在 --root 指定的书库根内（含根本身）。
+ * 路径无法解析（不存在的盘符）时把 INVALID_PARAMS 原样抛给调用方——那是参数问题，
+ * 不该被"越界 → 回退默认根"这条正常分支吞掉。
+ */
 function isInsideRoot(target) {
   const rel = relative(canonicalPath(LIBRARY_ROOT), canonicalPath(target));
   return rel === "" || (rel !== ".." && !rel.startsWith(".." + sep) && !isAbsolute(rel));
@@ -468,7 +496,18 @@ async function handleToolCall(id, params) {
       availableToolCount: toolMap.size
     });
   }
-  const args = buildArgs(name, params.arguments);
+  // v7.0.1（审查 #6）：路径解析失败属于**参数错误**（-32602），不是内部错误（-32603）。
+  // buildArgs/derivedPathViolation 里的 canonicalPath 会抛 code=INVALID_PARAMS，在这里统一转换。
+  let args;
+  try {
+    args = buildArgs(name, params.arguments);
+  } catch (error) {
+    if (error && error.code === INVALID_PARAMS) {
+      log(`参数错误（${name}）：${toText(error.message)}`);
+      return rpcError(id, -32602, "无效参数：" + String(error.message ?? error));
+    }
+    throw error;
+  }
   if (args[SRC_OUT_OF_ROOT] !== void 0) {
     const blocked = args[SRC_OUT_OF_ROOT];
     delete args[SRC_OUT_OF_ROOT];
@@ -482,7 +521,16 @@ async function handleToolCall(id, params) {
       isError: true
     });
   }
-  const derivedViolation = derivedPathViolation(args);
+  let derivedViolation;
+  try {
+    derivedViolation = derivedPathViolation(args);
+  } catch (error) {
+    if (error && error.code === INVALID_PARAMS) {
+      log(`参数错误（${name}）：${toText(error.message)}`);
+      return rpcError(id, -32602, "无效参数：" + String(error.message ?? error));
+    }
+    throw error;
+  }
   if (derivedViolation !== null) {
     log(`拒绝越界派生路径：${derivedViolation}`);
     return rpcResult(id, {
@@ -601,20 +649,44 @@ process.stdout.on("error", (error) => {
   log("stdout 错误（客户端可能已断开）：" + toText(error && error.message));
 });
 
+// 连续写入超时的计数：成功写出一个 chunk 就归零（见 writeAndWait）。
+let consecutiveWriteTimeouts = 0;
+
 function writeChunk(frame, offset) {
   return new Promise((resolveWrite, rejectWrite) => {
     let settled = false;
     const chunk = frame.subarray(offset, offset + Math.min(16 * 1024, frame.length - offset));
     // Writable.write 的回调只接收可选错误参数，不会返回写入字节数。
     // 这里按提交给 stdout 的 chunk 长度推进偏移，避免 offset 变成 NaN 后卡死。
+    let timer = null;
+    /**
+     * v7.0.1（审查 #2）：定时器改为**可重置**——stdout 的 'drain' 事件表示管道重新可写
+     * （客户端在读了），此时把计时归零。旧版从提交写入起固定 2 秒，慢客户端即使一直在读，
+     * 只要单 chunk 花了 2 秒就被判"客户端未读取"。
+     */
+    const arm = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        process.stdout.off("drain", onDrain);
+        const error = new Error("stdout 写入超时，客户端未读取响应");
+        error.code = "WRITE_TIMEOUT";
+        rejectWrite(error);
+      }, OUTPUT_TIMEOUT_MS);
+    };
+    const onDrain = () => { if (!settled) arm(); };
     const finish = (error) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      process.stdout.off("drain", onDrain);
       if (error) rejectWrite(error);
       else resolveWrite(chunk.length);
     };
-    const timer = setTimeout(() => finish(new Error("stdout 写入超时，客户端未读取响应")), OUTPUT_TIMEOUT_MS);
+    process.stdout.on("drain", onDrain);
+    arm();
     try {
       process.stdout.write(chunk, finish);
     } catch (error) {
@@ -623,13 +695,33 @@ function writeChunk(frame, offset) {
   });
 }
 
+/**
+ * v7.0.1（审查 #2）：单 chunk 超时不再直接致命退出。
+ *
+ * Node 的 Writable 不支持取消"某一次 write"，所以这里把"destroy 该次写入"落地为
+ * **放弃本帧剩余部分**：已经进入 stdout 缓冲的部分最多一个 chunk（16KB），对进程无害；
+ * 只有**连续** `MAX_WRITE_TIMEOUTS` 次超时（说明客户端真的不读了）才抛出错误，
+ * 由 enqueueLine 的 catch 走既有的 process.exit(1) 路径。
+ */
 async function writeAndWait(payload) {
   const frame = Buffer.from(JSON.stringify(payload) + "\n", "utf8");
   if (frame.length > MAX_OUTPUT_FRAME_BYTES) {
     throw new Error(`stdout 写入超时：响应帧 ${frame.length} 字节超过 ${MAX_OUTPUT_FRAME_BYTES} 字节安全上限，客户端未读取响应`);
   }
   for (let offset = 0; offset < frame.length;) {
-    offset += await writeChunk(frame, offset);
+    try {
+      offset += await writeChunk(frame, offset);
+      // 写出成功 = 背压已恢复，连续超时计数归零
+      consecutiveWriteTimeouts = 0;
+    } catch (error) {
+      if (error && error.code === "WRITE_TIMEOUT") {
+        consecutiveWriteTimeouts += 1;
+        log(`stdout 写入等待超时（连续第 ${consecutiveWriteTimeouts} 次，上限 ${MAX_WRITE_TIMEOUTS}）：`
+          + (consecutiveWriteTimeouts < MAX_WRITE_TIMEOUTS ? "放弃本帧剩余部分，连接保留给后续请求" : "客户端持续未读取，关闭连接"));
+        if (consecutiveWriteTimeouts < MAX_WRITE_TIMEOUTS) return;
+      }
+      throw error;
+    }
   }
 }
 

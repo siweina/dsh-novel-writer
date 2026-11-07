@@ -211,3 +211,18 @@ test("常量：7 个类别、冻结、章末闸门文案完整", () => {
   assert.equal(ENDING_GATE_TEXT.includes("本章必须停在"), true);
   assert.equal(SINGLE_CLAUSE_STEP_HINT.includes("单句大纲请拆成三步"), true);
 });
+
+// ---------------------------------------------------------------------------
+// 6. 审查修复 #51：单字「答」被「回」豁免后，双字「回答」必须接住
+// ---------------------------------------------------------------------------
+
+test("classifyClause：「回答」是言语动词，不得被单字「回」的位移吞掉（#51）", () => {
+  // 旧行为：talk 只收「答」，而 LEFT_GUARDS["答"] 把左邻「回」豁免掉；
+  // 单字「回」又属于 move → 末位命中 move（"他回答" === "move"）。
+  assert.equal(classifyClause("他回答"), "talk");
+  assert.equal(classifyClause("他点头回答"), "talk");
+  assert.equal(classifyClause("他回答了"), "talk");
+  // 反证：真正的位移「回」仍判 move，不能被「回答」顺带改掉
+  assert.equal(classifyClause("他回了家"), "move");
+  assert.equal(classifyClause("他把银子还了回去"), "move");
+});

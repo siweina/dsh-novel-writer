@@ -344,6 +344,20 @@ test("⑩ 知道参照集章长时按千字密度比较（万字参照集不误�
   assert.ok(keysOf(diagnoseChapterSymptoms(SENSE_NEUTRAL, refLong)).includes("sense_mono"), "0 次触觉应低于密度地板");
 });
 
+// ── ⑫ 感官通道单一：p10=0 时的话术不得自相矛盾 ──────────────────────────────
+
+test("⑫ 参照集 p10=0 且本章 0 次 → 不得输出「低于参照集 p10（0 次）」", () => {
+  const got = diagnoseChapterSymptoms(SENSE_NEUTRAL, SENSE_REF_TACTILE_ZERO_P10);
+  const item = got.find((symptom) => symptom.key === "sense_mono");
+  assert.ok(item, "p10=0 且 0 次仍应触发（现有 ⑩ 的行为保留）");
+  // 旧行为：「仅 0 次，低于参照集 p10（0 次）」——0 次怎么可能低于 0 次
+  assert.equal(item.detail.includes("低于"), false, "p10=0 时不该说「低于」：" + item.detail);
+  assert.ok(!(item.detail.includes("低于") && item.detail.includes("0 次）")), "出现矛盾句：" + item.detail);
+  assert.ok(item.detail.includes("触觉"), "仍须点名通道：" + item.detail);
+  assert.ok(/未使用|也是 0/.test(item.detail), "应使用 p10=0 的独立话术：" + item.detail);
+  assert.ok(item.detail.length <= 60, "detail 必须 ≤ 60 字：" + item.detail);
+});
+
 // ── ⑥ 空值安全 ──────────────────────────────────────────────────────────────
 
 test("⑥ 空值 / 脏输入不抛错", () => {

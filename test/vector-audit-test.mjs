@@ -402,3 +402,96 @@ test("⑭ 大纲兑现：方向行过短 / 引擎不可用 → checked:false 且
   assert.equal(b.checked, false);
   assert.ok(b.reason.includes("不可用"), "要给原因：" + b.reason);
 });
+
+// ---------------------------------------------------------------------------
+// 缺陷 #7：查询向量推理异常不得被吞成「最高相似度 0」→ 假报大纲漏写
+// ---------------------------------------------------------------------------
+
+test("⑮ 查询向量推理异常：该子句进 skipped（未判定），绝不进 unfulfilled；全部失败 → checked:false", async () => {
+  __clearVectorCache();
+  const body = [
+    para("壹", "另一段无关但足够长的文字用来凑块数，免得被字数下限挡住。"),
+    para("贰", "第三段同样无关，只是把正文撑到两百字以上，供判定使用。"),
+    para("叁", "他数了三枚铜钱，推到柜台另一边，袖口沾着泥。"),
+    para("肆", "第四段继续无关，讲的是院墙外的天色和路边的水洼。"),
+    para("伍", "第五段还是无关，提到有人从巷口经过，脚步很慢。")
+  ].join("\n\n");
+  const text = withFiller(body);
+  const direction = "叁人去楼空，登上城楼点燃烽火号令三军";
+
+  // 第 1 条子句的查询能够推理（向量命中「叁」块 → 兑现），第 2 条查询抛错 → 必须进 skipped
+  let queries = 0;
+  const flaky = (t) => {
+    if (String(t).startsWith(QUERY_PREFIX)) {
+      queries += 1;
+      if (queries === 2) throw new Error("wasm oom");
+    }
+    return fakeEmbed(t);
+  };
+  const r = await checkOutlineFulfillment(direction, text, { embed: flaky, isAvailable: always });
+  assert.equal(r.checked, true, "只有一条子句未判定时整体仍应 checked:true：" + JSON.stringify(r));
+  assert.equal(r.unfulfilled.length, 0, "推理异常的子句不许被当成漏写：" + JSON.stringify(r.unfulfilled));
+  assert.equal(r.skipped.length, 1, "推理异常的子句应进 skipped：" + JSON.stringify(r.skipped));
+  assert.equal(r.skipped[0].clause, "登上城楼点燃烽火号令三军", "skipped 应是被抛错的那一条：" + JSON.stringify(r.skipped));
+  assert.ok(r.skipped[0].reason.includes("未做判定"), "skipped 要说明「没判定」而不是「漏写」：" + r.skipped[0].reason);
+  assert.ok(!r.unfulfilled.some((u) => u.clause.includes("烽火")), "unfulfilled 里绝不能出现推理失败的子句");
+
+  // 全部查询推理失败 → 整体不可判定（checked:false），且没有一条被算成漏写
+  __clearVectorCache();
+  const boomQuery = (t) => {
+    if (String(t).startsWith(QUERY_PREFIX)) throw new Error("wasm oom");
+    return fakeEmbed(t);
+  };
+  const r2 = await checkOutlineFulfillment(direction, text, { embed: boomQuery, isAvailable: always });
+  assert.equal(r2.checked, false, "全部子句都无法判定时必须 checked:false：" + JSON.stringify(r2));
+  assert.ok(r2.reason.includes("推理"), "要给原因：" + r2.reason);
+  assert.equal(r2.unfulfilled.length, 0, "全部失败时不许报漏写：" + JSON.stringify(r2.unfulfilled));
+  assert.equal(r2.skipped.length, 2, "两条子句都应记为未判定：" + JSON.stringify(r2.skipped));
+});
+
+// ---------------------------------------------------------------------------
+// 缺陷 #25：块定位游标必须按整块长度推进（只步进 40 字会让行号贴到前一块里）
+// ---------------------------------------------------------------------------
+
+test("⑯ 重复语料下块行号按整块推进：18 行同一句 → 末块必须落在第 18 行（旧版只步进 40 字 → 第 8 行）", async () => {
+  __clearVectorCache();
+  // 50 字一行 × 18 行：chunkText 每 3 行拼成一块（150 字），共 6 块；块首 40 字完全相同。
+  // 旧版游标只 +40，下一块会在**前一块内部**命中，行号逐块前移贴到前面，末块只到第 8 行。
+  const S = "叁他在雨里站了很久没有作声只是看着水洼里的倒影和远处的灯火明灭不定谁也没有回头凑字数的填充句子用来补";
+  assert.equal(S.length, 50, "夹具必须是 50 字一行（3 行 = 一块 150 字）");
+  const lines = Array.from({ length: 18 }, () => S);
+  const r = await detectSemanticLoop(lines.join("\n"), { embed: fakeEmbed, isAvailable: always });
+  assert.equal(r.checked, true, "应当真的跑了：" + JSON.stringify(r));
+  assert.equal(r.blocks, 6, "18 行应切成 6 块，实际 " + r.blocks);
+  assert.equal(r.loops.length, 1, "整章同一句应报一处打转：" + JSON.stringify(r.loops));
+  const loop = r.loops[0];
+  assert.equal(loop.fromBlock, 0);
+  assert.equal(loop.toBlock, 5);
+  assert.equal(loop.lineFrom, 1, "首块应从第 1 行起：" + JSON.stringify(loop));
+  assert.equal(loop.lineTo, 18, "末块应到第 18 行（游标按整块推进）；旧版只到第 8 行：" + JSON.stringify(loop));
+});
+
+// ---------------------------------------------------------------------------
+// 缺陷 #68：detectSemanticLoop 返回体不再带无意义的 degraded: "" 字段
+// ---------------------------------------------------------------------------
+
+test("⑰ 返回体不再输出死字段 degraded（缺陷 #68）", async () => {
+  __clearVectorCache();
+  const S = "灯花爆了一下，他抬手把火苗按灭，屋里彻底黑了。";
+  const paras = [
+    para("壹", DISTINCT[0]),
+    para("贰", DISTINCT[1]),
+    para("叁", S),
+    para("叁", S),
+    para("叁", S),
+    para("肆", DISTINCT[2]),
+    para("伍", DISTINCT[3]),
+    para("陆", DISTINCT[4]),
+    para("柒", DISTINCT[5]),
+    para("捌", DISTINCT[6])
+  ];
+  const r = await detectSemanticLoop(paras.join("\n\n"), { embed: fakeEmbed, isAvailable: always });
+  assert.equal(r.checked, true);
+  assert.ok(r.loops.length > 0, "夹具应报出打转（旧版会在这里塞 degraded: \"\"）");
+  assert.equal(Object.hasOwn(r, "degraded"), false, "返回体不应再有 degraded 键：" + JSON.stringify(r));
+});

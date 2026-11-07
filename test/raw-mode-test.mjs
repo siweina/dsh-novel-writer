@@ -124,6 +124,76 @@ test("② rawguard：标记判定与 nudge 追加", () => {
   assert.ok(rg.withRawNudge(blocks).messages[0].content[0].text.includes("【继续】"));
 });
 
+// 审查 #42：多文本块 content 会被每一块都追加一次 nudge（提示词膨胀）
+test("②-c withRawNudge：只给**最后一个** text 块追加，多块不重复注入（#42）", () => {
+  const multi = {
+    messages: [
+      {
+        role: "system",
+        content: [
+          { type: "text", text: "系统提示前半" },
+          { type: "image", image: "ignored" },
+          { type: "text", text: "系统提示后半" }
+        ]
+      },
+      { role: "user", content: "写第 9 章" }
+    ]
+  };
+  const nudged = rg.withRawNudge(multi);
+  const blocks = nudged.messages[0].content;
+  assert.equal(blocks[0].text, "系统提示前半", "非末尾的 text 块不得被追加");
+  assert.ok(blocks[2].text.startsWith("系统提示后半"), "最后一个 text 块必须保留原文");
+  assert.ok(blocks[2].text.includes(rg.RAW_RETRY_NUDGE.trim()), "nudge 必须追加到最后一个 text 块");
+  const occurrences = blocks
+    .filter((b) => b && b.type === "text")
+    .map((b) => String(b.text).split("【继续】").length - 1)
+    .reduce((sum, n) => sum + n, 0);
+  assert.equal(occurrences, 1, "两个 text 块时 nudge 只能出现 1 次，实际 " + occurrences + " 次");
+  // 不得就地修改调用方的 options
+  assert.equal(multi.messages[0].content[2].text, "系统提示后半", "不得改动调用方对象");
+});
+
+// 审查 #47：withRawNudge 只看 messages[0]，system 不在首位时静默不注入
+test("②-d withRawNudge：system 不在首位时仍注入，且只动**第一个** system（#47）", () => {
+  const shifted = { messages: [{ role: "user", content: "先聊两句" }, { role: "system", content: "系统提示" }] };
+  const nudged = rg.withRawNudge(shifted);
+  assert.ok(nudged.messages[1].content.includes("【继续】"), "system 在第二位时 nudge 仍必须注入");
+  assert.equal(nudged.messages[0].content, "先聊两句", "用户消息不得被改动");
+  assert.equal(nudged.messages.length, 2, "不得新增消息");
+
+  const twoSystem = {
+    messages: [
+      { role: "system", content: "系统一" },
+      { role: "assistant", content: "…" },
+      { role: "system", content: "系统二" }
+    ]
+  };
+  const nudged2 = rg.withRawNudge(twoSystem);
+  assert.ok(nudged2.messages[0].content.includes("【继续】"), "nudge 应落在第一个 system");
+  assert.equal(nudged2.messages[2].content, "系统二", "第二个 system 不应被追加");
+
+  const noSystem = { messages: [{ role: "user", content: "你好" }] };
+  assert.equal(rg.withRawNudge(noSystem), noSystem, "没有 system 时原样返回（同一引用）");
+  const noMessages = {};
+  assert.equal(rg.withRawNudge(noMessages), noMessages, "没有 messages 时原样返回（同一引用）");
+});
+
+// 审查 #66：WORKFLOW_TEXT / LEAN_TEXT / SCENE_TEXTS 只由本文件内 promptTextFor 消费 → 取消对外导出
+test("②-e prompts 导出面：内部常量不再导出，promptTextFor 与其余符号仍可用（#66）", () => {
+  for (const name of ["WORKFLOW_TEXT", "LEAN_TEXT", "SCENE_TEXTS"]) {
+    assert.equal(prompts[name], void 0, name + " 属内部实现，不应再导出");
+  }
+  for (const name of ["RAW_WRITING_PROMPT", "RAW_MODE_HINT", "RAW_MODE_CHECKLIST", "BRIEF_TEXT", "PROMPT_SCENES", "promptTextFor"]) {
+    assert.notEqual(prompts[name], void 0, name + " 是外部消费者用到的符号，必须继续导出");
+  }
+  assert.equal(prompts.promptTextFor("off", "writing"), "");
+  assert.ok(prompts.promptTextFor("brief", "writing").length > 0);
+  assert.ok(prompts.promptTextFor("full", "general").length > 0);
+  assert.ok(prompts.promptTextFor("full", "writing").length > 0, "场景表仍须生效");
+  assert.equal(prompts.promptTextFor("full", "writing", true), prompts.promptTextFor("brief", "writing", true), "lean 优先级不变");
+  assert.ok(prompts.promptTextFor("full", "writing", true).includes("工具按需调用"));
+});
+
 test("②-b streamWithRawRetry：命中→丢弃并重试一次；未命中→原样透传", async () => {
   const options = { messages: [{ role: "system", content: "prefix" }] };
   const seen = [];

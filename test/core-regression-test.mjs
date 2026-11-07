@@ -5,12 +5,15 @@ import { join } from "node:path";
 import test from "node:test";
 import {
   auditLexicon,
+  bookNameFromFileName,
+  cjkToNumber,
   createOutlineTool,
   decodeTextBuffer,
   detectChapterBridge,
   enrichSemanticImplicit,
   extractKeywords,
   findChapter,
+  formatImport,
   internalRoot,
   isAbort,
   lexiconFile,
@@ -21,7 +24,10 @@ import {
   normalizeLexiconEntry,
   novelsDir,
   noteRoot,
+  OUTLINE_LINE_RE,
   parseChapterNumber,
+  resolveStyleRule,
+  sanitizeSegment,
   parseLexiconLine,
   readLexiconFile,
   readSentenceState,
@@ -620,4 +626,139 @@ test("v6.9.0 词表审查修复回归：未登记 worldview 时 brief 仍注入�
     assert.ok(brief.worldview && brief.worldview.bannedWords.length > 0, "brief.worldview 必须注入默认禁用词列表");
     assert.ok(brief.degraded.some((d) => d.includes("默认禁用词表")), "未登记 worldview 时 degraded 必须说明已注入默认禁用词表");
   });
+});
+
+// ---------------------------------------------------------------------------
+// v7.0.1：源码审查 14 条缺陷的回归（core 侧 #3 / #31 / #34 / #35 / #37 / #38 / #52 / #55 / #64）
+// 每条都先有断言、再改实现；断言取值来自缺陷判据，不掺"看着差不多"。
+// ---------------------------------------------------------------------------
+
+test("【#3】sanitizeSegment 把中间连续点号规整为下划线（不再产出含 .. 的 trashId 片段）", () => {
+  // 旧版只剥首尾点号，中间 ".." 原样保留 → trashId 含 ".." 被 isValidTrashId 判非法，条目永久孤立。
+  assert.equal(sanitizeSegment("v1..2", "book"), "v1_2");
+  assert.equal(sanitizeSegment("a.b", "book"), "a.b", "单个点号是合法书名，不得改动");
+  assert.equal(sanitizeSegment("v1...2", "book"), "v1_2", "连续 3 个点号同样压成一个下划线");
+  assert.equal(sanitizeSegment("..v1..2..", "book"), "v1_2", "首尾点号先剥、中间点号再压");
+  assert.throws(() => sanitizeSegment("..", "book"), /不能为空/, "纯点号仍按「清洗后无有效字符」拒绝");
+});
+
+test("【#31】词表审计：替身词「包含」必用词时必须报 avoidHit（严格包含判定 + 跨词条占位互通）", () => {
+  // 旧版用区间相交判"已在合法专名内"：「草药」与必用词「药」相交 → 被当成合法而漏报。
+  const hit = auditLexicon([{ term: "药", avoid: ["草药"] }], "他买了草药。\n");
+  assert.equal(hit.avoidHits.length, 1, "「草药」并未完整落在必用词「药」之内，必须报 avoidHit");
+  assert.equal(hit.avoidHits[0].word, "草药");
+  assert.equal(hit.avoidHits[0].term, "药");
+  assert.equal(hit.avoidHits[0].line, 1);
+  // 真正被完整包含的（魔导步枪 ⊃ 步枪）仍不报——既有口径不得回退
+  const clean = auditLexicon([{ term: "魔导步枪", avoid: ["步枪"] }], "战士手持魔导步枪冲锋。\n");
+  assert.equal(clean.avoidHits.length, 0, "必用词自身含有的替身词不得误报");
+  // 占位跨词条互通：替身词落在**另一条目**的合法专名内部时不报
+  const shared = auditLexicon([{ term: "灵芝草" }, { term: "丹房", avoid: ["草"] }], "他买了灵芝草。\n");
+  assert.equal(shared.avoidHits.length, 0, "「草」落在另一条目的合法专名「灵芝草」内，属正常用词");
+  // 覆盖计数仍按本词条口径：短词落在另一条目的长词里也不能被判 missing
+  const both = auditLexicon([{ term: "草药" }, { term: "药" }], "他买了草药。\n");
+  assert.equal(both.coveredCount, 2, "「草药」与「药」都确实出现，不得因共享占位而漏计");
+});
+
+test("【#34】cjkToNumber 无权位叠字按十进制位权累加（「一二」= 12，不再静默取末位）", () => {
+  assert.equal(cjkToNumber("一二"), 12);
+  assert.equal(cjkToNumber("一零"), 10, "「一零」= 10（不是 undefined，也不是 0）");
+  assert.equal(cjkToNumber("一零二四"), 1024);
+  // 「零」明确判为解析不出（第 0 章不存在）：这里把行为写死，防止以后被改成 0 而静默多出第 0 章
+  assert.equal(cjkToNumber("零"), undefined);
+  assert.equal(parseChapterNumber("第零章.md"), undefined, "「第零章」走同一条判据：解析不出");
+  // 有位权字的既有口径不得回归
+  assert.equal(cjkToNumber("十二"), 12);
+  assert.equal(cjkToNumber("二十"), 20);
+  assert.equal(cjkToNumber("一千零一"), 1001);
+  assert.equal(cjkToNumber("一万"), 10000);
+});
+
+test("【#35】「1984-第一章.md」按中文「第N章」解析，不再被分隔符数字抢成第 1984 章", () => {
+  assert.equal(parseChapterNumber("1984-第一章.md"), 1);
+  assert.equal(parseChapterNumber("1984-第1章.md"), 1);
+  assert.equal(parseChapterNumber("第1984章"), 1984, "纯「第1984章」仍按阿位伯数字取 1984");
+  assert.equal(parseChapterNumber("斗破苍穹-01-陨落.md"), 1, "无「第」的分隔符章号保持原口径");
+});
+
+test("【#37】normalizeChapterKey 统一剥除 .md/.markdown/.txt 扩展名", () => {
+  assert.equal(normalizeChapterKey("番外.md"), "番外");
+  assert.equal(normalizeChapterKey("番外.markdown"), "番外");
+  assert.equal(normalizeChapterKey("番外.txt"), "番外");
+  assert.equal(normalizeChapterKey("番外.MD"), "番外", "扩展名大小写不敏感");
+  assert.equal(normalizeChapterKey("第01章.md"), "第01章", "章号归一不受影响");
+});
+
+test("【#38】formatImport 不向模型输出宿主绝对路径（相对书库根，失败只留 basename）", () => {
+  const base = { mode: "scan", groups: [], skipped: [], imported: [] };
+  if (process.platform === "win32") {
+    const text = formatImport({ ...base, src: "C:\\Users\\zg\\Desktop\\稿件" }, "C:\\Users\\zg\\Desktop");
+    assert.equal(text.split("\n")[0], "<path>稿件</path>", "书库根内 → 相对书库根");
+    assert.ok(!/[A-Za-z]:[\\/]/.test(text), "渲染文本不得出现 Windows 盘符绝对路径：" + text.split("\n")[0]);
+    const outside = formatImport({ ...base, src: "D:\\备份\\小说\\旧稿" }, "C:\\Users\\zg\\Desktop");
+    assert.equal(outside.split("\n")[0], "<path>旧稿</path>", "跨盘符 relative 失败 → 只留 basename");
+    const noRoot = formatImport({ ...base, src: "C:\\Users\\zg\\Desktop\\稿件" });
+    assert.equal(noRoot.split("\n")[0], "<path>稿件</path>", "拿不到书库根时同样只留 basename");
+  } else {
+    const text = formatImport({ ...base, src: "/home/zg/novels/草稿" }, "/home/zg");
+    assert.equal(text.split("\n")[0], "<path>novels/草稿</path>", "书库根内 → 相对书库根");
+    assert.ok(!text.includes("/home/"), "渲染文本不得出现 /home/ 绝对路径");
+  }
+  // 判据的普适形式：无论如何都不得把绝对路径原样吐给模型
+  const win = formatImport({ ...base, src: "C:\\Users\\zg\\Desktop\\稿件" }, "C:\\Users\\zg\\Desktop");
+  assert.ok(!/[A-Za-z]:[\\/]/.test(win), "Windows 绝对路径泄露");
+  const posix = formatImport({ ...base, src: "/home/zg/novels/草稿" }, "/home/zg");
+  assert.ok(!posix.includes("/home/"), "POSIX 绝对路径泄露");
+});
+
+test("【#52】大纲方向行正则单一来源 OUTLINE_LINE_RE，判重按行首锚定", async () => {
+  const parse = (line) => {
+    const m = OUTLINE_LINE_RE.exec(line);
+    return m === null ? null : { number: Number(m[1]), text: m[2].trim() };
+  };
+  assert.deepEqual(parse("- 3 夜航"), { number: 3, text: "夜航" }, "novel_outline 自己落盘的格式");
+  assert.deepEqual(parse("- 第3章 夜航"), { number: 3, text: "夜航" });
+  assert.deepEqual(parse("* 第3节 夜航"), { number: 3, text: "夜航" }, "「节」与章/回/话 同口径（graph 旧正则漏了它）");
+  assert.deepEqual(parse("# 第3章 夜航"), { number: 3, text: "夜航" });
+  assert.deepEqual(parse("3、夜航"), { number: 3, text: "夜航" });
+  assert.equal(parse("正文里提到 - 3 秒后的爆炸"), null, "正文中间的「- 3 」不是方向行");
+
+  await withBook(async ({ root, book }) => {
+    const outline = createOutlineTool({});
+    const exec = { agent: { session: { header: { cwd: root } } } };
+    await outline.execute({ book, action: "init", root }, exec);
+    const file = join(root, "novels", "创作资料", book, "剧情大纲.md");
+    // 旧版用 includes("- 3 ") 判重：正文里出现「- 3 」就误以为第 3 章已在纲
+    await writeFile(file, "# 剧情大纲\n\n第 2 章里他数了 - 3 秒钟。\n", "utf8");
+    const added = await outline.execute({ book, action: "chapter", number: 3, title: "夜航", root }, exec);
+    assert.ok(/大纲已补/.test(added.message), "正文里的「- 3 」不得被当成「已在纲」，实际：" + added.message);
+    const after = await readFile(file, "utf8");
+    assert.ok(/^- 3 夜航$/m.test(after), "第 3 章方向行必须真的落盘");
+    const again = await outline.execute({ book, action: "chapter", number: 3, title: "夜航", root }, exec);
+    assert.ok(/已在纲/.test(again.message), "已有行首「- 3 夜航」后必须识别为已在纲，实际：" + again.message);
+    assert.equal((after.match(/^- 3 /gm) || []).length, 1, "同号方向行不得重复追加");
+  });
+});
+
+test("【#55】只带 allowWords 的「用词豁免」条目不得被当成文化基准名", () => {
+  const fallback = resolveStyleRule({}, []).cultureName;
+  const rule = resolveStyleRule({ worldview: [{ name: "用词豁免", allowWords: ["修士"], bannedWords: [] }] }, []);
+  assert.notEqual(rule.cultureName, "用词豁免", "保留名不得污染 cultureName（否则文案显示「与当前文化基准「用词豁免」不符」）");
+  assert.equal(rule.cultureName, fallback, "没有真正的文化声明时，cultureName 必须落默认基准名");
+  assert.deepEqual(rule.allowedWords, ["修士"], "用词豁免本身仍要生效");
+  // 正常命名的文化条目仍要覆写 cultureName（不要把过滤写成「一律不用条目名」）
+  const named = resolveStyleRule({ worldview: [{ name: "东方修真", bannedWords: ["骑士"] }] }, []);
+  assert.equal(named.cultureName, "东方修真");
+});
+
+test("【#64】bookNameFromFileName 删掉不可达分支后行为不变", () => {
+  // 以章号开头且没有书名前缀的文件仍归「未分类」（name === "" 分支）
+  assert.equal(bookNameFromFileName("第1章 初遇.md"), undefined);
+  assert.equal(bookNameFromFileName("01-初遇.md"), undefined);
+  assert.equal(bookNameFromFileName("第一章 初遇.md"), undefined);
+  assert.equal(bookNameFromFileName("第01节 初遇.md"), undefined);
+  // 有书名前缀的照旧取书名；中文数字+空格是书名不是章号
+  assert.equal(bookNameFromFileName("斗破苍穹 第1章 陨落.md"), "斗破苍穹");
+  assert.equal(bookNameFromFileName("大秦帝国 第1章.md"), "大秦帝国");
+  assert.equal(bookNameFromFileName("三 体.md"), "三 体");
 });

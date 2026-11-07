@@ -278,10 +278,14 @@ test("⑤ 恢复：文件原样回位，设定库条目也回来", async () => {
   seedState({ 回书: { genre: "科幻" } });
   const before = treeFiles(root);
   const result = await bd.applyBookDelete({ root, book: "回书" });
+  // 清单里的 files 才是"真实搬走的文件数"（totals 还含设定库条目这个非文件项）
+  const manifest = JSON.parse(readFileSync(join(result.trashDir, "manifest.json"), "utf8"));
   const restored = await bd.restoreTrash({ root, trashId: result.trashId });
   assert.equal(restored.conflicts.length, 0, JSON.stringify(restored.conflicts));
   assert.equal(restored.failed.length, 0, JSON.stringify(restored.failed));
-  assert.equal(restored.restored, result.moved);
+  assert.equal(restored.restored, manifest.files, "恢复项数按文件数统计（#60）：" + restored.restored + " != " + manifest.files);
+  const restoredText = bd.formatBookDelete({ action: "restore", book: "回书", restored: restored.restored, profileRestored: true });
+  assert.ok(restoredText.includes("个文件"), "恢复文案必须写明单位是「个文件」：" + restoredText.slice(0, 120));
   assert.equal(restored.profileRestored, true);
   // 每一个原文件都回来了（树结构一致）
   assert.deepEqual(treeFiles(root), before);
@@ -366,7 +370,7 @@ test("⑦-b 选择性清理：只清报告与缓存，正文/创作资料/设定
   const manifest = JSON.parse(readFileSync(join(result.trashDir, "manifest.json"), "utf8"));
   assert.equal(manifest.items.length, result.moved);
   const back = await bd.restoreTrash({ root, trashId: result.trashId });
-  assert.equal(back.restored, result.moved);
+  assert.equal(back.restored, result.totals.files);
   assert.equal(existsSync(join(root, ".novel-writer", "analysis", "分书-chapters-metrics.json")), true);
 
   // 三种非法 keys 都要报错（未知位置 / 空选择 / 不是数组）
@@ -463,9 +467,10 @@ test("⑨ 工具：进 ALL_TOOLS 第 21 位，输出契约与 render 同源", as
     assert.ok(key in listed.trash[0], "list 条目缺少字段：" + key);
   }
 
+  const appliedManifest = JSON.parse(readFileSync(join(applied.trashDir, "manifest.json"), "utf8"));
   const restored = await def.execute({ action: "restore", trashId: applied.trashId }, {});
   check("restore", restored);
-  assert.equal(restored.restored, applied.moved);
+  assert.equal(restored.restored, appliedManifest.files, "恢复项数按文件数统计（#60）");
 
   // action 缺省 = preview（安全的那一侧）
   const defaulted = await def.execute({ book: "工具书" }, {});

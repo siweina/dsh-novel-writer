@@ -260,6 +260,14 @@ await defs.novel_plot.execute({ book: "测试", action: "done", id }, exec);
 const afterDone = await defs.novel_plot.execute({ book: "测试", action: "list" }, exec);
 console.log("done 后:", afterDone.entries.map((e) => e.content + ":" + e.status).join(" "));
 if (afterDone.entries.find((e) => e.id === id).status !== "done") throw new Error("plot done broken");
+// 【#20】状态可逆：误标 done 之后必须能用 update status=open 改回待回收
+const reopened = await defs.novel_plot.execute({ book: "测试", action: "update", id, status: "open" }, exec);
+const afterReopen = await defs.novel_plot.execute({ book: "测试", action: "list" }, exec);
+const reopenedEntry = afterReopen.entries.find((e) => e.id === id);
+if (reopenedEntry.status !== "open") throw new Error("【#20】update status=open 未把伏笔改回待回收，实际：" + reopenedEntry.status);
+console.log("【#20】伏笔状态可逆（done → open）✓ |", reopened.message);
+// 再标回 done，避免影响后面的断言
+await defs.novel_plot.execute({ book: "测试", action: "update", id, status: "done" }, exec);
 const plotFile = join(testRoot, ".novel-writer", "plots", "测试.json");
 if (!existsSync(plotFile)) throw new Error("plot file not persisted");
 console.log("伏笔文件:", plotFile, "存在 ✓");
@@ -1272,6 +1280,117 @@ await (async function v500PostAuditFixes() {
   if (explorerSpawnFailed({ code: "ENOENT" }) !== true) throw new Error("ENOENT 未被判成启动失败");
   if (explorerSpawnFailed({ code: "EACCES" }) !== true) throw new Error("EACCES 未被判成启动失败");
   console.log("v5.2.0 explorer 误报修正: 退出码 0/1/2 视为成功 ✓ | ENOENT/EACCES 视为启动失败 ✓");
+}
+
+// ---------------------------------------------------------------------------
+// v7.0.1：源码审查 14 条缺陷的回归（index 侧 #9 / #32 / #36 / #38 / #53 / #71）
+// 每条都先有断言、再改实现。
+// ---------------------------------------------------------------------------
+
+// 【#9】建章章号上限必须与 MAX_CHAPTER_NUMBER（9999）一致：10000 必须被拒且报上限
+{
+  const book10000 = "越界章号书";
+  let rejected = "";
+  try { await defs.novel_new_chapter.execute({ book: book10000, chapter: 10000, root: testRoot }, exec); }
+  catch (e) { rejected = String(e?.message ?? e); }
+  if (!rejected.includes("9999")) throw new Error("chapter=10000 必须被拒且错误信息说明上限 9999，实际：" + (rejected || "未拒绝"));
+  if (existsSync(join(testRoot, "novels", book10000))) throw new Error("越界章号必须在 mkdir 之前被拒（不得留下空书目录）");
+  // 上限内（9999）仍要放行——不能为了拒绝越界把合法边界也误伤
+  const atEdge = await defs.novel_new_chapter.execute({ book: book10000, chapter: 9999, root: testRoot }, exec);
+  if (atEdge.number !== 9999) throw new Error("章号 9999 应被接受，实际：" + JSON.stringify(atEdge.number));
+  rmSync(join(testRoot, "novels", book10000), { recursive: true, force: true });
+  console.log("【#9】建章章号上限 9999：10000 被拒且报上限 ✓ | 9999 放行 ✓");
+}
+
+// 【#32】裸 catch 不得吞掉 AbortError：取消必须上抛，而不是伪装成"成功但不全"
+{
+  const abortIgnore = (e) => e?.name === "AbortError" || e?.code === "ABORT_ERR";
+  const aborted = { agent: { session: { header: { cwd: testRoot } } }, signal: AbortSignal.abort() };
+  // novel_import：src 下有可读文件，读盘时已取消 → 必须抛出，而不是"跳过 1 个文件"的成功返回
+  const abortSrc = join(testRoot, "abort-src");
+  mkdirSync(abortSrc, { recursive: true });
+  writeFileSync(join(abortSrc, "第01章.md"), "正文。\n", "utf8");
+  let importAborted = false;
+  try { await defs.novel_import.execute({ src: abortSrc, mode: "scan", root: testRoot }, aborted); }
+  catch (e) { importAborted = abortIgnore(e); }
+  if (!importAborted) throw new Error("novel_import 把取消吞成了「成功但跳过文件」的返回");
+  // novel_books：章字数统计读盘时取消 → 必须抛出，而不是 chars=0 的全绿列表
+  mkdirSync(join(testRoot, "novels", "取消书"), { recursive: true });
+  writeFileSync(join(testRoot, "novels", "取消书", "第01章.md"), "正文。\n", "utf8");
+  let booksAborted = false;
+  try { await defs.novel_books.execute({ root: testRoot }, aborted); }
+  catch (e) { booksAborted = abortIgnore(e); }
+  if (!booksAborted) throw new Error("novel_books 把取消吞成了 chars=0 的成功结果");
+  rmSync(abortSrc, { recursive: true, force: true });
+  rmSync(join(testRoot, "novels", "取消书"), { recursive: true, force: true });
+  console.log("【#32】AbortError 上抛：novel_import ✓ | novel_books ✓");
+}
+
+// 【#36】baselineMode 违反 schema enum 的路径：基线计算失败时不得返回 ""（省略键或给合法值）
+{
+  const bbook = "基线失败书";
+  mkdirSync(join(testRoot, "novels", bbook), { recursive: true });
+  // 必须先有一章别的章节：基线 try 里的 readTextFile 才会被真正调用（新章自己读的是内存里的 text）。
+  writeFileSync(join(testRoot, "novels", bbook, "第01章.md"), "第一章已有正文。\n", "utf8");
+  // exec.signal 第 1 次访问是建章写盘（必须有效），第 2 次起是基线扫描读已有章节（让它取消 →
+  // 基线 try/catch 兜住 → 旧版 baselineMode 留在 ""，宿主按 enum:["all","custom"] 整条拒收，
+  // 而章其实已经写盘）。这里用计数 getter 稳定复现"章已写、基线失败"的状态。
+  const live = new AbortController();
+  let signalReads = 0;
+  const trickyExec = { agent: { session: { header: { cwd: testRoot } } } };
+  Object.defineProperty(trickyExec, "signal", {
+    get() { signalReads += 1; return signalReads >= 2 ? AbortSignal.abort() : live.signal; }
+  });
+  const res = await defs.novel_new_chapter.execute({ book: bbook, chapter: 2, content: "第二章正文。\n", root: testRoot }, trickyExec);
+  assertOutputContract(defs.novel_new_chapter, res, "novel_new_chapter(baseline-failed)");
+  if ("baselineMode" in res && res.baselineMode !== "all" && res.baselineMode !== "custom") {
+    throw new Error("baselineMode 违反 schema enum:[" + ["all", "custom"].join(",") + "]：" + JSON.stringify(res.baselineMode));
+  }
+  rmSync(join(testRoot, "novels", bbook), { recursive: true, force: true });
+  console.log("【#36】基线失败时 baselineMode=" + ("baselineMode" in res ? res.baselineMode : "（省略）") + " ✓（章已写盘且契约不破）");
+}
+
+// 【#38】导入回执的 <path> 必须是书库根相对路径（render 接线也要把根传下去）
+{
+  const renderSrc = join(testRoot, "render-src");
+  mkdirSync(renderSrc, { recursive: true });
+  writeFileSync(join(renderSrc, "某书 第01章.md"), "正文。\n", "utf8");
+  const scanned = await defs.novel_import.execute({ src: renderSrc, mode: "scan", root: testRoot }, exec);
+  const rendered = defs.novel_import.output.render({ root: testRoot }, scanned).map((c) => c.text).join("\n");
+  if (!rendered.includes("<path>render-src</path>")) throw new Error("import 渲染的 <path> 必须是书库根相对路径：" + rendered.split("\n")[0]);
+  if (/[A-Za-z]:[\\/]/.test(rendered)) throw new Error("import 渲染泄露了宿主盘符路径：" + rendered.split("\n")[0]);
+  rmSync(renderSrc, { recursive: true, force: true });
+  console.log("【#38】import 渲染 <path> 相对化 ✓");
+}
+
+// 【#53】无章号摘要的兜底排序值不得是硬编码 999（千章以上会把番外夹在第 999 与 1000 章之间）
+{
+  const sbook = "排序书";
+  const sdir = join(testRoot, ".novel-writer", "summaries");
+  mkdirSync(sdir, { recursive: true });
+  const sfile = join(sdir, sbook + ".json");
+  writeFileSync(sfile, JSON.stringify({ book: sbook, summaries: [
+    { chapter: "番外", summary: "番外摘要" },
+    { chapter: "第2000章", summary: "两千章摘要" }
+  ] }), "utf8");
+  const listed = await defs.novel_summary.execute({ book: sbook, root: testRoot }, exec);
+  if (listed.summaries.length !== 2) throw new Error("summary 列表条数错: " + JSON.stringify(listed.summaries));
+  if (listed.summaries[0].chapter !== "第2000章") {
+    throw new Error("无章号条目被 999 夹到千章之前（应为 Number.MAX_SAFE_INTEGER 兜底）：" + JSON.stringify(listed.summaries.map((s) => s.chapter)));
+  }
+  rmSync(sfile, { force: true });
+  console.log("【#53】summary 无章号兜底排序 ✓");
+}
+
+// 【#71】lib/index.js 头部的 6 个死导入必须清掉（只删 import，不删定义——其它模块/测试仍在用）
+{
+  const src = readFileSync(new URL("../lib/index.js", import.meta.url), "utf8");
+  // 只看 import 语句（注释里会保留"删了哪几个"的说明，不能把说明文字当成导入）
+  const importLines = src.split("\n").filter((line) => /^\s*import\b/.test(line)).join("\n");
+  for (const dead of ["readBaselineScope", "writeBaselineScope", "normalizeBaselineScope", "BASELINE_SCOPE_MODES", "readLogEvents", "logStats"]) {
+    if (new RegExp("\\b" + dead + "\\b").test(importLines)) throw new Error("lib/index.js 头部仍导入零引用死符号: " + dead);
+  }
+  console.log("【#71】index.js 6 个死导入已清 ✓");
 }
 
 // 清理缓存文件（保留状态文件）

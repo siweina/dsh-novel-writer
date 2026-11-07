@@ -151,6 +151,7 @@ console.log("factory 类型:", typeof loaded.factory);
 // 并遍历返回的 vnode 树（组件体里的运行期异常会直接抛出，由调用方 fail）。
 // ---------------------------------------------------------------------------
 let reactRenderDepth = 0; // 渲染期外的 setState 直接忽略（不引入重渲染语义，避免假异步）
+let useStateCalls = 0; // #29 回归：useState 调用总次数（用于断言「每帧 Hook 数量相同」）
 const hookViolations = []; // v5.5.0：hook 数量不稳定的记录（收尾统一判失败）
 function makeElement(type, props, ...children) {
   const vnode = { type, props: props === null || props === undefined ? {} : props, children: [] };
@@ -165,6 +166,7 @@ let currentHooks = null;
 const reactStub = {
   createElement: makeElement,
   useState(initial) {
+    useStateCalls += 1;
     if (currentHooks === null) throw new Error("useState 在组件渲染之外被调用");
     const slot = currentHooks.index;
     currentHooks.index += 1;
@@ -1216,6 +1218,165 @@ getClose.props.onClick();
 if (viaGet.selected !== null) fail("ctx.get 路径的关闭按钮未调用 layout.selectPanel(null)");
 console.log("席位晚声明与兜底（v5.2.0 二次修正）: 无 ctx.inject 依赖（不拖垮启动）✓ | 未声明时不注册 ✓"
   + " | 旧路径兜底 ✓ | 声明后接管两个席位并撤旧 UI ✓ | ctx.get 取 layout ✓");
+
+// ---------------------------------------------------------------------------
+// v8 面板缺陷回归（源码审查报告 #1 / #28 / #29 / #30 / #62）
+// 每条断言都对应一个真实会导致误删 / 泄漏 / 白屏 / 抛错的路径，修复前必须红。
+// ---------------------------------------------------------------------------
+
+// #1 [P0] 回收站行内动作必须按项绑定 id。
+// 旧实现是 `for (var ti...) { var trashItem = ...; onClick: function () { ...trashItem.id } }`，
+// var 是函数级作用域 → 所有行的回调共享同一个变量，循环结束后固定指向最后一条：
+// 点任何一行的「恢复」/「彻底删除」都作用在最后一条（有误删正文风险）。
+const trashPurgeCalls = [];
+const trashRestoreCalls = [];
+const trashSnapshot = Object.assign({}, controller.getSnapshot(), {
+  view: "trash", trashLoading: false, trashError: "", trashNote: "", trashBusyId: "",
+  delBook: "", delPlan: null, delResult: null, delSel: {}, delAck: false, delBusy: false,
+  booksStats: [],
+  trashList: [
+    { id: "trash-id-1", book: "第一本", createdAt: "2026-01-01T00:00:00.000Z", files: 1, bytes: 10, items: 1, restorable: true, path: "C:\\trash\\trash-id-1" },
+    { id: "trash-id-2", book: "第二本", createdAt: "2026-01-02T00:00:00.000Z", files: 2, bytes: 20, items: 2, restorable: true, path: "C:\\trash\\trash-id-2" }
+  ]
+});
+const trashProbe = Object.assign({}, controller, {
+  subscribe: () => () => {},
+  getSnapshot: () => trashSnapshot,
+  trashPurge: (id) => { trashPurgeCalls.push(id); return Promise.resolve(null); },
+  trashRestore: (id) => { trashRestoreCalls.push(id); return Promise.resolve(null); }
+});
+const trashProbeRender = runRender(reactStub.createElement(panelRender.element.type, { controller: trashProbe, toggle: () => {} }));
+const trashPurgeBtns = trashProbeRender.buttons.filter((b) => vnodeText(b).trim() === "彻底删除");
+const trashRestoreBtns = trashProbeRender.buttons.filter((b) => vnodeText(b).trim() === "恢复");
+if (trashPurgeBtns.length !== 2 || trashRestoreBtns.length !== 2) {
+  fail("#1 回收站应渲染 2 条恢复 + 2 条彻底删除，实际 " + trashRestoreBtns.length + "/" + trashPurgeBtns.length);
+}
+trashPurgeBtns[0].props.onClick();
+trashPurgeBtns[1].props.onClick();
+trashRestoreBtns[0].props.onClick();
+trashRestoreBtns[1].props.onClick();
+if (JSON.stringify(trashPurgeCalls) !== JSON.stringify(["trash-id-1", "trash-id-2"])) {
+  fail("#1 回收站彻底删除闭包陷阱：期望按行收到 [trash-id-1, trash-id-2]，实际 " + JSON.stringify(trashPurgeCalls));
+}
+if (JSON.stringify(trashRestoreCalls) !== JSON.stringify(["trash-id-1", "trash-id-2"])) {
+  fail("#1 回收站恢复闭包陷阱：期望按行收到 [trash-id-1, trash-id-2]，实际 " + JSON.stringify(trashRestoreCalls));
+}
+console.log("#1 回收站行动作按项绑定：恢复 / 彻底删除各自命中本行 id ✓");
+
+// #28 下拉展开/收起必须成对解绑全局监听（旧实现每次展开都 addEventListener，从不 remove）。
+const savedWinAdd = globalThis.addEventListener;
+const savedWinRemove = globalThis.removeEventListener;
+const winAdds = [];
+const winRemoves = [];
+globalThis.addEventListener = function (type) { winAdds.push(type); };
+globalThis.removeEventListener = function (type) { winRemoves.push(type); };
+try {
+  for (let round = 0; round < 3; round += 1) {
+    controller.selectSet("regress-28", { open: true });
+    controller.selectSet("regress-28", { open: false });
+  }
+} finally {
+  if (savedWinAdd === undefined) delete globalThis.addEventListener; else globalThis.addEventListener = savedWinAdd;
+  if (savedWinRemove === undefined) delete globalThis.removeEventListener; else globalThis.removeEventListener = savedWinRemove;
+}
+if (winAdds.length === 0) fail("#28 探测无效：展开下拉时未安装任何全局监听");
+const leakedWin = winAdds.length - winRemoves.length;
+if (leakedWin > 1) fail("#28 下拉全局监听未成对解绑：add " + winAdds.length + " / remove " + winRemoves.length + "（净泄漏 " + leakedWin + "）");
+const leakedDoc = (documentListeners.get("mousedown") || []).length;
+if (leakedDoc > 0) fail("#28 下拉 mousedown 监听未解绑（净泄漏 " + leakedDoc + "）");
+console.log("#28 下拉监听成对解绑：3 次开合 add " + winAdds.length + " / remove " + winRemoves.length + "，净泄漏 " + leakedWin + " ✓");
+
+// #29 prepare 里的 Hook 必须每帧稳定调用；非 Hook 的上下文计算抛错不得冒泡。
+// 旧实现把 prepare（内部含 useId/useState）整个包进 try/catch：一旦 Hook 入参求值抛错，
+// 这一帧一个 Hook 都不调用、下一帧又调用 → React 报 "Rendered fewer hooks than expected" → 面板白屏。
+const nwui = exported.__internals.NW_UI;
+if (!nwui || typeof nwui.DisclosureRow !== "function") {
+  fail("#29 回归需要 __internals.NW_UI.DisclosureRow（适配层未暴露，无法直接驱动 Hook 稳定性断言）");
+}
+let poisonHits = 0;
+const poisonedProps = { title: "hooks-probe", children: null };
+Object.defineProperty(poisonedProps, "defaultOpen", {
+  configurable: true,
+  get() {
+    poisonHits += 1;
+    // 恒抛：Hook 的入参求值失败（useState(isOn(defaultOpen))）——这正是旧实现会让
+    // FallbackOnly 的 try/catch 吞掉 Hook、下一帧又恢复 Hook 数量的那条路径。
+    throw new Error("hook-arg boom");
+  }
+});
+const hooksBeforePoison = useStateCalls;
+let poisonThrew = "";
+try {
+  runRender(reactStub.createElement(nwui.DisclosureRow, poisonedProps));
+} catch (err) {
+  poisonThrew = String(err && err.message ? err.message : err);
+}
+if (poisonThrew !== "") fail("#29 DisclosureRow 在 Hook 入参求值抛错时冒泡/破坏 Hook 链：" + poisonThrew);
+const poisonedFrameHooks = useStateCalls - hooksBeforePoison;
+const hooksBeforeNormal = useStateCalls;
+runRender(reactStub.createElement(nwui.DisclosureRow, { defaultOpen: true, title: "hooks-probe", children: null }));
+const normalFrameHooks = useStateCalls - hooksBeforeNormal;
+if (poisonedFrameHooks !== normalFrameHooks) {
+  fail("#29 Hook 调用次数每帧不同（异常帧 " + poisonedFrameHooks + " / 正常帧 " + normalFrameHooks + "）");
+}
+console.log("#29 适配层 Hook 每帧稳定：异常帧 / 正常帧均 " + normalFrameHooks + " 个 hook ✓");
+
+// #62 copyPath 必须校验 navigator/clipboard 存在性并吞掉同步异常（旧实现裸访问 navigator.clipboard）。
+removeClipboard();
+controller.set({ revealMsg: "", revealErr: false }, { silent: true });
+let copyPathThrew = false;
+try { controller.copyPath("C:\\probe\\#62"); } catch (err) { copyPathThrew = true; }
+if (copyPathThrew) fail("#62 navigator.clipboard 缺失时 copyPath 抛错");
+const copySnap = controller.getSnapshot();
+if (copySnap.revealErr !== true || !String(copySnap.revealMsg).includes("#62")) {
+  fail("#62 复制失败应如实报错并给出路径，实际：" + copySnap.revealMsg);
+}
+if (typeof navigator !== "undefined" && navigator !== null) {
+  let clipboardPoisoned = false;
+  try {
+    Object.defineProperty(navigator, "clipboard", { configurable: true, get() { throw new Error("policy denied"); } });
+    clipboardPoisoned = true;
+  } catch { clipboardPoisoned = false; }
+  if (clipboardPoisoned) {
+    controller.set({ revealMsg: "", revealErr: false }, { silent: true });
+    let copyPolicyThrew = false;
+    try { controller.copyPath("C:\\probe\\#62b"); } catch (err) { copyPolicyThrew = true; }
+    if (copyPolicyThrew) fail("#62 访问 navigator.clipboard 抛错时 copyPath 不得冒泡");
+    if (controller.getSnapshot().revealErr !== true) fail("#62 剪贴板访问抛错时应提示复制失败");
+  }
+  removeClipboard();
+}
+console.log("#62 copyPath：clipboard 缺失 / 访问抛错均不冒泡并如实提示 ✓");
+
+// #30 无 confirm 环境（沙箱 iframe / 无头测试）下破坏性路径不得抛错，且按「用户已确认」继续。
+const savedConfirm30 = globalThis.confirm;
+const savedFetch30 = globalThis.fetch;
+const deleteRequests30 = [];
+globalThis.fetch = (url) => {
+  deleteRequests30.push(String(url));
+  return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ ok: true, trash: [], groups: [] }) });
+};
+let confirmPathThrew = false;
+try {
+  globalThis.confirm = undefined;
+  try {
+    await controller.trashPurge("trash-id-30");
+    await controller.deleteReport("probe-report.json");
+  } catch (err) { confirmPathThrew = true; }
+  if (confirmPathThrew) fail("#30 window.confirm 缺失时删除路径抛错（safeConfirm 应视为已确认）");
+  if (!deleteRequests30.some((u) => u.includes("/delete-book"))) {
+    fail("#30 无 confirm 环境应继续执行删除请求，实际请求：" + JSON.stringify(deleteRequests30));
+  }
+  // 有 confirm 且用户取消时仍必须中止（统一口径后不能把「取消」变成「继续」）
+  globalThis.confirm = () => false;
+  const requestsBeforeCancel = deleteRequests30.length;
+  await controller.trashPurge("trash-id-30-cancel");
+  if (deleteRequests30.length !== requestsBeforeCancel) fail("#30 confirm 返回 false 时不得发出删除请求");
+} finally {
+  if (savedConfirm30 === undefined) delete globalThis.confirm; else globalThis.confirm = savedConfirm30;
+  globalThis.fetch = savedFetch30;
+}
+console.log("#30 safeConfirm：无 confirm 按已确认继续 / 用户取消仍中止 ✓");
 
 // v5.5.0 收尾：hook 数量必须跨渲染稳定（否则真机 = 面板白屏）
 if (hookViolations.length > 0) {

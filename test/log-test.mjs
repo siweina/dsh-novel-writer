@@ -323,6 +323,12 @@ test("① log 落点：logs/ 紧邻 state.json，而不是书库根；常量形�
   assert.equal(stats.exists, stats.files.length > 0);
 });
 
+test("①-b 导出面：logToolCall 已删除（入口层内联 logEvent，审查 #69）", () => {
+  assert.equal(typeof log.logToolCall, "undefined", "logToolCall 属 100% 死代码，应已删除");
+  assert.equal(typeof log.logEvent, "function", "logEvent 是唯一写入入口，必须保留");
+  assert.equal(typeof log.summarizeArgs, "function", "审计包装仍要用 summarizeArgs");
+});
+
 // ===========================================================================
 // ② 字段白名单 / ④ 自由文本收敛
 // ===========================================================================
