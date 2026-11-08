@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="技术文档总览｜dsh-novel-writer">
 <meta name="twitter:description" content="dsh-novel-writer 的 21 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","name":"技术文档总览｜dsh-novel-writer","description":"dsh-novel-writer 的 21 个工具实现细节：参数契约、计算原理、约束边界与源码位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/index.html","inLanguage":"zh-CN","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.1.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer","url":"https://siweina.github.io/dsh-novel-writer/"}}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","name":"技术文档总览｜dsh-novel-writer","description":"dsh-novel-writer 的 21 个工具实现细节：参数契约、计算原理、约束边界与源码位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/index.html","inLanguage":"zh-CN","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.2.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer","url":"https://siweina.github.io/dsh-novel-writer/"}}</script>
 </head>
 <body class="docs">
 
@@ -33,7 +33,7 @@
   <main class="docs__main">
     <article class="doc">
       <h1>技术文档</h1>
-      <p class="doc__version">当前版本 <code>7.1.0</code> · 更新记录见 <a href="https://github.com/siweina/dsh-novel-writer/blob/main/CHANGELOG.md">CHANGELOG</a>（下方「版本说明」）</p>
+      <p class="doc__version">当前版本 <code>7.2.0</code> · 更新记录见 <a href="https://github.com/siweina/dsh-novel-writer/blob/main/CHANGELOG.md">CHANGELOG</a>（下方「版本说明」）</p>
       <p class="doc__lead">
         <code>dsh-novel-writer</code> 的 21 个工具全部在本地运行，<strong>不使用在线大模型</strong>：所有指标由规则统计与本地 ONNX 推理得出。本组页面面向二次开发与集成方，逐工具说明参数契约、计算原理、约束边界与源码位置。
       </p>
@@ -55,6 +55,12 @@
       <ul class="doc__releases">
         <li>
           <details open>
+            <summary><code>7.2.0</code> · 2026-11-07 <span class="doc__rel-sum">对抗性审计：改稿台新增严格对账、独立 AI 任务书与证据复核（编造的原文判废），工具数仍 21</span></summary>
+            <p>新入口挂在 <a href="novel-fix-plan.html">novel_fix_plan</a> 上，<b>不新增工具</b>（仍为 21 个）：<code>action="audit"</code> <b>严格对账</b>——只跑八条<b>可机器判定</b>的契约（必用词 / 替身词、世界观禁用词、套话、原地打转、大纲兑现、章末收束、连续裸台词、伏笔登记），每条违约要么带 1-based 行号与原句片段、要么明确标成全章层面，契约没跑会写明原因（<code>ran: false</code>）而不是「查过没问题」；<code>action="audit_brief"</code> 生成给另一个<b>没有写作上下文</b>的 AI 的审计任务书（判据、取证 JSON 格式、「举不出证据一条都不许写」的硬约束，末尾附正文）；<code>action="audit_verify"</code> <b>逐条复核</b>它交回的 <code>claims</code>——行号错但原文确实在文中 → <code>corrected</code>（自动修正行号），全文找不到 → <code>rejected</code>（<b>疑似编造证据</b>），并给出 <code>score</code>（可信证据占比）。<b>明确不做文学评论</b>：抽象度 / 物件偏少 / 感官单通道这类风格症状仍在改稿台与开写包里作建议，但<b>不进审计</b>；审计永不修改正文，三个动作都不落盘。参数契约只加一个 <code>claims</code>，书库格式不变，详见 <a href="novel-fix-plan.html">novel_fix_plan</a> 的「严格对账的 8 条契约」与「为什么这不是文学评论」两节。</p>
+          </details>
+        </li>
+        <li>
+          <details>
             <summary><code>7.0.0</code> · 2026-11-01 <span class="doc__rel-sum">修尺子：细节密度词表去噪，动作链示例不再恒取开头三句、不再截断</span></summary>
             <p>这一版只做一件事：<b>修尺子</b>。细节密度的几张词表（动作 / 物件 / 五个感官通道）此前全是<b>单字正则</b>——「一点」贡献 2 个"动作动词"，「根本 / 要被」贡献"物件名词"，「一样 / 里面」贡献"视觉"，「痛苦 / 语气 / 力气」贡献"嗅觉"，「干净 / 麻烦」贡献"触觉"，「温柔」贡献"温度"。也就是说，过去基于这些数字得出的"感官偏科""动作干瘪"结论，测的是<b>词表</b>，不是你的正文。<br><b>① 加上下文豁免层</b>：新增 <code>lib/lexicons/collocation-guards.js</code>（198 条搭配，覆盖 7 个通道），这些虚词搭配命中时不再计数；实测同一章细节密度下降约 15%~20%。<b>② 动作链示例修两个旧 bug</b>：旧版 <code>actionChains.length &lt; 3</code> 填满即止、且遍历从全书开头开始，于是<b>每一章</b>拿到的都是本书第 1 章开头那三句（所谓"按章轮换"根本无从谈起）；旧版还按 40 个码点硬截断，放进开写包等于教模型写残句——现在只取 8~70 字的完整句并等距抽样。<b>③ 面板可见</b>：「诊断报告」页新增<b>度量口径</b>区，显示当前口径、还有几个缓存来自旧口径，并提供「重建分析缓存」按钮（只删 <code>analysis/*-chapters-metrics.json</code> 派生缓存；你在「基线范围」里选的章节存在 <code>baseline/</code> 下，不会被删）。<br><b>质量门禁</b>：新增 <code>test/density-precision-test.mjs</code>——陷阱句必须为 0、真信号必须仍被计入、固定语料计数锁定、豁免表不许有"死条目"（登记了却根本不命中该通道词表）。<br><b>升级须知</b>：细节密度（动作 / 物件 / 五维感官）在多数书上会<b>下降</b>，这是修掉虚词灌水、不是能力退化，<b>同一章的新旧数值不可直接比较</b>；六维基线（动作密度 / 抽象度 / 修饰密度 / 虚化 / 留白 / 复杂度）<b>本次未改</b>，口径不变。缓存随版本号失效，首次测量会重建。工具数仍为 21，参数契约与书库格式不变。<br><b>Phase 0 / 1A / 1B（同一版本内继续补完，不另起版本号）</b>：<b>Phase 0</b> 修尺子（细节密度上下文豁免、动作链只取完整句，见上）；<b>Phase 1A</b> <a href="novel-chapter-brief.html">novel_chapter_brief</a> 新增 5 个字段——<code>actionChains</code>（原著典型颗粒度动作链，p60~p85 分位取样 + 按目标章号确定性轮换）、<code>clauseFrames</code>（大纲子句框架，7 类动词元类 + 填空格式，插件不生成问句）、<code>prevChapterIssues</code>（上一章遗留问题）、<code>symptomPrescriptions</code>（症状处方，相关性门控 + 3 章 2 中滞回 + 每章最多 3 条）、<code>referenceProvenance</code>（参照集来源），受新增总预算 <code>enhanceChars</code>（compact 450 / full 900 字，装填优先级「上一章遗留 &amp; 症状处方 &gt; 子句框架 &gt; 动作链」）约束，开写清单另加一条恒定项「章末收束闸门」；<b>Phase 1B</b> <a href="novel-new-chapter.html">novel_new_chapter</a> 新增可选参数 <code>plan</code>（不写入正文，只用于写盘后核对兑现）与返回字段 <code>postWriteAudit</code>（最多 5 条，按严重度降序：未兑现的 plan 子句 / 章末升华 / 连续站桩对话 / 高频套话；只告警、不阻断保存），新增套话库 <code>lib/lexicons/slop.js</code>（8 类 / 73 条 pattern），<a href="novel-fix-plan.html">novel_fix_plan</a> 据此新增一类待办 <b>AI套话</b>（按类别归并、给命中处数与行号区间、target「0 处」，不罗列套话原文），并把参照集与诊断集分开。<b>Phase 2</b> <a href="novel-fix-plan.html">novel_fix_plan</a> 接入<b>本地向量审计</b>（<code>lib/vector-audit.js</code>，纯本地 ONNX、零外网、<b>不需要任何 API key</b>）：新增两类待办 <b>原地打转</b>（连续 ≥3 块语义雷同且没有新信息：章内 z ≥ 2.0、绝对余弦 ≥ 0.80、新二字组占比 &lt; 0.12）与 <b>大纲漏写</b>（大纲子句「关键词命中 || 向量相似 ≥ 0.42」，都未命中才报）；<b>只在改稿台跑</b>（单块约 47ms，进开写包/建章/常规自检会拖垮高频路径），受语义嵌入开关与引擎可用性双重门控，不可用时明确跳过并披露。测试套件 18 → 23 套，工具数仍为 21，<b>版本号仍为 7.0.0</b>。</p>
           </details>

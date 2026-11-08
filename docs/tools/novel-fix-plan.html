@@ -4,21 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>novel_fix_plan — 改稿台｜dsh-novel-writer 技术文档</title>
-<meta name="description" content="novel_fix_plan 的实现细节：plan / verify / mark 三个动作、mark 的 itemId + state 双必填与其不受引擎门禁约束的边界、待办项的稳定 id 与九类 type、severity 与 effort 的排序口径、locate 的段落级行号归因与字面类的行号区间 / 子串守卫（宁可粗也不给错的行号）、2 字词待判档与本书用词豁免、hint 只给改写方向不生成正文的边界、fix-plan JSON 的原子写落盘，以及「正常文本不产出待办」的误报约束。">
+<meta name="description" content="novel_fix_plan 的实现细节：plan / verify / mark 三个改稿动作与 audit / audit_brief / audit_verify 三个审计动作、mark 的 itemId + state 双必填与其不受引擎门禁约束的边界、待办项的稳定 id 与九类 type、severity 与 effort 的排序口径、locate 的段落级行号归因与字面类的行号区间 / 子串守卫（宁可粗也不给错的行号）、2 字词待判档与本书用词豁免、hint 只给改写方向不生成正文的边界、fix-plan JSON 的原子写落盘，以及「正常文本不产出待办」的误报约束，以及 v7.2.0 对抗性审计的三件套（严格对账 / 独立 AI 任务书 / 证据复核）。">
 <link rel="stylesheet" href="../styles.css">
 <link rel="stylesheet" href="docs.css">
 <link rel="canonical" href="https://siweina.github.io/dsh-novel-writer/tools/novel-fix-plan.html">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="dsh-novel-writer">
 <meta property="og:title" content="novel_fix_plan — 改稿台｜dsh-novel-writer 技术文档">
-<meta property="og:description" content="novel_fix_plan 的实现细节：plan / verify / mark 三个动作、mark 的 itemId + state 双必填与其不受引擎门禁约束的边界、待办项的稳定 id 与九类 type、severity 与 effort 的排序口径、locate 的段落级行号归因与字面类的行号区间 / 子串守卫（宁可粗也不给错的行号）、2 字词待判档与本书用词豁免、hint 只给改写方向不生成正文的边界、fix-plan JSON 的原子写落盘，以及「正常文本不产出待办」的误报约束。">
+<meta property="og:description" content="novel_fix_plan 的实现细节：plan / verify / mark 三个改稿动作与 audit / audit_brief / audit_verify 三个审计动作、mark 的 itemId + state 双必填与其不受引擎门禁约束的边界、待办项的稳定 id 与九类 type、severity 与 effort 的排序口径、locate 的段落级行号归因与字面类的行号区间 / 子串守卫（宁可粗也不给错的行号）、2 字词待判档与本书用词豁免、hint 只给改写方向不生成正文的边界、fix-plan JSON 的原子写落盘，以及「正常文本不产出待办」的误报约束，以及 v7.2.0 对抗性审计的三件套（严格对账 / 独立 AI 任务书 / 证据复核）。">
 <meta property="og:url" content="https://siweina.github.io/dsh-novel-writer/tools/novel-fix-plan.html">
 <meta property="og:locale" content="zh_CN">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="novel_fix_plan — 改稿台｜dsh-novel-writer 技术文档">
-<meta name="twitter:description" content="novel_fix_plan 的实现细节：plan / verify / mark 三个动作、mark 的 itemId + state 双必填与其不受引擎门禁约束的边界、待办项的稳定 id 与九类 type、severity 与 effort 的排序口径、locate 的段落级行号归因与字面类的行号区间 / 子串守卫（宁可粗也不给错的行号）、2 字词待判档与本书用词豁免、hint 只给改写方向不生成正文的边界、fix-plan JSON 的原子写落盘，以及「正常文本不产出待办」的误报约束。">
+<meta name="twitter:description" content="novel_fix_plan 的实现细节：plan / verify / mark 三个改稿动作与 audit / audit_brief / audit_verify 三个审计动作、mark 的 itemId + state 双必填与其不受引擎门禁约束的边界、待办项的稳定 id 与九类 type、severity 与 effort 的排序口径、locate 的段落级行号归因与字面类的行号区间 / 子串守卫（宁可粗也不给错的行号）、2 字词待判档与本书用词豁免、hint 只给改写方向不生成正文的边界、fix-plan JSON 的原子写落盘，以及「正常文本不产出待办」的误报约束，以及 v7.2.0 对抗性审计的三件套（严格对账 / 独立 AI 任务书 / 证据复核）。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_fix_plan","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-fix-plan.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_fix_plan — 改稿台｜dsh-novel-writer 技术文档","description":"novel_fix_plan 的实现细节：plan / verify / mark 三个动作、mark 的 itemId + state 双必填与其不受引擎门禁约束的边界、待办项的稳定 id 与九类 type、severity 与 effort 的排序口径、locate 的段落级行号归因与字面类的行号区间 / 子串守卫（宁可粗也不给错的行号）、2 字词待判档与本书用词豁免、hint 只给改写方向不生成正文的边界、fix-plan JSON 的原子写落盘，以及「正常文本不产出待办」的误报约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-fix-plan.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.1.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_fix_plan, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_fix_plan — 改稿台｜dsh-novel-writer 技术文档","description":"novel_fix_plan 的实现细节：plan / verify / mark 三个改稿动作与 audit / audit_brief / audit_verify 三个审计动作、mark 的 itemId + state 双必填与其不受引擎门禁约束的边界、待办项的稳定 id 与九类 type、severity 与 effort 的排序口径、locate 的段落级行号归因与字面类的行号区间 / 子串守卫（宁可粗也不给错的行号）、2 字词待判档与本书用词豁免、hint 只给改写方向不生成正文的边界、fix-plan JSON 的原子写落盘，以及「正常文本不产出待办」的误报约束，以及 v7.2.0 对抗性审计的三件套（严格对账 / 独立 AI 任务书 / 证据复核）。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-fix-plan.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.2.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_fix_plan, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -38,8 +38,12 @@
       <div class="note"><b>v6.5.0：</b>字面类待办（禁用词 / 语用不符）改为<strong>行号区间</strong>定位，并<strong>跳过子串巧合</strong>（与 <a href="novel-continuity-check.html">novel_continuity_check</a> 的用语审计同一套邻接守卫）；2 字词标为<strong>待判档</strong>，读原文后判定只是相邻巧合即可 <code>mark state: "skip"</code>。</div>
       <div class="note"><b>v6.5.5：</b>指标类待办的基线改为可配置——面板「风格基线」的<strong>基线范围</strong>（<strong>按全书</strong> 默认，＝旧行为；<strong>按部分</strong> 只用勾选的章，<strong>按书存储</strong>）决定「跟谁比」。<strong>目标章永远排除</strong>（即使被勾选）；实际参与 μ/σ 的基线章少于 3 章时容差下限抬到 <strong>±25%</strong>；勾选的章<strong>一章都取不到</strong>时回退<strong>按全书</strong>（绝不以空基线出结论）。范围由 <code>baselineScope</code>（文案）/ <code>baselineMode</code>（档位）两个键披露，文案也写进 <code>summary</code> 与落盘清单。</div>
       <div class="note"><b>v7.0.0：</b>新增三类待办——<strong>AI套话</strong>（类别 8→9：同一类别下的多处命中<strong>合成一条</strong>，给命中处数与行号区间，<code>target</code> 是「0 处」，<b>不罗列套话原文</b>以免负样本诱发）、<strong>原地打转</strong>与<strong>大纲漏写</strong>（9→11，本地向量审计，<b>只在改稿台跑</b>）。</div>
+      <div class="note"><b>v7.2.0：</b>新增<strong>对抗性审计</strong>三个动作——<code>audit</code> 严格对账 / <code>audit_brief</code> 生成独立 AI 任务书 / <code>audit_verify</code> 复核它交回的取证。<strong>工具数仍为 21</strong>：能力挂在既有工具上，不新增工具。三件事说清楚：<strong>①</strong> 动作取值从三个变成六个（参数表只多一个 <code>claims</code>）；<strong>②</strong> 审计<strong>只报能举证的违约</strong>——每条违约要么落到 1-based 行号与原句片段，要么明确标成<strong>全章层面</strong>（<code>line: 0</code>）并指向哪张表 / 哪条子句没对上；<code>detail</code> 只写「事实 + 依据」，<strong>不评价文笔</strong>（抽象度 / 物件偏少 / 感官单通道这类风格症状仍在改稿台与开写包里作建议，但<strong>不进审计</strong>）；<strong>③</strong> 独立 AI 的结论<strong>必须原样回传复核</strong>：行号错但原文确实在文中 → 自动修正（<code>corrected</code>），<strong>原文在正文里根本不存在 → 判为编造证据（<code>rejected</code>）并计入废卷</strong>。三个动作都不改正文、不落盘，也不受「写作助手功能」总开关约束（对账是对契约，不是对文风）。</div>
       <p class="doc__lead">
         改稿台。把某一章的测量偏差翻译成<strong>按优先级排好序的待办清单</strong>：每项带稳定 <code>id</code>、类型、原文定位（<code>lineStart</code> / <code>lineEnd</code> / <code>excerpt</code>）、现值与目标区间、可照改的原著锚段、严重度与改写代价，以及一句<strong>改写方向</strong>。<code>action: "plan"</code> 出清单，<code>"verify"</code> 复测，<code>"mark"</code> 标记单项。<strong>工具本身从不生成改写后的正文句子</strong>。指标类待办「跟谁比」由面板的<strong>基线范围</strong>决定（默认<strong>按全书</strong>，可改成<strong>按部分</strong>、只用勾选的章）。
+      </p>
+      <p class="doc__lead">
+        v7.2.0 起同一个工具还挂着<strong>对抗性审计</strong>：<code>action: "audit"</code> 严格对账（只报<strong>能举证</strong>的违约：行号 + 原句，或明确标注的全章层面）、<code>"audit_brief"</code> 生成给另一个<strong>没有写作上下文</strong>的 AI 的任务书、<code>"audit_verify"</code> 逐条复核它交回来的取证（行号错但原文在文中 = 自动修正，原文查不到 = 疑似编造证据、判废）。审计<strong>不评价文笔、不修改正文、不落盘</strong>——它不是文学评论，是账。
       </p>
 
       <div class="note">
@@ -56,9 +60,10 @@
         <tbody>
           <tr><th><code>book</code></th><td>string</td><td>是</td><td>书名，即 <code>novels/</code> 下的子目录名。空串或纯空白被拒绝，值经 <code>sanitizeSegment</code> 清洗。</td></tr>
           <tr><th><code>chapter</code></th><td>string</td><td>是</td><td>要改的章节标识：章号（<code>1</code> / <code>01</code>）、文件名（<code>第01章.md</code>）或标题子串，由 <code>findChapter</code> 解析；找不到则报错。与 <a href="novel-style-check.html">novel_style_check</a> 同一套解析规则（文件名优先于章号、纯数字不做子串兜底）。</td></tr>
-          <tr><th><code>action</code></th><td>string</td><td>否</td><td>枚举 <code>"plan"</code>（默认，产出待办清单） / <code>"verify"</code>（复测） / <code>"mark"</code>（标记单项）。省略或非枚举取值时按 <code>plan</code> 处理。</td></tr>
+          <tr><th><code>action</code></th><td>string</td><td>否</td><td>枚举 <code>"plan"</code>（默认，产出待办清单） / <code>"verify"</code>（复测） / <code>"mark"</code>（标记单项） / <code>"audit"</code>（严格对账：只跑可机器判定的契约，每条违约带行号与原文） / <code>"audit_brief"</code>（生成给独立 AI 的审计任务书） / <code>"audit_verify"</code>（复核审计者交回的 <code>claims</code>）。省略或非枚举取值时按 <code>plan</code> 处理。</td></tr>
           <tr><th><code>itemId</code></th><td>string</td><td><code>mark</code> 必填</td><td><code>mark</code> 必需：目标待办项的 <code>id</code>（取自 <code>plan</code> 返回的 <code>items[].id</code>），必须已存在于该章<strong>已落盘</strong>的清单里。<strong>缺省或空白串直接报错</strong>。</td></tr>
           <tr><th><code>state</code></th><td>string</td><td><code>mark</code> 必填</td><td><code>mark</code> 必需：处置状态，枚举 <code>"done"</code>（已按 <code>hint</code> 改过） / <code>"skip"</code>（有意不改）。<strong>缺省或非枚举值直接报错</strong>，且两种情形文案不同（v5.0.0 修正）：未传 → 「缺少 state 参数：只能是 "done"（已改）或 "skip"（跳过不改）」；传了非法值 → 「state 只能是 "done"（已改）或 "skip"（跳过不改），收到："finished"」。（旧版两种情形都报「需要 state 参数」，传了非法值时容易被误判成漏传。）</td></tr>
+          <tr><th><code>claims</code></th><td>array</td><td><code>audit_verify</code> 必填</td><td><code>audit_verify</code> 必需：审计者交回的声明数组，每条形如 <code>&#123; contract, line, text, why &#125;</code>——<code>contract</code> 是契约 id（<code>audit</code> 返回的 <code>contracts[].id</code> 之一）、<code>line</code> 是 1-based 行号、<code>text</code> <strong>必须是该行原文的连续子串</strong>（不得改字、不得拼接、不得跨行）、<code>why</code> 是可选的 ≤40 字理由。条目上声明 <code>additionalProperties: false</code>，必填项为 <code>contract</code> / <code>line</code> / <code>text</code>（<code>why</code> 可省）。插件会<strong>逐条复核</strong>：编造的行号与原文会被判 <code>rejected</code>。省略或非数组时按「没有待复核的声明」处理（<code>total: 0</code>），不报错。</td></tr>
           <tr><th><code>root</code></th><td>string</td><td>否</td><td>章节库根目录。省略时按 <code>config.root</code> → 会话工作目录回退；MCP 形态下越界值被静默回退到启动参数 <code>--root</code> 指定的书库根。</td></tr>
         </tbody>
       </table>
@@ -71,20 +76,27 @@
           <tr><th><code>plan</code></th><td>重新测量本章并产出待办清单（默认），同时把清单原子写到该章的 <code>fix-plan-*.json</code>。</td><td>章节可解析；<strong>写作助手功能已开启</strong>（六维引擎门禁，与 <a href="novel-style-check.html">novel_style_check</a> 同口径）</td><td><code>items[]</code> + <code>summary</code> + <code>planFile</code></td></tr>
           <tr><th><code>verify</code></th><td>对当前正文重算，并与上次落盘的清单逐项比对，给出三态结论。<strong>不写盘</strong>。</td><td>同上（引擎门禁）；清单文件不存在时不报错，改为报告「按当前正文现算」</td><td><code>checked[]</code>（逐项三态）+ <code>summary</code></td></tr>
           <tr><th><code>mark</code></th><td>把单项标记为已处置（<code>state: "done"</code> 已改 / <code>state: "skip"</code> 有意不改）。<strong>只改落盘清单里的处置状态，不重新测量、不改正文</strong>，因此<strong>不受六维引擎门禁约束</strong>。</td><td><code>itemId</code> <strong>且</strong> <code>state</code> 齐备，且该章已有落盘清单、<code>itemId</code> 能在清单里找到</td><td><code>ok</code> + <code>item</code>（被更新的那条）</td></tr>
+          <tr><th><code>audit</code>（v7.2.0）</th><td><strong>严格对账</strong>：只跑八条可机器判定的契约，每条违约都带 1-based 行号与原句片段；<strong>不评价文笔、不改正文</strong>。没跑的契约会写明原因（<code>ran: false</code> + <code>reason</code>），<strong>不把「没查」伪装成「查过没问题」</strong>。只读，不落盘。</td><td>章节文件可解析；<strong>不依赖六维引擎、也不受「写作助手功能」总开关约束</strong>（两条向量契约要看本地语义引擎是否可用，不可用时该契约 <code>ran: false</code>）</td><td><code>auditReport</code>（结构见下文）+ <code>summary</code> + <code>ok</code></td></tr>
+          <tr><th><code>audit_brief</code>（v7.2.0）</th><td><strong>出任务书</strong>：生成一段 Markdown 交给<strong>没有写作上下文的 AI</strong>——写清允许的契约与判据、取证 JSON 格式、「举不出证据一条都不许写」的硬约束，末尾附本章正文（行号从 1 开始）。<strong>不派 AI、不发网络请求</strong>（插件是工具提供者，spawn 子代理是宿主的事）。</td><td>同上；正文会整段进入返回体（返回体大小约等于正文长度）</td><td><code>auditBrief</code>（结构见下文）+ <code>summary</code> + <code>ok</code></td></tr>
+          <tr><th><code>audit_verify</code>（v7.2.0）</th><td><strong>复核取证</strong>：把审计者交回的 <code>claims</code> 逐条验证——都对 → <code>accepted</code>；行号错但原文在文中别处 → <code>corrected</code>（自动修正行号）；全文找不到 → <code>rejected</code>（<strong>疑似编造证据</strong>）。最后给 <code>score</code>（可信证据占比）。<strong>只验存在性，不判断「算不算违约」</strong>。</td><td><code>claims</code> 为数组；章节正文可读（行号以它为准）。<code>claims</code> 缺失/空数组不报错，返回 <code>total: 0</code></td><td><code>auditVerify</code>（结构见下文）+ <code>summary</code> + <code>ok</code></td></tr>
         </tbody>
       </table>
       <div class="warn note">
-        <b>门禁口径：<code>mark</code> 与 <code>plan</code> / <code>verify</code> 不同。</b><code>plan</code> / <code>verify</code> 依赖六维引擎，执行前先读状态文件里的「写作助手功能」总开关，关闭时<strong>直接拒绝执行</strong>（与 <code>novel_style_check</code> 完全一致）。<code>mark</code> 在引擎门禁之前就分支返回——它只是读-改-写自己那份清单，即使总开关被关闭也能用来登记处置状态。三个动作都仍要过工具级开关 <code>assertToolEnabled("novel_fix_plan")</code>。
+        <b>门禁口径：<code>mark</code> 与 <code>plan</code> / <code>verify</code> 不同。</b><code>plan</code> / <code>verify</code> 依赖六维引擎，执行前先读状态文件里的「写作助手功能」总开关，关闭时<strong>直接拒绝执行</strong>（与 <code>novel_style_check</code> 完全一致）。<code>mark</code> 在引擎门禁之前就分支返回——它只是读-改-写自己那份清单，即使总开关被关闭也能用来登记处置状态。三个改稿动作（<code>plan</code> / <code>verify</code> / <code>mark</code>）都仍要过工具级开关 <code>assertToolEnabled("novel_fix_plan")</code>。
+        <br><b>v7.2.0：审计的三个动作同样不受「写作助手功能」总开关约束。</b><code>audit</code> / <code>audit_brief</code> / <code>audit_verify</code> 在引擎门禁之前就分支返回——对账是对<strong>契约</strong>（词表、登记表、结构），不是对<strong>文风</strong>，因此总开关关着时仍能对账。它们仍要过工具级开关。
       </div>
 
       <h2>输出结构</h2>
-      <p>三个动作的返回体形状<strong>并不相同</strong>，且<strong>只有 <code>plan</code> 返回 <code>planFile</code></strong>：</p>
+      <p>六个动作的返回体形状<strong>并不相同</strong>，且<strong>只有 <code>plan</code> 返回 <code>planFile</code></strong>：</p>
       <table>
         <thead><tr><th><code>action</code></th><th>返回字段</th></tr></thead>
         <tbody>
           <tr><th><code>plan</code></th><td><code>book</code>、<code>action</code>、<code>chapter</code>（<code>&#123; file, number, title &#125;</code>）、<code>items[]</code>、<code>summary</code>、<code>planFile</code>、<code>baselineScope</code>（<strong>基线说明</strong>）与 <code>baselineMode</code>（<code>all</code> / <code>custom</code> 档位）——v6.5.5 起两键一起返回、随面板「基线范围」变化，完整文案格式、与风格自检的<strong>同口径</strong>关系及残留的两处刻意差异见下文「十一类待办的判定来源」下的 v6.5.5 说明块</td></tr>
           <tr><th><code>verify</code></th><td><code>book</code>、<code>action</code>、<code>chapter</code>（优先取落盘清单里的 chapter，无清单时取本次现算的）、<code>checked[]</code>、<code>summary</code>。<strong>不返回 <code>planFile</code></strong>（清单路径只在「找不到清单」时被写进 <code>summary</code> 文案）</td></tr>
           <tr><th><code>mark</code></th><td><code>book</code>、<code>action</code>、<code>summary</code>、<code>ok</code>、<code>item</code>（更新后的那条，含 <code>state</code> / <code>stateAt</code>）</td></tr>
+          <tr><th><code>audit</code>（v7.2.0）</th><td><code>book</code>、<code>action</code>、<code>chapter</code>、<code>summary</code>、<code>ok</code>、<code>auditReport</code>——字段口径见下文 <code>auditReport</code> / <code>auditBrief</code> / <code>auditVerify</code> 三小节；<strong>不返回 <code>planFile</code>，不写任何文件</strong></td></tr>
+          <tr><th><code>audit_brief</code>（v7.2.0）</th><td><code>book</code>、<code>action</code>、<code>chapter</code>、<code>summary</code>、<code>ok</code>、<code>auditBrief</code>——<code>brief</code> 是<strong>给没有写作上下文的 AI</strong> 的整段任务书（末尾附正文）、<code>allowedContracts</code> 是允许的契约 id、<code>protocol</code> 是同一份约束的<strong>机器可读版本</strong></td></tr>
+          <tr><th><code>audit_verify</code>（v7.2.0）</th><td><code>book</code>、<code>action</code>、<code>chapter</code>、<code>summary</code>、<code>ok</code>、<code>auditVerify</code>——<code>total</code> / <code>score</code> / <code>accepted</code> / <code>corrected</code> / <code>rejected</code>（<code>total = 0</code> 时另带 <code>reason</code>）。<code>score</code> 是<strong>可信证据占比</strong>，不是文笔评分</td></tr>
         </tbody>
       </table>
       <p><code>chapter</code> 对象来自目录扫描：<code>number</code> 解析不出时为 <code>null</code>（键被整键丢弃）。契约必返字段是 <code>book</code> / <code>action</code> / <code>summary</code>。</p>
@@ -111,6 +123,122 @@
       <p>四级排序的用意依次是：先改影响文风判定最严重的；同严重度时先做便宜的（不让人卡在难改的一段上）；同权重同代价时按正文顺序自上而下，便于一次通读改完；最后一级只用于让完全同键的项<strong>结果可复现</strong>。<code>lineStart = 0</code> 的全章层面项排在同键项的最前（行号最小），调用方应显式分支处理，不要把它当作「第一段」。</p>
       <p><strong>渲染文本带 <code>id</code>（v5.0.0 修正）</strong>：<code>plan</code> 的渲染在每条待办的「类型 / 严重度 / 难度 / 位置」行下方紧跟一行 <code>id：fix-…</code>。此前 <code>id</code> 只在返回体与落盘文件里，模型要 <code>mark</code> 得先自己去读 <code>planFile</code> 才能拿到——现在清单里直接可复制，少一次往返。</p>
       <p><strong>渲染文本带「处理建议」（v5.1.0 新增）</strong>：<code>plan</code> 的渲染在 <code>待办 N 条…</code> 之后多一行<strong>处理建议</strong>，内容是<strong>分批改</strong>——同一段落 / 同一类型的问题<strong>合并成一次修改</strong>；<strong>一轮只处理 3~5 条</strong>；<strong>不必逐条 <code>mark</code></strong>；<strong>改完最多 <code>verify</code> 一次</strong>。这是给调用方的<strong>节奏约束</strong>，不是新的返回字段：返回体形状未变（<code>items[]</code> 仍是 9 字段，<code>state</code> / <code>stateAt</code> 仍只落盘、只由 <code>mark</code> 写入）。改稿一次只动几处、一次改完整段，比按清单从上到下逐条打磨更接近真实改稿，也能避免「改一处、测一次」的往返成本把注意力耗在数字上。<strong>清单上有一条不等于必须改那一条</strong>：只有偏离达到 <strong>2 倍容差</strong>以上、或那一处读起来确实别扭时才动笔——容差带本身取 1.5σ，六维里有一维出带是常见现象，为对齐数字改文只会把作者的写法磨平；确实属于正常写法的（抒情 / 心理 / 留白段落）用 <code>mark state: "skip"</code> 留下记录即可。</p>
+
+      <p id="auditOutput">三个审计动作各自只产出<strong>一个</strong>专属键，彼此不混装；三者都<strong>只读</strong>：不改正文、不写盘、不迁移旧数据（读 <code>novel_plot</code> 的登记表时走 <code>readOnly</code> 分支，避免顺手把旧位置伏笔表搬到新位置）。</p>
+
+      <h3><code>auditReport</code>（<code>action: "audit"</code>）</h3>
+      <div class="formula">auditReport = &#123;
+  file,            // 章节文件名（basename，不是完整路径）
+  chapterNumber,   // 由文件名解析；解析不出为 null，且被整键丢弃（返回体里不出现该键）
+  lines,           // 正文行数（空正文 0 行；与 novel_read / countTextLines 同口径）
+  contracts: [ &#123; id, label, ran, reason? &#125; × 8 ],          // 恒 8 条，顺序固定，不按有无违约过滤
+  violations: [ &#123; contract, severity, title, line, text, detail &#125; ],  // 每条恒 6 键
+  summary
+&#125;</div>
+      <ul>
+        <li><strong><code>contracts</code> 恒 8 条</strong>（<code>lexicon</code> / <code>banned</code> / <code>slop</code> / <code>loop</code> / <code>outline</code> / <code>ending</code> / <code>bare_dialogue</code> / <code>plot</code>，顺序即定义顺序）。<code>ran: false</code> 的条目带 <code>reason</code>（如「未登记必用词表」「语义引擎不可用」）——<strong>它表示「没查」，不表示「查过没问题」</strong>。</li>
+        <li><strong><code>violations</code> 每条恒 6 键</strong>：即使注入的依赖多给了字段也<strong>不许漏进输出</strong>（审计的契约是「无建议性字段」）。<code>title</code> 为空时回落到契约 <code>label</code>；<code>severity</code> 钳到 1–5 的整数；<code>line</code> 为 1-based 行号，<code>0</code> 表示全章 / 跨章层面（此时 <code>text</code> 通常是空串）；<code>detail</code> 只写事实与依据，不写改法。</li>
+        <li><strong>排序</strong>：<code>severity</code> 降序 → <code>contract</code> 字典升序 → <code>line</code> 升序（<span class="src">lib/audit.js</span> 的 <code>compareViolations</code>）。</li>
+        <li><strong><code>summary</code> 形态</strong>：「严格对账：N 条违约（其中 H 条硬违约）；M 项契约未跑（<code>id</code>：原因；…）」。<strong>硬违约 = <code>severity ≥ 4</code></strong>（世界观禁用词、命中 ≥3 处的套话），其余是一般违约。</li>
+        <li><strong>渲染文本</strong>：逐条列出 <code>[契约] 标题（第 N 行 / 全章层面，严重度 S，硬违约 / 待确认）</code>，有原文与依据才各起一行；末尾单独列<strong>未跑的契约</strong>，并固定写一句「审计只报能举证的违约，不改正文、不评价文笔；「硬违约」与「待确认」的区别是后者可能是你有意为之」。0 条违约时的文案是「没有发现<strong>能举证</strong>的违约。（不等于「文笔没问题」……）」。</li>
+      </ul>
+
+      <h3><code>auditBrief</code>（<code>action: "audit_brief"</code>）</h3>
+      <table>
+        <thead><tr><th>字段</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr><th><code>brief</code></th><td>给<strong>没有写作上下文</strong>的 AI 的整段任务书（Markdown，八节）：身份与边界（「你是审计员，不是编辑」）→ 任务 → 允许的契约（逐条判据）→ 取证格式（严格 JSON，带一个示例）→ 硬约束（违反会被判废）→ 输出 → 本次审计对象（书 / 文件 / 章号 / 行数 / 允许的契约）→ <strong>正文</strong>（代码围栏，行号从 1 开始，与 <code>line</code> 字段一一对应）。围栏长度按正文里最长的反引号串自适应（至少 3 个），避免正文自带 ``` 时把任务书的正文层提前闭合。<strong>任务书只写判据与取证格式，不写任何改法。</strong></td></tr>
+          <tr><th><code>allowedContracts</code></th><td>本次允许的契约 id 数组。<strong>工具层恒为全部 8 个</strong>——<code>buildAuditBrief</code> 支持传子集（未知 id 忽略、一个都不剩时退回全量），但调用参数里<strong>没有</strong>暴露该选项（<code>additionalProperties: false</code>）。</td></tr>
+          <tr><th><code>protocol</code></th><td>同一份约束的<strong>机器可读版本</strong>：<code>version: 1</code>、<code>book</code> / <code>file</code> / <code>chapterNumber</code> / <code>lineCount</code>、<code>contracts[]</code>（<code>&#123; id, label, criterion &#125;</code>）、<code>allowedContracts</code>、<code>claimFields</code>（<code>contract</code> 的 enum、<code>line</code> 的 1..lineCount、<code>text</code> 的「该行连续子串」、<code>why</code> 的 ≤40 字）、<code>outputSchema</code>、<code>verifyRules</code>（<code>textMustBeContinuousSubstring</code> / <code>lineIs1Based</code> / <code>normalizesWhitespace</code> / <code>correctsLineWhenTextFoundElsewhere</code> / <code>rejectsFabricatedText</code>）与 <code>output</code> 示例。</td></tr>
+        </tbody>
+      </table>
+
+      <h3><code>auditVerify</code>（<code>action: "audit_verify"</code>）</h3>
+      <div class="formula">auditVerify = &#123;
+  total,      // 参与复核的声明数 = accepted + corrected + rejected（去重后）
+  score,      // 可信证据占比 = round((accepted + corrected) / total × 100)；total = 0 时为 0
+  accepted: [ &#123; contract, line, text, why &#125; ],                       // 行号与原文都对
+  corrected: [ &#123; contract, line, text, why, foundLine, reason &#125; ],    // 行号错、原文在文中别处
+  rejected: [ &#123; contract, line, text, why, reason &#125; ],               // 判废
+  reason?     // 仅 total = 0 时出现：「没有待复核的声明」
+&#125;</div>
+      <ul>
+        <li><strong>四条判定</strong>：<code>text</code> 去空白后为空、或 <code>line</code> 不是整数 / &lt; 1 / 超出正文行数 → <code>rejected</code>（<code>reason</code> = 「行号或原文缺失」）；该行（空白归一后）包含声明原文 → <code>accepted</code>；该行不含但全章<strong>其它行</strong>能找到 → <code>corrected</code>（按行号<strong>升序</strong>取第一条，<code>foundLine</code> 是实际行号，<code>line</code> 仍是声明时给的行号）；全章都找不到 → <code>rejected</code>（<code>reason</code> = 「原文在正文中不存在（疑似编造证据）」）。</li>
+        <li><strong>去重</strong>：同一 <code>contract</code> + 归一后原文只保留第一条；<strong>原文为空的非法声明不参与去重</strong>（否则多条坏声明会被并成一条，虚高 <code>score</code>）。</li>
+        <li><strong>空白口径</strong>：声明与正文行都先做 <code>\s+</code> → 单空格、去首尾再比较；再退一步用「去掉全部空白」的形态兜底（容忍独立 AI 多打 / 少打一个空格）。<strong>回填的 <code>text</code> 恒为归一空白后的形态</strong>（机器可读、稳定）。</li>
+        <li><strong>不校验的东西</strong>：<code>contract</code> 是否在 8 个合法 id 里、<code>why</code> 是否超 40 字——复核只验<strong>存在性</strong>，判不了「这条算不算违约」。</li>
+        <li><strong>渲染文本</strong>：一行汇总「N 条声明 → 可信 X 条（其中 Y 条行号已修正），判废 Z 条；可信度 score%」，然后分 <code>✅ 采纳</code> / <code>✎ 行号已修正（原文确实在文中，只是行号报错）</code> / <code>✗ 判废（疑似编造证据，不要采信）</code> 三组列出。</li>
+      </ul>
+
+      <h2>严格对账的 8 条契约（v7.2.0）</h2>
+      <p><code>action: "audit"</code> 只跑下面这八条<strong>可机器判定</strong>的契约。判据、<code>severity</code> 与「没跑」的条件都照 <span class="src">lib/audit.js</span> 的 <code>CONTRACT_DEFS</code> 与八条处理器写——<strong>判据只写怎么判，不写怎么改</strong>：改法是改稿台 <code>hint</code> 的事，不是审计的事。</p>
+      <table>
+        <thead><tr><th>契约 <code>id</code></th><th>判据（一句话）</th><th><code>severity</code></th><th>未跑（<code>ran: false</code>）的条件</th></tr></thead>
+        <tbody>
+          <tr><th><code>lexicon</code><br>必用词/替身词</th><td>必用词（含 <code>aliases</code> 等价写法）本章<strong>一次都没出现</strong>，或出现了词表登记的「通用替身词」（沿用 v7.1.0 的<strong>严格包含</strong>口径：替身词包含必用词时，如必用词「药」vs 替身「草药」，该处仍算用了替身词）。</td><td>未出现 <strong>2</strong>（<code>line: 0</code>、<code>text: ""</code>，全章层面）<br>替身词 <strong>3</strong>（取该词条首次出现的行）</td><td>「未登记必用词表」；「必用词表文件损坏（无法读取或不是合法 JSON）」。<strong>表为空是「没跑」，不是「没问题」</strong></td></tr>
+          <tr><th><code>banned</code><br>世界观禁用词</th><td>正文使用了 <code>core.resolveStyleRule</code> 裁决出的禁用词（本书 <code>allowWords</code> 的逐词静音已在裁决点生效，这里不重复实现）。同一行同一词只报一条。</td><td><strong>4</strong>（恒为硬违约）</td><td>「未登记世界观条目（worldview）」或「当前文化基准没有可用的禁用词（未登记 bannedWords / 全被 <code>allowWords</code> 豁免）」——<strong>空材料一律 <code>ran: false</code></strong>，与 <code>lexicon</code> 同口径（v7.2.0 修正前这里会报 <code>ran: true</code> + 0 违约，看起来像「查过没问题」）</td></tr>
+          <tr><th><code>slop</code><br>套话</th><td>命中套话词表（8 类）的<strong>词面片段</strong>，<strong>按类别归并</strong>：每类只出一条，取该类最早命中行，<code>detail</code> 给类别名与命中处数。</td><td>基准 <strong>3</strong>；同类 <strong>≥3 处 → 4</strong>、<strong>≥6 处 → 5</strong>（封顶 5）</td><td>无固定条件——只有该步抛错时才由外层 <code>catch</code> 记为 <code>ran: false</code>，<code>reason</code> 是错误消息</td></tr>
+          <tr><th><code>loop</code><br>原地打转</th><td>连续语义块高度相似且几乎没有新信息（<code>detectSemanticLoop</code>：章内稳健 z 分数 <strong>与</strong> 绝对余弦 <strong>与</strong> 词汇新颖度三条件同时满足）。</td><td><strong>3</strong></td><td>「语义引擎不可用（模型缺失或 WASM 初始化失败）」；<code>checked !== true</code>（正文 &lt; 200 字、语义块太少、任一嵌入失败——引擎给的 <code>reason</code> 原样透传）</td></tr>
+          <tr><th><code>outline</code><br>大纲兑现</th><td>本章大纲方向行的某个子句，在正文里<strong>关键词命中不足且向量相似低于阈值</strong> → 该子句「未兑现」；<code>skipped</code>（查询向量拿不到、压根没判定）<strong>不算违约</strong>。</td><td><strong>3</strong>（<code>line: 0</code>、<code>text: ""</code>，全章层面）</td><td>解析不出章号 / 大纲文件不存在或<strong>没有本章方向行</strong> / 方向行为空 / 引擎不可用 / <code>checked !== true</code>（方向行过短、正文 &lt; 200 字、切不出语义块、嵌入失败）</td></tr>
+          <tr><th><code>ending</code><br>章末收束</th><td>章末停在抽象感悟 / 预告上（<code>ending_preach</code> 症状）：结尾段没有对话、具体动作 &lt; 2 处，且命中抽象总结词或章末套话。</td><td><strong>3</strong>（<code>line</code> = 最后一个内容行，跳过空行 / Markdown 标题 / 分割线）</td><td>实际上<strong>恒 <code>ran: true</code></strong>——诊断函数内部逐维吞错并返回空数组；只有依赖本身抛错才 <code>ran: false</code></td></tr>
+          <tr><th><code>bare_dialogue</code><br>连续裸台词</th><td>连续多段只有台词与「道 / 冷笑」，旁白 &lt; 12 字且没有具体动作或器物接触（<code>bare_dialogue</code>）；行号取该游程<strong>首段的真实行号</strong>（游程由 <code>maxBareDialogueRun</code> 给出，再经语义块定位换算；定不到给 0）。</td><td><strong>3</strong></td><td>与 <code>ending</code> 共用<strong>同一次</strong>诊断，条件同上</td></tr>
+          <tr><th><code>plot</code><br>伏笔登记</th><td>仍 <code>open</code> 且登记章号<strong>早于</strong>本章的伏笔，本章命中其 <strong>≥2 个关键词</strong>，但登记表没记录本章提及 → 「伏笔<strong>疑似</strong>推进但登记表未更新」。</td><td><strong>2</strong>（刻意只给最低档——「推进」本身不可判定，见下节）</td><td>「无伏笔记录」（先于章号判定：登记表为空时给这个原因）/「解析不出本章章号，无法核对伏笔登记」</td></tr>
+        </tbody>
+      </table>
+      <div class="note">
+        <b>这份表的四条通用规则。</b>
+        <br>① <strong>顺序即定义顺序，<code>contracts</code> 恒 8 条</strong>，不按「有没有违约」过滤；<code>ran: false</code> 的条目带 <code>reason</code>，它表示<strong>没查</strong>，不表示查过没问题。
+        <br>② <strong>八条契约各自独立 try/catch</strong>：某一条抛错或依赖缺失<strong>只让它自己</strong> <code>ran: false</code>，其余照跑；取消（<code>AbortError</code>）一律向外重抛，<strong>不伪装成「契约未跑」</strong>。
+        <br>③ <strong>硬违约 = <code>severity ≥ 4</code></strong>：实际上只有 <code>banned</code>（4）与命中密集的 <code>slop</code>（4~5）算硬违约；<code>lexicon</code> 的必用词缺失是 2、<code>plot</code> 是 2，其余一律 3。
+        <br>④ <strong>行号口径</strong>：绝对行号、1-based、<code>\r\n</code> / <code>\r</code> 先归一为 <code>\n</code>（行号不变），与 <a href="novel-read.html">novel_read</a> 同口径；<code>line: 0</code> 表示全章 / 跨章层面，调用方要<strong>显式分支</strong>，不要当成「第 1 行」。
+      </div>
+      <div class="warn note">
+        <b>口径与改稿台的对齐情况（v7.2.0 发布前修过一轮）。</b>
+        <br><b>① <code>banned</code> 的豁免表已与改稿台统一。</b>审计现在用 <code>core.isGuardedArtifact</code>（<span class="src">lib/lexicons/guards.js</span> 的实证碰撞表），与改稿台、连贯性审计<strong>同一张</strong>。修正前误用了细节密度的六通道搭配表，导致「这里正是…」含禁用词「里正」时<strong>改稿台静音、审计报硬违约</strong>——两套结论互相打脸，现已消除。
+        <br><b>② <code>slop</code> 现在也套用「题材静音」。</b>审计会先用 <code>buildSlopExemptions("", &#123; settings &#125;)</code> 生成豁免（系统流 / 数据面板题材静音 <code>stat_numeric</code>），再 <code>scanSlop</code>。<strong>但「参照集高频习惯词」这一层审计不加载</strong>（不读基线章）——所以审计只会比改稿台<strong>更严</strong>，不会更松。
+        <br><b>③ 语义开关已透传。</b><code>features.semanticEmbedding</code> 关闭时，<code>loop</code> / <code>outline</code> 记 <code>ran: false</code> 并写明原因，与改稿台 <code>plan</code> / <code>verify</code> 同口径，不会再绕过用户设置去跑嵌入推理。
+        <br><b>④ 空材料语义已统一。</b><code>lexicon</code>（无词表）与 <code>banned</code>（无可用禁用词）一律 <code>ran: false</code> + 原因；看到 0 违约时先看 <code>ran</code>，别把「没查」读成「查过没问题」。</div>
+
+      <h2>为什么这不是文学评论（v7.2.0 设计取舍）</h2>
+      <p><strong>写作没有真值。</strong>一段文字「好不好」无法用机器判定，任何这类判断都只是模型口味。所以审计的产出<strong>只允许是违约</strong>：契约必须可判定（词表命中 / 登记项缺失 / 结构性症状），每条违约要么能定位到 1-based 行号与原文片段、要么在明确标成「全章层面」（<code>line: 0</code>）时仍指向具体的表项或大纲子句——不能有任何一条是「我觉得这里不好」，<code>detail</code> 只写「事实 + 依据」，<strong>绝不写「应该怎么改」</strong>。这条边界也写进了任务书本身——「你是一名<strong>审计员</strong>，不是编辑」「举不出证据的一条都不许写」。</p>
+
+      <h3>① 风格症状被明确排除（是取舍，不是漏做）</h3>
+      <p><code>abstract</code>（抽象度）/ <code>object_thin</code>（物件偏少）/ <code>sense_mono</code>（感官单通道）/ <code>action_thin</code>（动作偏少）这类<strong>风格症状不进审计</strong>：它们都是「相对参照集分位」的判断，题材差异极大——一旦写成违约，审计就会<strong>天天劝人把留白填满、把抒情段改成动作段</strong>。它们仍是<strong>改稿台与开写包里的建议</strong>（那里的处境不同：把选项摆出来，改不改由作者定），只是不会变成「违约」。</p>
+      <p><strong>代码上还有第二道保险。</strong>审计调用 <code>diagnoseChapterSymptoms(text, refStats)</code> 时 <code>refStats</code> 传的是 <code>null</code>，该函数在 <code>refStats = null</code> 时<strong>只返回结构性症状</strong>（<code>ending_preach</code> / <code>bare_dialogue</code>），相对类症状（<code>abstract</code> / <code>action_thin</code> / <code>sense_mono</code> / <code>object_thin</code>）<strong>根本不会产生</strong>。套话的<strong>词表命中</strong>仍是违约（词面事实，由 <code>slop</code> 契约负责），但它的<strong>相对分位</strong>版本同样不是。</p>
+
+      <h3>② 只报不改</h3>
+      <p>审计<strong>永不修改正文</strong>：三个动作都不写文件（不落盘报告、不写清单、不迁移旧数据），<code>detail</code> 里没有改写建议，返回体里没有任何「改写后的句子」。改不改、怎么改由作者决定——插件只负责<strong>把账摆出来</strong>。</p>
+
+      <h3>③ 三段式：插件出任务书 → 宿主派独立 AI → 插件复核证据</h3>
+      <p>插件是<strong>工具提供者</strong>，不能 spawn 子代理，也不调用在线模型。所以一次完整的对抗性审计是<strong>三次调用 + 一次宿主动作</strong>：</p>
+      <div class="formula">① novel_fix_plan action="audit"        → 机器契约直接对账（零 token，只报能举证的）
+② novel_fix_plan action="audit_brief"  → 出任务书（判据 + 取证格式 + 硬约束 + 正文）
+   └ 宿主把整段 brief 交给一个没有写作上下文的独立 AI（上下文隔离是宿主的责任）
+③ novel_fix_plan action="audit_verify" claims=[…] → 逐条复核取证
+     accepted（都对）/ corrected（行号错、原文在文中）/ rejected（查不到 = 疑似编造证据）
+   → score = 可信证据占比</div>
+      <p><strong>没有第 ③ 步，前两步只是「第二个会说话的模型」。</strong>独立 AI 的结论不是结论，只是一组待验证的声明；能不能采信，由插件逐条核对<strong>行号与原文</strong>决定。</p>
+      <div class="note">
+        <b>面板也有独立入口（v7.2.0）。</b>WebUI「诊断报告」页新增一张<b>「对抗性审计」</b>卡片，三个按钮各自标明成本：
+        「严格对账 · 本地 0 token」「生成任务书 · 0 token」（结果自动复制到剪贴板）「复核证据 · 0 token」（粘贴外部 AI 返回的
+        <code>claims</code>，当场给出采纳 / 修正 / 判废）。后端对应一条<b>只读</b>路由 <code>/api/dsh-novel-writer/audit</code>
+        （<code>GET</code> 探测并返回<b>作品名清单</b>，面板的书名下拉用它；<code>POST</code> 三种 action；<code>chapter</code> 留空 = 最后一章）。
+        卡片里还写了「独立 AI 复核」的四步用法（生成任务书 → 派新子代理 → 子代理只回 claims JSON → 粘回来复核），
+        以及<b>口径号与插件版本不是一回事</b>的说明（口径号只在测量规则变化时递增）。
+        <br><b>为什么单开一个入口而不做成新工具</b>：工具数 21 是跨 MCP 清单、面板开关与文档计数的稳定契约，审计属于「改稿」域，
+        用动作 + 面板入口即可。而<b>单独放一张卡片</b>是为了把两笔账分开——本地对账零成本、随便点；
+        「派独立 AI」会产生一次额外会话费用，混在改稿台里会让人以为都免费。
+      </div>
+
+      <h3>④ 诚实披露局限</h3>
+      <ul>
+        <li><strong><code>loop</code> / <code>outline</code> 本质是启发式。</strong>它们依赖本地 embedding，报的是「相似度与新颖度没达标」「关键词与向量都没达标」，<strong>不是「作者写错了」</strong>。引擎不可用（模型缺失 / WASM 失败 / 正文 &lt; 200 字 / 语义块太少 / 嵌入失败）时这两条契约是 <code>ran: false</code> 并写明原因，<strong>不是「查过没问题」</strong>；<code>outline</code> 的 <code>skipped</code>（查询向量拿不到）既不进未兑现，也不冒充已兑现。</li>
+        <li><strong><code>plot</code> 的「推进」不可判定。</strong>只靠「命中该伏笔 ≥2 个关键词」这一条启发式，关键词少或同名时既会漏、也会误报。所以它 <code>severity</code> 只给 <strong>2</strong>、标题写「<strong>疑似</strong>推进但登记表未更新」、<code>line</code> 只指向首个命中关键词的行，<code>detail</code> 里列出命中的关键词，让人自己看。</li>
+        <li><strong>证据复核只验「存在性」。</strong>它能判「这段文字在第几行、是不是真的」，<strong>判不了「这条算不算违约」</strong>——后者仍要人看一眼。它也不校验 <code>contract</code> 是否属于 8 个合法 id、不校验 <code>why</code> 的长度。</li>
+        <li><strong><code>score</code> 不是文笔分。</strong>它只是「交上来的证据里有多少条站得住」：一条声明都没交时 <code>total: 0</code>、<code>score: 0</code>（<strong>不是 100</strong>），别把 0 读成「全章不可信」；反过来，100% 也只代表<strong>证据真实</strong>，不代表它举的每一处都算违约。</li>
+        <li><strong>上下文隔离由宿主保证。</strong>任务书只能<em>要求</em>「给一个干净的上下文」；宿主若把写作用的对话一起塞给审计者，对抗性就打折——这是已知的外部依赖，插件管不到。</li>
+        <li><strong>口径对齐情况见上一节末尾</strong>（<code>banned</code> 豁免表、<code>slop</code> 题材静音、语义开关、空材料语义）：v7.2.0 发布前已收掉三处真实分叉，唯一保留的差异是「审计不加载参照集高频词豁免」（审计只会更严）。</li>
+      </ul>
 
       <h2>十一类待办的判定来源</h2>
       <p>类型字符串是第一列这<strong>十一个中文词</strong>，没有其它取值。判定统一遵守文件头的硬约束：<strong>判定不出就跳过该类检查</strong>，绝不退化成默认词表兜底。</p>
@@ -268,7 +396,7 @@ mark   → 读-改-写该文件，只把 itemId 指定项的 state / stateAt 更
       <ul>
         <li><strong>不生成正文</strong>：<code>hint</code> 只给改写方向，<code>anchor</code> 只给可参照的原著样例；返回体里没有任何「改写后的句子」。插件不调用在线模型，也从不代替作者写字。</li>
         <li><strong>只读正文，只写自己的清单文件</strong>：<code>plan</code> 不修改章节正文，落盘只发生在 <code>&lt;root&gt;/.novel-writer/audits/</code> 下的 <code>fix-plan-*.json</code>；<code>verify</code> 连清单都不写，也不写指标缓存或旧版伏笔迁移文件；<code>mark</code> 只改该文件里的处置状态。</li>
-        <li><strong>取消会抛错，不会伪装成空结果</strong>：调用被中止时（<code>AbortError</code>）三个动作一律向上抛，<strong>不落进任何降级分支</strong>——否则一次取消会返回「成功但清单为空」，被误读成「这一章没有问题」。</li>
+        <li><strong>取消会抛错，不会伪装成空结果</strong>：调用被中止时（<code>AbortError</code>）三个改稿动作一律向上抛，<strong>不落进任何降级分支</strong>；审计的三个动作同样如此——<code>runAuditContracts</code> 的每条契约 <code>catch</code> 里都先放行 <code>AbortError</code>，不把取消伪装成「契约未跑」——否则一次取消会返回「成功但清单为空」，被误读成「这一章没有问题」。</li>
         <li><strong>行号可以被整段，但不会给错</strong>：指标类 <code>locate</code> 的最小粒度是段落；字面类（禁用词 / 语用）给的是<strong>命中行的区间列表</strong>（<code>current</code> / <code>hint</code> 里的「位置：第2-10行，第52行」逐段精确，<code>locate</code> 两端是这些区间的超集）；<code>lineStart = lineEnd = 0</code> 表示全章 / 跨章层面，需按分支处理。行号是<strong>绝对行号</strong>（与 <a href="novel-read.html">novel_read</a> 同口径），不随任何 <code>offset</code> 重编号。<strong>字面类还有一个前置过滤</strong>：命中处紧邻前/后一个字落在实证碰撞表里（如「这[里正]是」「[在下]面」）时该处<strong>不计入</strong>，全被挡掉的词不产出待办。</li>
         <li><strong>档位只在 <code>hint</code> 前缀里，不改 <code>type</code></strong>：<code>type</code> 是十一类固定中文词（e2e 契约），档位由 <code>hint</code> 的 <code>【硬命中·3字以上】</code> / <code>【待判·2字词】</code> 表达。<strong>待判档必须留「可以不改」的出口</strong>——2 字中文词当子串的概率天然很高（实测无辜句子里 14/15 条是误报），一律照改会把作者的正常用词改掉。</li>
         <li><strong>id 与正文位置绑定</strong>：先按 id 精确配对；位置变化后，仅按可确认的问题身份（禁用词、语用命中词、指标方向与摘录等）配对。只同类型不能确认是同一项时分别报告 <code>resolved</code> 与 <code>new</code>。</li>
@@ -277,7 +405,8 @@ mark   → 读-改-写该文件，只把 itemId 指定项的 state / stateAt 更
         <li><strong>六维相关项可能整体缺失</strong>：需要<strong>至少 2 个基线章节</strong>（<code>按全书</code> 时即全书除本章外至少 2 章、全书合计至少 3 章；<code>按部分</code> 时即<strong>实际生效</strong>的基线章至少 2 章）才能估计作者自身波动；本章正文短于 40 字也跳过。此时句式偏离 / 抽象度过高 / 留白异常三类不产出，原因写进备注；<code>style_check</code> 的同一限制在此同样成立。</li>
         <li><strong>首次调用需要测量本章</strong>：复用分章测量缓存（<code>metricChaptersCached</code>），已预热时成本很低；正文刚改过则要重算本章。</li>
         <li><strong>优先级算法属经验值</strong>：severity 的分档阈值与 effort 的分级是规则给定值，不是从真实稿件学出来的；清单顺序应按实际改稿手感校准，而不是当作绝对权威。</li>
-        <li><strong>工具开关与引擎门禁是两道不同的闸</strong>：三个动作都要过 <code>assertToolEnabled("novel_fix_plan")</code>（工具级开关关闭时直接报错，可用 <a href="novel-sentence-config.html">novel_sentence_config</a> 重新开启）；此外 <code>plan</code> / <code>verify</code> 还要过「写作助手功能」总开关（关闭时拒绝执行，文案引导去侧边栏开启），<strong><code>mark</code> 不受第二道闸约束</strong>。</li>
+        <li><strong>工具开关与引擎门禁是两道不同的闸</strong>：六个动作都要过 <code>assertToolEnabled("novel_fix_plan")</code>（工具级开关关闭时直接报错，可用 <a href="novel-sentence-config.html">novel_sentence_config</a> 重新开启）；此外 <code>plan</code> / <code>verify</code> 还要过「写作助手功能」总开关（关闭时拒绝执行，文案引导去侧边栏开启），<strong><code>mark</code> 与审计的三个动作（<code>audit</code> / <code>audit_brief</code> / <code>audit_verify</code>）不受第二道闸约束</strong>——它们要么只改自己那份清单，要么只对契约（词表 / 登记表 / 结构）而不是对文风。</li>
+        <li><strong>审计只读：不改正文，也不落盘</strong>（v7.2.0）：<code>audit</code> / <code>audit_brief</code> / <code>audit_verify</code> 都不写任何文件（不生成报告、不写清单、不迁移旧版伏笔表——读登记表走 <code>readOnly</code> 分支），<code>detail</code> 不给改写建议。唯一的副作用是本地语义引擎的<strong>惰性加载</strong>（纯内存，块文本按哈希做内存 LRU，不落盘），没有新增任何落盘位置。</li>
       </ul>
 
       <h2>相关工具</h2>
@@ -291,12 +420,13 @@ mark   → 读-改-写该文件，只把 itemId 指定项的 state / stateAt 更
 
       <h2>源码位置</h2>
       <ul>
-        <li><span class="src">lib/vector-audit.js</span> —— v7.0.0 Phase 2 的向量审计（<code>detectSemanticLoop</code> / <code>checkOutlineFulfillment</code>）：只在改稿台调用，受 <code>features.semanticEmbedding</code> 开关与本地引擎可用性双重门控；块文本按哈希做内存 LRU，<code>verify</code> 时复用；判定用章内 z 分数 + 词汇新颖度，不生成任何正文句子。</li>
+        <li><span class="src">lib/audit.js</span> —— v7.2.0 对抗性审计（三个导出，全部只读）：<code>runAuditContracts</code>（严格对账：按 <code>CONTRACT_DEFS</code> 顺序逐条跑八条契约，每条独立 try/catch，产出 <code>&#123; file, chapterNumber, lines, contracts[], violations[], summary &#125;</code>；<code>cleanViolation</code> 把违约<strong>强制收成 6 键</strong>、<code>compareViolations</code> 做 severity → contract → line 三级排序）、<code>buildAuditBrief</code>（生成任务书 + 机器可读 <code>protocol</code>；围栏长度按正文最长反引号串自适应）、<code>verifyAuditClaims</code>（逐条复核取证：空白归一两形态匹配、行号可修正、编造原文判废、<code>score</code> = 可信占比）。另有内部的 <code>snippetOf</code>（trim + 按码点截断，保证是「该行的连续子串」）、<code>lineOfIndex</code> / <code>blockLineNumbers</code>（字符偏移与段落块 → 1-based 行号）、<code>guardRangesOfLine</code>（<code>banned</code> 的六通道搭配豁免）、<code>readOutlineDirection</code>（大纲方向行的单一来源 <code>OUTLINE_LINE_RE</code>）、<code>plotMentioned</code>（登记表「本章已提及」的章号 / 文件名 / 数字三写法）。</li>
+        <li><span class="src">lib/vector-audit.js</span> —— v7.0.0 Phase 2 的向量审计（<code>detectSemanticLoop</code> / <code>checkOutlineFulfillment</code>）：只在改稿台调用，受 <code>features.semanticEmbedding</code> 开关与本地引擎可用性双重门控；块文本按哈希做内存 LRU，<code>verify</code> 时复用；判定用章内 z 分数 + 词汇新颖度，不生成任何正文句子。v7.2.0 起这两个函数也被 <span class="src">lib/audit.js</span> 的 <code>loop</code> / <code>outline</code> 契约复用（<strong>那两条只看引擎可用性，不看语义开关</strong>，见上文口径差异 ③）。</li>
         <li><span class="src">lib/fixplan.js</span> —— 改稿台主体：<code>buildFixPlan</code> / <code>verifyFixPlan</code> / <code>markFixItem</code> 三个导出，以及内部的 <code>computeFixPlan</code>（测量 → 六类收集 → 排序截断 → 落盘）、<code>makeItem</code> / <code>makeItemId</code>（9 字段与稳定 id）、<code>buildParagraphIndex</code> / <code>lineOfOffset</code> / <code>firstLineContaining</code> / <code>lineExcerpt</code>（段落索引与行号归因）、<code>locateWord</code> / <code>locateOfRanges</code> / <code>hitClause</code> / <code>TIER_TAG</code> / <code>reviewTierTail</code>（v6.5.0：字面类的守卫过滤 + 行号区间 + 档位话术）、<code>sortItems</code>（四级排序）、<code>METRIC_TYPE</code> / <code>TYPE_SLUG</code> / <code>METRIC_DIRECTION</code> / <code>METRIC_MIN_DELTA</code>（类型映射与阈值常量）、<code>collectMetricItems</code> / <code>collectBannedItems</code> / <code>collectPragmaticItems</code> / <code>collectEmotionItems</code> / <code>collectBridgeItems</code> / <code>collectPlotItems</code>（前六类判定）；v7.0.0 的「AI套话」在主流程 ⑤b 内联完成（<code>scanSlop</code> → 按类别归并 → <code>makeItem</code>）。</li>
         <li><span class="src">lib/lexicons/slop.js</span> —— v7.0.0 套话词表（8 类 / 73 条 pattern，<code>SLOP_CATEGORIES</code> 与 <code>scanSlop</code>）：只收高确定性、低误报的结构片段，命中给行号 + 类别 + 一句改法；正则安全纪律由 <code>test/slop-regex-safety-test.mjs</code> 逐条门禁（禁嵌套量词、禁 <code>.*</code> 跨句、<code>{n,m}</code> 的 m ≤ 12）。</li>
-        <li><span class="src">lib/lexicons/guards.js</span> —— 子串碰撞守卫表（<code>COLLISION_GUARDS</code> 的 <code>notBefore</code> / <code>notAfter</code> / <code>notAfterSeq</code> / <code>notBeforeSeq</code> + 实证 <code>evidence</code>）；改稿台与审计共用 <code>core.isGuardedArtifact</code> 判定，口径不可能分叉。</li>
-        <li><span class="src">lib/index.js</span> —— <code>registerNovelFixPlan</code>：工具注册、参数与输出 schema、三个动作分支、<code>mark</code> 的 <code>itemId</code> + <code>state</code> 校验（在引擎门禁之前分支）、<code>plan</code> / <code>verify</code> 的「写作助手功能」门禁、渲染文本。</li>
-        <li><span class="src">lib/core.js</span> —— <code>resolveStyleRule</code>（禁用词 / 语用词源的单点裁决，开写包 / 审计 / 改稿台共用；<code>allowWords</code> 逐词静音也在这里生效）、<code>linesContaining</code> / <code>mergeLineRanges</code> / <code>formatLineRanges</code> / <code>isGuardedArtifact</code>（v6.5.0：字面类定位与子串守卫，本页与审计共用）、<code>withFileTx</code> / <code>atomicWriteJson</code>（清单文件的原子写与串行事务）、<code>normalizeChapterKey</code> / <code>sanitizeSegment</code>（落盘文件名的章号归一与清洗）、<code>readSettings</code>（禁用词与语用规范）、<code>readPlots</code>（伏笔表）、<code>detectChapterBridge</code>（衔接检测）、<code>metricChaptersCached</code> / <code>buildStyleAnchorPackage</code>（分章测量缓存与锚包）、<code>readSentenceState</code>（引擎开关）。</li>
+        <li><span class="src">lib/lexicons/guards.js</span> —— 子串碰撞守卫表（<code>COLLISION_GUARDS</code> 的 <code>notBefore</code> / <code>notAfter</code> / <code>notAfterSeq</code> / <code>notBeforeSeq</code> + 实证 <code>evidence</code>）；改稿台与<a href="novel-continuity-check.html">连贯性审计</a>共用 <code>core.isGuardedArtifact</code>（同口径）。<strong>v7.2.0 的审计 <code>banned</code> 契约也用这张表</strong>（发布前修正：此前误用 <span class="src">lib/lexicons/collocation-guards.js</span> 的六通道搭配豁免，会导致「改稿台静音、审计报硬违约」，现已统一）。</li>
+        <li><span class="src">lib/index.js</span> —— <code>registerNovelFixPlan</code>：工具注册、参数与输出 schema、<strong>六个</strong>动作分支（v7.2.0 的 <code>audit</code> / <code>audit_brief</code> / <code>audit_verify</code> 在引擎门禁<strong>之前</strong>分支返回，<code>runAuditContracts</code> / <code>buildAuditBrief</code> / <code>verifyAuditClaims</code> 从 <span class="src">lib/audit.js</span> 引入）、<code>mark</code> 的 <code>itemId</code> + <code>state</code> 校验（在引擎门禁之前分支）、<code>plan</code> / <code>verify</code> 的「写作助手功能」门禁、渲染文本。</li>
+        <li><span class="src">lib/core.js</span> —— <code>resolveStyleRule</code>（禁用词 / 语用词源的单点裁决，开写包 / 审计 / 改稿台共用；<code>allowWords</code> 逐词静音也在这里生效）、<code>linesContaining</code> / <code>mergeLineRanges</code> / <code>formatLineRanges</code> / <code>isGuardedArtifact</code>（v6.5.0：字面类定位与子串守卫，本页与连贯性审计共用；审计的 <code>banned</code> 不走这里）、<code>withFileTx</code> / <code>atomicWriteJson</code>（清单文件的原子写与串行事务）、<code>normalizeChapterKey</code> / <code>sanitizeSegment</code>（落盘文件名的章号归一与清洗）、<code>readSettings</code>（禁用词与语用规范）、<code>readPlots</code>（伏笔表）、<code>detectChapterBridge</code>（衔接检测）、<code>metricChaptersCached</code> / <code>buildStyleAnchorPackage</code>（分章测量缓存与锚包）、<code>readSentenceState</code>（引擎开关）。</li>
         <li><span class="src">lib/style-metrics.js</span> —— <code>measureStyleMetrics</code> / <code>computeBaselineFromPerChapter</code> / <code>judgeAgainstBaseline</code> / <code>METRIC_ORDER</code> / <code>METRIC_LABELS</code>（六维测量、基线与出带判定）。</li>
         <li><span class="src">lib/core.js</span> —— <code>ALL_TOOLS</code> / <code>TOOL_LABELS</code> 注册表条目（开关面板与关闭报错文案）。</li>
       </ul>

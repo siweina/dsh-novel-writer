@@ -1384,6 +1384,156 @@ if (hookViolations.length > 0) {
 }
 console.log("hook 稳定性: " + (process.env.NW_TEST_PRIMITIVES === "1" ? "官方原语路径" : "回退路径") + " 跨视图/弹窗切换零违规 ✓");
 
+// ---------------------------------------------------------------------------
+// v7.2.0：对抗性审计卡片（诊断页）——三个动作共用一条**只读**路由
+//   POST /api/dsh-novel-writer/audit {action:audit|brief|verify, book, chapter, claims?}
+// 这条测试钉住四件事：
+//   ① 卡片在诊断页渲染出三个按钮（按 i18n 文案定位，而不是内部方法名）；
+//   ② 「严格对账」发出 POST，body 的 action/book/chapter 齐全；
+//   ③ 结果回来渲染出「N 条违约」、契约名、行号，以及「未跑」契约单独一行；
+//   ④ 后端 500 时错误必须显示出来（不能静默）；另外覆盖 brief 复制与 verify 的 claims 解析。
+// ---------------------------------------------------------------------------
+const AUDIT_ROUTE = "/api/dsh-novel-writer/audit";
+const auditRender = () => renderLog[renderLog.length - 1].stats;
+controller.set({
+  view: "diagnose",
+  auditBusy: false, auditMsg: "", auditErr: false,
+  auditBook: "测试", auditChapter: "", auditClaims: "", auditResult: null
+}, { silent: true });
+const auditCard = auditRender();
+if (!auditCard.text.includes("对抗性审计")) fail("诊断页缺少「对抗性审计」卡片");
+if (!auditCard.text.includes("本地对账不消耗 token")) fail("对抗性审计卡片缺少 token 口径说明：" + auditCard.text.slice(0, 200));
+const auditBtnRun = auditCard.buttons.find((b) => vnodeText(b) === "严格对账 · 本地 0 token");
+const auditBtnBrief = auditCard.buttons.find((b) => vnodeText(b) === "生成任务书 · 0 token");
+const auditBtnVerify = auditCard.buttons.find((b) => vnodeText(b) === "复核证据 · 0 token");
+if (!auditBtnRun || !auditBtnBrief || !auditBtnVerify) {
+  fail("对抗性审计缺少三个动作按钮（找到：" + auditCard.buttons.map((b) => vnodeText(b)).join(" / ") + "）");
+}
+console.log("对抗性审计：卡片渲染 三个按钮 + token 口径说明 ✓");
+
+// ② + ③ 严格对账：POST 契约 + 结果渲染
+const auditCalls = [];
+const realAuditFetch = globalThis.fetch;
+globalThis.fetch = (url, init) => {
+  auditCalls.push({ url: String(url), init: init || {} });
+  return Promise.resolve({
+    ok: true, status: 200,
+    json: () => Promise.resolve({
+      ok: true, action: "audit",
+      chapter: { file: "第02章.md", number: 2, title: "" },
+      report: {
+        file: "第02章.md", chapterNumber: 2, lines: 3,
+        contracts: ["lexicon", "banned", "slop", "loop", "outline", "ending", "bare_dialogue", "plot"].map((id) =>
+          id === "loop" ? { id: id, label: id, ran: false, reason: "语义引擎未启用" } : { id: id, label: id, ran: true }),
+        violations: [{ contract: "banned", severity: 5, title: "世界观禁用词「上香」", line: 2, text: "他点了一炷香", detail: "禁用词：上香" }],
+        summary: "严格对账：1 条违约"
+      }
+    })
+  });
+};
+try {
+  controller.set({ view: "diagnose", auditBook: "测试", auditChapter: "", auditResult: null, auditMsg: "", auditErr: false }, { silent: true });
+  auditRender().buttons.find((b) => vnodeText(b) === "严格对账 · 本地 0 token").props.onClick();
+  if (controller.getSnapshot().auditBusy !== true) fail("点击「严格对账」后应置 auditBusy=true");
+  await new Promise((resolve) => setImmediate(resolve));
+  if (auditCalls.length !== 1) fail("严格对账应只发一次请求，实际 " + auditCalls.length);
+  if (auditCalls[0].url !== AUDIT_ROUTE) fail("严格对账请求 URL 不对：" + auditCalls[0].url);
+  if (String(auditCalls[0].init.method).toUpperCase() !== "POST") fail("严格对账必须走 POST，实际 " + auditCalls[0].init.method);
+  const auditBody = JSON.parse(auditCalls[0].init.body);
+  if (auditBody.action !== "audit" || auditBody.book !== "测试") fail("严格对账 body 不对：" + auditCalls[0].init.body);
+  if (!Object.prototype.hasOwnProperty.call(auditBody, "chapter")) fail("严格对账 body 必须带 chapter（留空=最后一章由后端兜底）");
+  const auditAfter = auditRender();
+  if (!auditAfter.text.includes("1 条违约")) fail("对账结果未渲染「1 条违约」：" + auditAfter.text.slice(0, 240));
+  if (!auditAfter.text.includes("banned") || !auditAfter.text.includes("世界观禁用词「上香」")) fail("对账结果未渲染契约名/标题");
+  if (!auditAfter.text.includes("第 2 行")) fail("对账结果未渲染证据行号");
+  if (!auditAfter.text.includes("未跑") || !auditAfter.text.includes("语义引擎未启用")) fail("未跑的契约必须单列一行并给原因：" + auditAfter.text.slice(0, 260));
+  console.log("对抗性审计：POST 契约（action/book/chapter）✓ | 结果渲染 条违约/契约名/行号/未跑原因 ✓");
+
+  // ④ 后端 500：错误必须显示出来，而不是被吞成"没反应"
+  globalThis.fetch = () => Promise.resolve({
+    ok: false, status: 500,
+    json: () => Promise.resolve({ ok: false, error: "audit failed: 章节目录读不到" })
+  });
+  controller.set({ view: "diagnose", auditResult: null, auditMsg: "", auditErr: false }, { silent: true });
+  auditRender().buttons.find((b) => vnodeText(b) === "严格对账 · 本地 0 token").props.onClick();
+  await new Promise((resolve) => setImmediate(resolve));
+  const auditErrSnap = controller.getSnapshot();
+  if (auditErrSnap.auditErr !== true) fail("后端 500 应置 auditErr=true");
+  if (!String(auditErrSnap.auditMsg).includes("audit failed: 章节目录读不到")) fail("后端 500 的错误文本必须透传：" + auditErrSnap.auditMsg);
+  const auditErrRender = auditRender();
+  if (!auditErrRender.text.includes("对账失败") || !auditErrRender.text.includes("章节目录读不到")) {
+    fail("后端 500 的错误必须渲染到界面（不能静默）：" + auditErrRender.text.slice(0, 260));
+  }
+  console.log("对抗性审计：后端 500 → 界面显示人话错误（不静默）✓");
+
+  // ⑤ brief：发 action=brief，结果复制到剪贴板并显示字数 + 前 200 字预览
+  const auditBriefText = "# 对抗性审计任务书\n\n## 一、身份与边界\n你是一名审计员。\n";
+  globalThis.fetch = (url, init) => {
+    auditCalls.push({ url: String(url), init: init || {} });
+    return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ ok: true, action: "brief", chapter: { file: "第02章.md", number: 2, title: "" }, brief: auditBriefText, allowedContracts: [], protocol: {} }) });
+  };
+  const briefClip = [];
+  if (installClipboard((text) => { briefClip.push(text); return Promise.resolve(); })) {
+    auditCalls.length = 0;
+    controller.set({ view: "diagnose", auditResult: null, auditMsg: "", auditErr: false }, { silent: true });
+    auditRender().buttons.find((b) => vnodeText(b) === "生成任务书 · 0 token").props.onClick();
+    await new Promise((resolve) => setImmediate(resolve));
+    const briefBody = JSON.parse(auditCalls[0].init.body);
+    if (briefBody.action !== "brief") fail("任务书按钮应发 action=brief，实际：" + briefBody.action);
+    if (briefClip.length !== 1 || briefClip[0] !== auditBriefText) fail("任务书未复制到剪贴板（复用 copyPath 的安全写法失效）");
+    const briefRender = auditRender();
+    if (!briefRender.text.includes("任务书已生成") || !briefRender.text.includes("已复制到剪贴板")) fail("任务书结果文案不对：" + briefRender.text.slice(0, 220));
+    if (!briefRender.text.includes("对抗性审计任务书")) fail("任务书结果未显示前 200 字预览");
+  }
+  removeClipboard();
+  console.log("对抗性审计：brief → 生成 + 安全复制 + 字数/预览 ✓");
+
+  // ⑥ verify：把粘贴的 claims JSON 解析成数组发给后端，并渲染 可信/修正/判废 与判废明细
+  globalThis.fetch = (url, init) => {
+    auditCalls.push({ url: String(url), init: init || {} });
+    return Promise.resolve({
+      ok: true, status: 200,
+      json: () => Promise.resolve({
+        ok: true, action: "verify", chapter: { file: "第02章.md", number: 2, title: "" },
+        verify: {
+          accepted: [{ contract: "plot", line: 1, text: "正文", why: "" }],
+          corrected: [{ contract: "plot", line: 2, foundLine: 3, text: "正文", why: "" }],
+          rejected: [{ contract: "plot", line: 9, text: "编造证据", why: "", reason: "疑似编造证据" }],
+          total: 3, score: 67
+        }
+      })
+    });
+  };
+  auditCalls.length = 0;
+  controller.set({
+    view: "diagnose", auditResult: null, auditMsg: "", auditErr: false,
+    auditClaims: JSON.stringify({ claims: [{ contract: "plot", line: 1, text: "正文", why: "" }] })
+  }, { silent: true });
+  auditRender().buttons.find((b) => vnodeText(b) === "复核证据 · 0 token").props.onClick();
+  await new Promise((resolve) => setImmediate(resolve));
+  if (auditCalls.length !== 1) fail("复核证据应只发一次请求，实际 " + auditCalls.length);
+  const verifyBody = JSON.parse(auditCalls[0].init.body);
+  if (verifyBody.action !== "verify") fail("复核按钮应发 action=verify，实际：" + verifyBody.action);
+  if (!Array.isArray(verifyBody.claims) || verifyBody.claims.length !== 1) fail("复核证据必须把粘贴的 {\"claims\":[...]} 解析成数组：" + auditCalls[0].init.body);
+  const verifyRender = auditRender();
+  if (!verifyRender.text.includes("可信 2 / 修正 1 / 判废 1 · 可信度 67%")) fail("复核结果统计文案不对：" + verifyRender.text.slice(0, 260));
+  if (!verifyRender.text.includes("疑似编造")) fail("判废的证据必须逐条列出「疑似编造」");
+
+  // ⑦ 非法 claims：本地拦住，不发请求
+  auditCalls.length = 0;
+  controller.set({ view: "diagnose", auditClaims: "{not json", auditResult: null, auditMsg: "", auditErr: false }, { silent: true });
+  auditRender().buttons.find((b) => vnodeText(b) === "复核证据 · 0 token").props.onClick();
+  await new Promise((resolve) => setImmediate(resolve));
+  if (auditCalls.length !== 0) fail("非法 claims JSON 不应发请求，实际 " + auditCalls.length);
+  if (controller.getSnapshot().auditErr !== true) fail("非法 claims JSON 必须提示错误（不能静默丢弃）");
+  console.log("对抗性审计：verify → claims 解析/统计渲染/判废明细 ✓ | 非法 claims 本地拦截 ✓");
+} finally {
+  globalThis.fetch = realAuditFetch;
+  removeClipboard();
+}
+controller.set({ view: "main", auditMsg: "", auditErr: false, auditResult: null, auditClaims: "" }, { silent: true });
+
+
 cleanupHooks(); // 执行 effect 清理（取消控制器订阅），避免残留句柄影响进程退出
 // v6.3.0：成功标记原先被吞进上一行的行尾注释里（`…进程退出console.log("CLIENT OK");`），
 // 等于这一行从来没打印过——既有缺陷（v6.2.0 起就在），本次一并修掉。

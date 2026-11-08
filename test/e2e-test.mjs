@@ -942,6 +942,65 @@ await (async function fixPlanRegression() {
   if (clean.items.length !== 0) throw new Error("正常章被误报 " + clean.items.length + " 项: " + clean.items.map((it) => it.type + "@" + it.locate.lineStart).join(","));
   console.log("v5.0.0 改稿台误报检查: 正常章 0 项待办 ✓");
 
+  // ---------- v7.2.0 对抗性审计：audit / audit_brief / audit_verify ----------
+  {
+    const rep = await defs.novel_fix_plan.execute({ book: BOOK, chapter: "第02章", action: "audit", root: testRoot }, exec);
+    assertOutputContract(defs.novel_fix_plan, rep, "novel_fix_plan(audit)");
+    if (rep.action !== "audit") throw new Error("audit 返回的 action 错：" + rep.action);
+    const report = rep.auditReport;
+    if (!report || typeof report !== "object") throw new Error("audit 缺少 auditReport");
+    // 八条契约必须全部出现（跑没跑都要有记录）——这是"没查 ≠ 查过没问题"的契约
+    if (!Array.isArray(report.contracts) || report.contracts.length !== 8) {
+      throw new Error("audit 的 contracts 应为 8 条，实际：" + (report.contracts || []).length);
+    }
+    for (const c of report.contracts) {
+      if (c.ran !== true && (typeof c.reason !== "string" || c.reason === "")) throw new Error("未跑的契约必须写明原因：" + JSON.stringify(c));
+    }
+    // 每条违约必须是 6 键、且不得带"建议/改写"字段
+    for (const v of report.violations || []) {
+      const keys = Object.keys(v).sort().join(",");
+      if (keys !== "contract,detail,line,severity,text,title") throw new Error("audit 违约字段应为 6 键，实际：" + keys);
+      if (v.line > 0 && typeof v.text !== "string") throw new Error("有行号的违约必须带原文片段");
+    }
+    // 排序：severity 降序
+    for (let i = 1; i < (report.violations || []).length; i += 1) {
+      if (report.violations[i - 1].severity < report.violations[i].severity) throw new Error("audit 违约未按 severity 降序");
+    }
+    console.log(`v7.2.0 严格对账: ${report.violations.length} 条违约 / ${report.contracts.filter((c) => c.ran).length} 项契约已跑 ✓`);
+
+    const briefRes = await defs.novel_fix_plan.execute({ book: BOOK, chapter: "第02章", action: "audit_brief", root: testRoot }, exec);
+    assertOutputContract(defs.novel_fix_plan, briefRes, "novel_fix_plan(audit_brief)");
+    const brief = briefRes.auditBrief;
+    if (!brief || typeof brief.brief !== "string" || brief.brief.length < 200) throw new Error("audit_brief 任务书过短");
+    for (const must of ["claims", "contract", "line", "text"]) {
+      if (!brief.brief.includes(must)) throw new Error("任务书缺少取证字段：" + must);
+    }
+    if (!Array.isArray(brief.allowedContracts) || brief.allowedContracts.length !== 8) throw new Error("allowedContracts 应为 8 条");
+    console.log("v7.2.0 审计任务书: 含取证格式与 8 条允许契约 ✓");
+
+    // 证据复核：1 条真实（从正文取第 1 行片段）+ 1 条编造
+    const body = readFileSync(join(testRoot, "novels", BOOK, "第02章.md"), "utf8");
+    const firstLine = body.split(/\r?\n/).map((l) => l.trim()).find((l) => l.length >= 8) || "正文";
+    const verifyRes = await defs.novel_fix_plan.execute({
+      book: BOOK,
+      chapter: "第02章",
+      action: "audit_verify",
+      claims: [
+        { contract: "slop", line: 1, text: firstLine.slice(0, 12), why: "测试：真实片段" },
+        { contract: "plot", line: 2, text: "这段文字在正文里根本不存在", why: "测试：编造证据" }
+      ],
+      root: testRoot
+    }, exec);
+    assertOutputContract(defs.novel_fix_plan, verifyRes, "novel_fix_plan(audit_verify)");
+    const vres = verifyRes.auditVerify;
+    if (!vres || vres.total !== 2) throw new Error("audit_verify total 应为 2，实际：" + (vres && vres.total));
+    if ((vres.rejected || []).length !== 1) throw new Error("编造的证据必须被判废 1 条，实际：" + JSON.stringify(vres.rejected));
+    if (!String(vres.rejected[0].reason || "").includes("编造")) throw new Error("判废原因应含「编造」：" + vres.rejected[0].reason);
+    if (vres.score !== 50) throw new Error("1 真 1 假时可信度应为 50，实际：" + vres.score);
+    console.log("v7.2.0 证据复核: 真实片段采纳 / 编造证据判废 / 可信度 50% ✓");
+  }
+
+
   // ── plan：条数 / 类型数 / 9 字段 / 排序 ──
   const planRes = await defs.novel_fix_plan.execute({ book: BOOK, chapter: "第02章", action: "plan", root: testRoot }, exec);
   assertOutputContract(defs.novel_fix_plan, planRes, "novel_fix_plan(plan)");
@@ -1391,6 +1450,135 @@ await (async function v500PostAuditFixes() {
     if (new RegExp("\\b" + dead + "\\b").test(importLines)) throw new Error("lib/index.js 头部仍导入零引用死符号: " + dead);
   }
   console.log("【#71】index.js 6 个死导入已清 ✓");
+}
+
+// ---------------------------------------------------------------------------
+// v7.2.0：对抗性审计路由（面板独立入口；方案 A = 不新增工具，只加一条**只读**路由）
+//   GET  /api/dsh-novel-writer/audit                  → 探测：tool/contracts/tokenFree
+//   POST /api/dsh-novel-writer/audit {action,book,chapter,claims?}
+//        action=audit  → {ok, action, chapter, report}
+//        action=brief  → {ok, action, chapter, brief, allowedContracts, protocol}
+//        action=verify → {ok, action, chapter, verify}
+// 口径：三种动作都是本地计算（0 token），且不落盘；只有另派 agent 执行任务书才花会话费。
+// ---------------------------------------------------------------------------
+{
+  const AUDIT_PATH = "/api/dsh-novel-writer/audit";
+  const AUDIT_BOOK = "审计路由书";
+  const auditRoute = routes.find((r) => r.path === AUDIT_PATH);
+  if (!auditRoute) throw new Error("审计路由未注册：" + AUDIT_PATH);
+  if (auditRoute.kind !== "exact") throw new Error("审计路由 kind 应为 exact，实际 " + auditRoute.kind);
+
+  const mkRes = () => ({ status: 0, body: "", writeHead(s) { this.status = s; }, end(b) { this.body = String(b); } });
+  const mkReq = (method, payload, headers) => {
+    const req = {
+      method,
+      url: AUDIT_PATH,
+      socket: { remoteAddress: "127.0.0.1" },
+      headers: Object.assign({ host: "127.0.0.1:51783" }, headers || {})
+    };
+    if (payload !== void 0) {
+      const text = typeof payload === "string" ? payload : JSON.stringify(payload);
+      req[Symbol.asyncIterator] = async function* () { yield Buffer.from(text); };
+    }
+    return req;
+  };
+  const callAudit = async (method, payload, headers) => {
+    const res = mkRes();
+    await auditRoute.handler(mkReq(method, payload, headers), res);
+    let json = null;
+    try { json = JSON.parse(res.body); } catch { json = res.body; }
+    return { status: res.status, json, raw: res.body };
+  };
+
+  // 夹具：一本两章的书 + 关掉语义增强（loop/outline 如实报「未跑」，也避免测试加载 WASM 模型）
+  mkdirSync(join(testRoot, "novels", AUDIT_BOOK), { recursive: true });
+  writeFileSync(join(testRoot, "novels", AUDIT_BOOK, "第01章.md"), "她推开门，雨声灌了进来。\n", "utf8");
+  const auditChapterFile = join(testRoot, "novels", AUDIT_BOOK, "第02章.md");
+  writeFileSync(auditChapterFile, "他仰头把半杯白酒灌了下去。\n她站在原地，没有回头。\n", "utf8");
+  writeFileSync(STATE_FILE, JSON.stringify({ enabled: true, autoAnalyze: true, features: { semanticEmbedding: false } }), "utf8");
+
+  // ① GET 探测：面板靠 contracts/tokenFree 写「本地 0 token」文案
+  const got = await callAudit("GET");
+  if (got.status !== 200 || !got.json || got.json.ok !== true) throw new Error("审计 GET 应 200+ok:true，实际 " + got.status + " " + got.raw);
+  if (got.json.tool !== "audit") throw new Error("审计 GET 的 tool 应为 audit，实际 " + JSON.stringify(got.json.tool));
+  const auditContracts = ["lexicon", "banned", "slop", "loop", "outline", "ending", "bare_dialogue", "plot"];
+  if (JSON.stringify(got.json.contracts) !== JSON.stringify(auditContracts)) {
+    throw new Error("审计 GET 的 contracts 不对：" + JSON.stringify(got.json.contracts));
+  }
+  if (got.json.tokenFree !== true) throw new Error("审计 GET 必须带 tokenFree:true");
+  console.log("审计路由 GET：tool=audit / contracts 8 条 / tokenFree ✓");
+
+  // ② POST audit：章节留空 = 最后一章；violations 必须是数组、contracts 必须 8 条
+  const chapterBefore = readFileSync(auditChapterFile, "utf8");
+  const audited = await callAudit("POST", { action: "audit", book: AUDIT_BOOK, chapter: "" });
+  if (audited.status !== 200 || !audited.json || audited.json.ok !== true) throw new Error("审计 POST 应 200，实际 " + audited.status + " " + audited.raw);
+  if (audited.json.action !== "audit") throw new Error("审计 POST 的 action 回执不对：" + JSON.stringify(audited.json.action));
+  if (!audited.json.chapter || audited.json.chapter.file !== "第02章.md") {
+    throw new Error("章节留空应默认最后一章，实际 " + JSON.stringify(audited.json.chapter));
+  }
+  if (!audited.json.report || !Array.isArray(audited.json.report.violations)) throw new Error("report.violations 必须是数组");
+  if (!Array.isArray(audited.json.report.contracts) || audited.json.report.contracts.length !== 8) {
+    throw new Error("report.contracts 必须是 8 条，实际 " + JSON.stringify(audited.json.report && audited.json.report.contracts));
+  }
+  // 只读：审计不得改正文（这条路由的卖点之一就是「零 token 也不留痕」）
+  if (readFileSync(auditChapterFile, "utf8") !== chapterBefore) throw new Error("审计路由改了章节正文（必须只读）");
+  console.log("审计路由 POST audit：200 / 最后一章 / violations 数组 / contracts 8 条 / 正文未变 ✓");
+
+  // ③ POST verify：编造的原文判废（rejected ≥ 1），真证据照常可信
+  const verified = await callAudit("POST", {
+    action: "verify", book: AUDIT_BOOK, chapter: "第02章",
+    claims: [
+      { contract: "plot", line: 1, text: "他仰头把半杯白酒灌了下去", why: "设定写他不喝酒" },
+      { contract: "plot", line: 1, text: "这句原文在正文里根本不存在XYZ", why: "编造" }
+    ]
+  });
+  if (verified.status !== 200 || !verified.json || !verified.json.verify) throw new Error("审计 verify 应 200 + verify，实际 " + verified.status + " " + verified.raw);
+  const verifyValue = verified.json.verify;
+  if (!Array.isArray(verifyValue.rejected) || verifyValue.rejected.length < 1) throw new Error("编造的证据必须被判废（rejected ≥ 1）");
+  if (!Array.isArray(verifyValue.accepted) || verifyValue.accepted.length < 1) throw new Error("真实原文应被判为可信（accepted ≥ 1）");
+  if (verifyValue.total !== 2) throw new Error("verify.total 应为 2，实际 " + verifyValue.total);
+  console.log("审计路由 POST verify：真证据可信 / 编造证据判废 ✓");
+
+  // ④ brief / 错误分支：未知 action 400、claims 非数组 400、空书名 400、找不到章节 400、PUT 405
+  const briefed = await callAudit("POST", { action: "brief", book: AUDIT_BOOK, chapter: "第01章" });
+  if (briefed.status !== 200 || !briefed.json || briefed.json.action !== "brief") throw new Error("审计 brief 应 200，实际 " + briefed.status + " " + briefed.raw);
+  if (typeof briefed.json.brief !== "string" || !briefed.json.brief.includes("对抗性审计任务书")) throw new Error("brief 正文不对（缺少任务书标题）");
+  if (!Array.isArray(briefed.json.allowedContracts) || briefed.json.allowedContracts.length !== 8) throw new Error("brief.allowedContracts 应为 8 条");
+  if (!briefed.json.protocol || typeof briefed.json.protocol !== "object") throw new Error("brief.protocol 必须是对象");
+  const unknown = await callAudit("POST", { action: "boom", book: AUDIT_BOOK });
+  if (unknown.status !== 400 || !/unknown action/.test(String(unknown.json && unknown.json.error))) throw new Error("未知 action 应 400，实际 " + unknown.status + " " + unknown.raw);
+  const badClaims = await callAudit("POST", { action: "verify", book: AUDIT_BOOK, chapter: "第01章", claims: "nope" });
+  if (badClaims.status !== 400) throw new Error("claims 非数组应 400，实际 " + badClaims.status);
+  const missingBook = await callAudit("POST", { action: "audit", book: "" });
+  if (missingBook.status !== 400) throw new Error("空书名应 400，实际 " + missingBook.status);
+  const missingChapter = await callAudit("POST", { action: "audit", book: AUDIT_BOOK, chapter: "第99章" });
+  if (missingChapter.status !== 400 || !String(missingChapter.json && missingChapter.json.error).includes("找不到章节")) {
+    throw new Error("不存在的章节应 400 + 人话，实际 " + missingChapter.status + " " + missingChapter.raw);
+  }
+  const badMethod = await callAudit("PUT");
+  if (badMethod.status !== 405) throw new Error("PUT 应 405，实际 " + badMethod.status);
+  const badJson = await callAudit("POST", "{");
+  if (badJson.status !== 400) throw new Error("非法 JSON body 应 400，实际 " + badJson.status);
+  console.log("审计路由：brief 200 / 未知 action 400 / claims 非法 400 / 空书名 400 / 章节不存在 400 / PUT 405 / 非法 JSON 400 ✓");
+
+  // ⑤ 非回环 → 403：e2e 主 ctx 是 allowLanState=true，403 需要一份 allowLanState=false 的注册
+  const lockedRoutes = [];
+  const lockedCtx = {
+    tools: { register: () => () => {} },
+    systemPrompt: { section: () => () => {} },
+    inject: (names, cb) => cb({ webServer: { register: (r) => { lockedRoutes.push(r); return () => {}; } }, effect: (fn) => fn() })
+  };
+  apply(lockedCtx, { root: testRoot, allowLanState: false });
+  const lockedRoute = lockedRoutes.find((r) => r.path === AUDIT_PATH);
+  if (!lockedRoute) throw new Error("allowLanState=false 的注册里缺少审计路由");
+  const forbidden = await (async () => {
+    const res = mkRes();
+    await lockedRoute.handler({ method: "GET", url: AUDIT_PATH, socket: { remoteAddress: "192.168.1.5" }, headers: { host: "192.168.1.5:3080", origin: "http://192.168.1.5:3080" } }, res);
+    return { status: res.status, body: res.body };
+  })();
+  if (forbidden.status !== 403) throw new Error("非回环访问未拦住（应 403），实际 " + forbidden.status);
+  if (!/loopback-only/.test(forbidden.body)) throw new Error("403 错误文案不对：" + forbidden.body);
+  console.log("审计路由：非回环 403 + loopback-only ✓");
 }
 
 // 清理缓存文件（保留状态文件）
