@@ -212,7 +212,7 @@ v4.3.0 曾有两处**刻意保留的偏差**，v4.3.0 已全部按规范修正�
 优先使用插件 `output.render(args, value)` 的返回值：
 
 - 返回**字符串** → 直接采用；
-- 返回 **`[{ type: "text", text }]` 数组**（DSH 宿主契约，本插件 21 个工具全部是这种）→ 过滤出 `type === "text"` 的
+- 返回 **`[{ type: "text", text }]` 数组**（DSH 宿主契约，本插件 22 个工具全部是这种）→ 过滤出 `type === "text"` 的
   `text` 后 `join("\n")` 作为 MCP 文本内容；
 - 两者都不是 / `render` 抛错 → 回退 `JSON.stringify(value, null, 2)`。
 

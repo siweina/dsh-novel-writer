@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>novel_draft — 草稿镜像｜dsh-novel-writer 技术文档</title>
+<meta name="description" content="novel_draft 的实现细节：为什么草稿镜像必须另起一个目录（isInsideBookDir 断言）、只追加的 commit 契约、程序侧的字数阈值与 __state.json 账本、章键归一与同章认领、系统提示里的逐段纪律、面板只读预览路由与按书删除的 data:drafts 登记。">
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="docs.css">
+<link rel="canonical" href="https://siweina.github.io/dsh-novel-writer/tools/novel-draft.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="dsh-novel-writer">
+<meta property="og:title" content="novel_draft — 草稿镜像｜dsh-novel-writer 技术文档">
+<meta property="og:description" content="novel_draft 的实现细节：为什么草稿镜像必须另起一个目录（isInsideBookDir 断言）、只追加的 commit 契约、程序侧的字数阈值与 __state.json 账本、章键归一与同章认领、系统提示里的逐段纪律、面板只读预览路由与按书删除的 data:drafts 登记。">
+<meta property="og:url" content="https://siweina.github.io/dsh-novel-writer/tools/novel-draft.html">
+<meta property="og:locale" content="zh_CN">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="novel_draft — 草稿镜像｜dsh-novel-writer 技术文档">
+<meta name="twitter:description" content="novel_draft 的实现细节：为什么草稿镜像必须另起一个目录（isInsideBookDir 断言）、只追加的 commit 契约、程序侧的字数阈值与 __state.json 账本、章键归一与同章认领、系统提示里的逐段纪律、面板只读预览路由与按书删除的 data:drafts 登记。">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_draft","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-draft.html"}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_draft — 草稿镜像｜dsh-novel-writer 技术文档","description":"novel_draft 的实现细节：为什么草稿镜像必须另起一个目录、只追加的 commit 契约、程序侧的字数阈值与账本、章键归一、系统提示纪律、面板只读预览与按书删除。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-draft.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_draft, dsh-novel-writer, 实时聊天写作, 草稿镜像, MCP 工具文档"}</script>
+</head>
+<body class="docs">
+
+<header class="docs__top">
+  <a class="docs__brand" href="../index.html">← dsh-novel-writer</a>
+  <span class="docs__crumb">技术文档 / <code>novel_draft</code></span>
+</header>
+
+<div class="docs__layout">
+  <aside class="docs__side" id="docsSide"></aside>
+
+  <main class="docs__main">
+    <article class="doc">
+      <h1>novel_draft</h1>
+      <p class="doc__lead">
+        <strong>实时聊天写作的草稿镜像</strong>：AI 一段段地写，每写完一段就把<strong>这一段正文</strong>交给本工具，由<strong>程序</strong>追加进独立目录 <code>.novel-writer/drafts/&lt;书&gt;/</code> 并自行累计字数；<strong>只追加，AI 不读、不改、不清</strong>；正式章节文件在用户确认之前<strong>一个字节都不动</strong>。它不生成正文，也不判断「该不该问人」——问不问、什么时候问，由程序按字数阈值决定，工具只把结论放在 <code>nextAction</code> 里（<code>continue</code> / <code>ask_user</code>）。
+      </p>
+
+      <h2>为什么必须另起一个目录</h2>
+      <p>这是整个功能的设计核心，也是唯一一处「放错位置就会静默把整本书的数字搞坏」的地方。</p>
+      <p>插件所有章节扫描都按 <code>&lt;书库根&gt;/novels/&lt;书&gt;/</code> 下的<strong>文件</strong>枚举（<code>core.scanChapters</code>），并把<strong>每个 <code>.md</code> 当成一章</strong>参与统计：章节数、总字数、六维基线、语义索引、风格自检、关键词、连贯性审计……全部从这份枚举派生。<strong>只要把「正在写的半成品」写进那个目录，这些数字就会被草稿污染</strong>——同一章出现两份、章号撞号、字数虚增、基线漂移、语义索引里混入还没定稿的段落。</p>
+      <p>更麻烦的是它<strong>不会报错</strong>：界面上只表现为「数字怪怪的」「同一章好像有两份」「基线忽然变了」，用户很难据此自查，模型也无从判断。</p>
+      <p>因此草稿镜像固定落在<strong>数据目录</strong>里，与正文目录同级但不相交：</p>
+      <div class="formula">镜像目录（DRAFT_DIRNAME = "drafts"）
+  &lt;书库根&gt;/.novel-writer/drafts/&lt;书&gt;/
+  ├─ &lt;章键&gt;__draft.md      ← 逐段正文（DRAFT_FILE_SUFFIX）
+  └─ &lt;章键&gt;__state.json    ← 程序账本（DRAFT_STATE_SUFFIX）
+
+正文目录（绝不允许写入）
+  &lt;书库根&gt;/novels/&lt;书&gt;/&lt;第NN章&gt;.md</div>
+      <p>工具层有一道<strong>硬断言</strong>：每次计算镜像路径后都跑一次 <code>isInsideBookDir(root, book, target)</code>，一旦路径落进正文目录就直接拒绝执行：</p>
+      <div class="formula">assert(!isInsideBookDir(root, book, file),
+  "草稿镜像不能放在正文目录 novels/" + book + "/ 内——半成品会被章节扫描当成正文，污染字数与基线")</div>
+      <p><code>isInsideBookDir</code> 比较的是 <code>resolve()</code> 之后的绝对路径，并按<strong>目录边界</strong>判定（<code>b === a</code> 或 <code>b</code> 以 <code>a + 路径分隔符</code> 开头），因此 <code>…/novels/雨夜灯甲/x</code> 不会被误判成 <code>…/novels/雨夜灯</code> 内部。解析失败（拿不到可用绝对路径）时返回 <code>false</code>，即「不敢断言在内部」——真正拦人的是路径本身由 <code>draftBookDir</code> 拼出，永远落在 <code>.novel-writer/drafts/</code> 下。</p>
+      <div class="note">
+        <b>同一个断言在第二处也跑。</b><a href="novel-new-chapter.html">novel_new_chapter</a> 的「定稿落盘」钩子在写镜像前重复一次同样的校验（见下文「与其它工具的关系」）。两处都写，是因为这条约束一旦破掉，损失是<strong>全书数据被污染</strong>，不是一次调用失败。
+      </div>
+
+      <h2>参数</h2>
+      <table>
+        <thead><tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><th><code>action</code></th><td>string</td><td>是</td><td>枚举<strong>只有一个值</strong> <code>commit</code>（提交这一段正文）。传 <code>open</code> / <code>read</code> / <code>clear</code> / <code>append</code> 等任何其它值都抛「草稿镜像只支持 action=commit（只追加）。它由程序维护、不交给 AI 读改清——需要清理请人工删除 <code>&lt;书库&gt;/.novel-writer/drafts/</code> 下的文件」。</td></tr>
+          <tr><th><code>book</code></th><td>string</td><td>是</td><td>书名，即 <code>novels/</code> 下的子目录名。经 <code>sanitizeSegment</code> 过滤后同时用于拼镜像目录。</td></tr>
+          <tr><th><code>chapter</code></th><td>string</td><td>否</td><td>章标识（章号 / <code>第NN章</code> / 标题），<strong>只用来命名镜像文件与账本</strong>，不改变写入内容。省略或纯空白 → 一并按「未命名章」处理（<code>draftKeyFor</code> 的兜底也是同一个词）。</td></tr>
+          <tr><th><code>text</code></th><td>string</td><td>是</td><td><strong>只传这一段</strong>的正文，不是整章。经 <code>requiredString</code> 取用，因此首尾空白会被 <code>trim()</code> 掉，<strong>纯空白视为未提供</strong>并报「参数 "text" 不能为空字符串」。重复段落也照写，程序不去重。</td></tr>
+          <tr><th><code>root</code></th><td>string</td><td>否</td><td>章节库根目录。</td></tr>
+        </tbody>
+      </table>
+      <p>契约口径：<code>required: ["action", "book", "text"]</code>，<code>additionalProperties: false</code>；参数表里<strong>没有</strong> <code>read</code> / <code>clear</code> / <code>index</code>——「只追加」不是文档承诺，而是<strong>接口面上不存在</strong>修改某一段的能力（<code>test/chat-writing-test.mjs</code> 用断言钉住这一条）。</p>
+
+      <h2>输出结构</h2>
+      <p>契约必返字段（<code>output.schema.required</code>，共 13 个）：</p>
+      <div class="formula">["action", "book", "chapter", "mirrorDir", "draftFile",
+ "segmentIndex", "segmentChars", "pendingChars", "threshold", "remaining",
+ "prompts", "nextAction", "message"]</div>
+      <table>
+        <thead><tr><th>字段</th><th>类型</th><th>内容</th></tr></thead>
+        <tbody>
+          <tr><th><code>action</code></th><td>string</td><td>恒为 <code>commit</code>（归一后的动作）</td></tr>
+          <tr><th><code>book</code></th><td>string</td><td>净化后的书名</td></tr>
+          <tr><th><code>chapter</code></th><td>string</td><td><strong>章键</strong>（镜像文件名前缀，如 <code>第03章</code> / <code>未命名章</code>），<strong>不是</strong>入参原文；入参写 <code>"3"</code>、<code>"第03章"</code>、<code>"第03章 证词里的空白"</code> 都回 <code>第03章</code></td></tr>
+          <tr><th><code>mirrorDir</code></th><td>string</td><td>镜像目录<strong>绝对路径</strong>（<code>…/.novel-writer/drafts/&lt;书&gt;</code>），给人看</td></tr>
+          <tr><th><code>draftFile</code></th><td>string</td><td>该章镜像文件<strong>绝对路径</strong>（<code>…/&lt;章键&gt;__draft.md</code>），给人看</td></tr>
+          <tr><th><code>segmentIndex</code></th><td>integer</td><td>本次写入是<strong>第几段</strong>（从 1 起；由账本续号，账本丢失时按镜像段头重建）</td></tr>
+          <tr><th><code>segmentChars</code></th><td>integer</td><td>本段字数（<code>text.trim()</code> 之后的 JS 字符串长度）</td></tr>
+          <tr><th><code>pendingChars</code></th><td>integer</td><td>本批已累计多少字（<strong>真实累计值</strong>）。达阈值那一批会<strong>略超</strong>阈值（例如阈值 150、本批 162），因为段落按整段累加、不会截断——这个字段报的就是真实的 162，不是阈值本身</td></tr>
+          <tr><th><code>threshold</code></th><td>integer</td><td>本次生效的<strong>程序阈值</strong>（字），见「提问节奏」</td></tr>
+          <tr><th><code>remaining</code></th><td>integer</td><td><code>max(0, threshold - 本批剩余待确认字数)</code>。批次刚被提问时计数器已清零，所以 <code>ask_user</code> 的返回里它<strong>等于 <code>threshold</code></strong>（表示「下一批从头累计」），而不是 0；渲染文本在 <code>ask_user</code> 时改写成「本批 162 字 / 阈值 150 字」，避免读成「162 / 150 还没到」</td></tr>
+          <tr><th><code>prompts</code></th><td>integer</td><td>本章累计提问次数（只在 <code>ask_user</code> 那一次 +1）</td></tr>
+          <tr><th><code>nextAction</code></th><td>string</td><td>枚举 <code>continue</code>（继续写下一段，别去问人） / <code>ask_user</code>（程序判定该问了）</td></tr>
+          <tr><th><code>message</code></th><td>string</td><td>一句中文结论：落了第几段、待确认多少 / 阈值多少、还差多少，或「已达阈值，现在停下来问用户」</td></tr>
+          <tr><th><code>combinedText</code></th><td>string</td><td><strong>仅 <code>ask_user</code> 时出现</strong>：本批全部段落用空行合并后的正文（贴给用户看的那份）</td></tr>
+          <tr><th><code>question</code></th><td>string</td><td><strong>仅 <code>ask_user</code> 时出现</strong>：原样交给提问工具的整段问题，正文已含在 <code>combinedText</code> 里</td></tr>
+        </tbody>
+      </table>
+      <p><code>ask_user</code> 时 <code>question</code> 的固定文案（程序拼，不由模型改写）：</p>
+      <div class="formula">这一段（本批合并 N 段 / 共 M 字，程序阈值 T 字）写得对不对？
+
+&lt;combinedText&gt;
+
+对就继续写下一段；哪里不对请直接说，我按你说的改。</div>
+      <p>渲染层（<code>output.render</code>）给人看的那段文本骨架：</p>
+      <pre><code>&lt;type&gt;novel-draft&lt;/type&gt;
+&lt;content&gt;
+&lt;message&gt;
+
+镜像文件（给人看的，你不要读）：&lt;draftFile&gt;
+第 N 段已写入（C 字）｜待确认 P/T 字｜本章已提问 K 次
+
+nextAction = continue → 程序判定：继续写下一段（还差 R 字到阈值）——不要自己去问用户。
+nextAction = ask_user → 程序判定：现在停下来问用户（阈值已到）。
+                         【问题】&lt;question&gt;
+                         【本批正文】&lt;combinedText&gt;
+&lt;/content&gt;</code></pre>
+
+      <h2>提问节奏：阈值与账本</h2>
+      <p>「什么时候停下来问用户」是本版刻意<strong>从模型手里拿走</strong>的判断：交给模型决定，就等于让「短段该不该合并着问」变成临场发挥，而这正是要消除的东西。</p>
+      <h3>阈值：默认 400，用户可填 100~5000</h3>
+      <div class="formula">CHAT_PROMPT_THRESHOLD_CHARS = 400     ← 用户没填时的确定行为
+CHAT_THRESHOLD_MIN = 100
+CHAT_THRESHOLD_MAX = 5000
+
+normalizeChatThreshold(value):
+  n = Number(value)
+  !Number.isFinite(n) 或 n &lt;= 0  → null（表示"用默认值"）
+  其余                          → min(5000, max(100, round(n)))</div>
+      <table>
+        <thead><tr><th>输入</th><th>落盘 / 生效</th></tr></thead>
+        <tbody>
+          <tr><th><code>400</code></th><td><code>400</code></td></tr>
+          <tr><th><code>800.4</code></th><td><code>800</code>（<code>round</code>）</td></tr>
+          <tr><th><code>50</code></th><td><code>100</code>（夹到下限）</td></tr>
+          <tr><th><code>999999</code></th><td><code>5000</code>（夹到上限）</td></tr>
+          <tr><th><code>0</code> / <code>null</code></th><td>清回默认 <code>400</code></td></tr>
+          <tr><th><code>"abc"</code> / 非数字</th><td>忽略该次写入，闸门按默认 <code>400</code></td></tr>
+        </tbody>
+      </table>
+      <p><strong>阈值不是每章一份</strong>：它存在状态文件 <code>state.json</code> 的顶层 <code>chatThreshold</code>（面板「实时聊天写作 → 提问节奏」那一行，或 <a href="novel-sentence-config.html">novel_sentence_config</a> 的 <code>chatThreshold</code> 参数），全书生效；读取侧取值口径是 <code>state.chatThreshold ?? 400</code>。</p>
+      <h3>判定：达到或超过即提问</h3>
+      <div class="formula">reached = pendingChars &gt;= threshold        ← 不是 &gt; ，正好等于也提问
+if reached:
+  combinedText = pending.join("\n\n")        ← 本批所有段落
+  question     = 固定文案 + combinedText
+  prompts      += 1
+  pending = [] ／ pendingChars = 0           ← 随即清零，下一批重新累计</div>
+      <p>阈值只决定「何时问」，<strong>不影响落盘</strong>：每一段都是立刻 append，哪怕只有 5 个字。所以「短段自动合并」合的是<strong>提问</strong>，不是写入。</p>
+      <h3>账本：该章一份 <code>__state.json</code></h3>
+      <p>计数不靠读回镜像正文，而是程序自己的账本 <code>&lt;章键&gt;__state.json</code>，与镜像同目录、同章键：</p>
+      <pre><code>{
+  "segments": 2,
+  "pendingChars": 0,
+  "totalChars": 425,
+  "prompts": 1,
+  "pending": [],
+  "updatedAt": "2026-11-10T13:39:39.069Z"
+}</code></pre>
+      <table>
+        <thead><tr><th>键</th><th>含义</th></tr></thead>
+        <tbody>
+          <tr><th><code>segments</code></th><td>已写入的段数（= 下一次的 <code>segmentIndex</code> − 1）</td></tr>
+          <tr><th><code>pendingChars</code></th><td>本批已累计、尚未提问的字数（提问后归零）</td></tr>
+          <tr><th><code>totalChars</code></th><td>本章累计写入字数（只增，不随提问清零）</td></tr>
+          <tr><th><code>prompts</code></th><td>本章已提问次数</td></tr>
+          <tr><th><code>pending</code></th><td><strong>本批各段正文的数组</strong>——合并提问要用它拼 <code>combinedText</code>，所以账本里存的是文字而不只是计数（提问后清空）</td></tr>
+          <tr><th><code>updatedAt</code></th><td>最近一次 commit 的 ISO 8601 时间戳</td></tr>
+        </tbody>
+      </table>
+      <p><strong>账本丢了会怎样</strong>：读不到或 JSON 损坏时，按镜像里已有的段头重建——只数 <code>## 第N段</code> 的行数（<code>/^## 第\s*\d+\s*段/gm</code>），<strong>不把正文读进上下文</strong>，并把 <code>pendingChars</code> / <code>totalChars</code> / <code>prompts</code> 归零。结果是<strong>段号能续上</strong>（不会从第 1 段重新覆盖），但「本轮待确认字数」从头累计。账本写入走 <code>atomicWriteJson</code>（临时文件 + 原子替换）。</p>
+      <div class="note">
+        <b>字数怎么数。</b><code>segmentChars</code> / <code>pendingChars</code> 都是 JS 字符串长度（<code>text.trim().length</code>）：中文一字记 1，<strong>换行与空格也计 1</strong>，emoji 等需要代理对的字符记 2。它不是「汉字数」，也没有走 <code>chapterStats</code> 那套章节字数口径。
+      </div>
+
+      <h2>章键归一与同章认领</h2>
+      <p>镜像文件名与账本文件名<strong>共用同一个章键</strong>，保证两者永远配对。章键由 <code>draftKeyFor</code> 产出：</p>
+      <div class="formula">raw = String(chapter ?? "").trim() || "未命名章"
+① 能解析出章号（parseChapterNumber）→ "第" + padStart(2,"0") + "章"
+② 否则 sanitizeSegment(raw)：折叠连续点号、去掉首尾点号
+③ 清洗后为空（".." / "///" / 纯非法字符）→ "章-" + sha1(raw) 前 8 位
+④ 清洗后超过 48 字符 → 前 48 字 + "-" + sha1(raw) 前 6 位</div>
+      <table>
+        <thead><tr><th>入参 <code>chapter</code></th><th>章键</th><th>说明</th></tr></thead>
+        <tbody>
+          <tr><th><code>3</code></th><td><code>第03章</code></td><td>能解析出章号就统一成规范写法</td></tr>
+          <tr><th><code>第03章 证词里的空白</code></th><td><code>第03章</code></td><td><strong>标题被丢掉</strong>：同章只能有一个镜像</td></tr>
+          <tr><th><code>第2章.md</code></th><td><code>第02章</code></td><td>后缀不影响</td></tr>
+          <tr><th>省略 / 空串</th><td><code>未命名章</code></td><td>兜底名，同一本书的「未命名」会共用一个文件</td></tr>
+          <tr><th><code>a/b/c</code></th><td><code>abc</code></td><td>路径分隔符被清掉（不会越界）</td></tr>
+          <tr><th><code>***</code></th><td><code>章-36c3eaa0</code></td><td>清洗后为空 → 稳定短哈希</td></tr>
+          <tr><th><code>"a" × 300</code></th><td><code>aaaa…aaaa-003ef1</code></td><td>截到 48 + 6 位哈希（Windows 260 字符路径上限）</td></tr>
+        </tbody>
+      </table>
+      <div class="note">
+        <b>为什么一定要归一。</b>真实数据踩过：AI 提交时写 <code>chapter:"3"</code> 得到 <code>3__draft.md</code>，而建章时用文件名 <code>第03章 证词里的空白</code> 又得到另一个文件——<strong>同一章两份镜像</strong>，用户看到的那份恰好只有「定稿」，于是以为「镜像没多写」。现在<strong>只要能解析出章号就统一成 <code>第NN章</code></strong>。
+      </div>
+      <p>归一之外还有第二层兼容：<code>resolveDraftTarget</code> 在规范文件不存在时，会扫一遍该书的 <code>__draft.md</code>，<strong>认领章号相同的第一份既有文件</strong>（按文件名排序）作为本章镜像与账本：</p>
+      <div class="formula">key = draftKeyFor(chapter)
+规范文件存在 → 用它
+否则若入参能解析出章号：
+  列出目录下所有 *__draft.md，按名排序
+  第一个 parseChapterNumber(文件名去后缀) === 章号 的 → 认领它（账本也随之改指 &lt;它的键&gt;__state.json）
+否则 → 规范文件（首次写入时创建）</div>
+      <p>这一层是为了兼容早期按字面量命名的镜像（<code>3__draft.md</code>）：不认领的话，升级后同一章会再多出一个 <code>第03章__draft.md</code>，历史内容看起来像丢了。</p>
+      <h3>镜像文件长什么样</h3>
+      <p>正文结构<strong>只有逐段块</strong>，没有标题头；每段以 <code>## 第N段</code> 开头，行尾带写入时间戳：</p>
+      <pre><code>## 第1段 · 2026-11-10 13:39:39
+
+第一小段。
+
+## 第2段 · 2026-11-10 13:39:39
+
+……（这一段正文）
+
+## 定稿落盘 · 第2章 · 2026-11-10 13:39:39
+
+&gt; 本章已写入正式章节：第02章 有篇.md（16 字）。本文件是草稿镜像，只追加、只给人看。</code></pre>
+      <div class="note">
+        <b>时间戳是 UTC。</b>写盘用的是 <code>new Date().toISOString()</code> 截到秒（<code>YYYY-MM-DD HH:MM:SS</code>，<strong>不带时区后缀、也不是本地时间</strong>），所以文件里看到的时刻通常比北京时间早 8 小时。它只是给人看的标记，不参与任何判断。
+      </div>
+      <div class="warn">
+        <b>一处已修正的口径不一致（v7.3.0 合并时修掉）。</b>写入格式是 <code>## 第N段 · &lt;时间戳&gt;</code>，而最初的 <code>parseDraftSegments</code> 正则要求「段」字之后直到行尾只有空白（<code>^##\s*第\s*(\d+)\s*段\s*$</code>）——<strong>解析不了自己的写入格式</strong>。后果很隐蔽：「数段」是对的（建章统计用的正则 <code>^## 第\s*\d+\s*段</code> 不要求行尾，所以账本重建正常），但「取正文」永远是 0 段，面板预览会显示成空。现在段头允许可选的 <code>· 时间戳</code> 后缀（也兼容人工手写的纯 <code>## 第N段</code>），并有回归测试盯着。另外：<code>core.draftMirrorHeader</code> / <code>core.renderDraftMirror</code> 定义了带标题头的渲染格式，但<strong>写入路径没有调用它们</strong>——镜像里确实没有「# 草稿镜像 · 第NN章」这样的头，只有逐段块。判断镜像内容请直接看文件原文。</p>
+      <p>纪律共八条，逐条都是为了让模型<strong>不做判断</strong>：</p>
+      <table>
+        <thead><tr><th>#</th><th>约束</th></tr></thead>
+        <tbody>
+          <tr><th>1</th><td>动笔前读一遍开写包（<a href="novel-chapter-brief.html">novel_chapter_brief</a>）；<strong>第一步不是问人，是写</strong></td></tr>
+          <tr><th>2</th><td>每写完<strong>一个自然段</strong>，就把这一段正文交给 <code>novel_draft</code>（<code>action="commit"</code>, book, chapter, text）</td></tr>
+          <tr><th>3</th><td>然后<strong>照 <code>nextAction</code> 做</strong>：<code>continue</code> 就继续写、不要去问人；<code>ask_user</code> 才把 <code>question</code> 原样交给提问工具，并把 <code>combinedText</code> 一起贴给用户，然后等他回答</td></tr>
+          <tr><th>4</th><td>用户说不对 → <strong>只改他指出的那几段</strong>，改好照常继续写、继续 commit；不要整章重写，也不要另起一次提问</td></tr>
+          <tr><th>5</th><td>用户说对 → 继续写下一段</td></tr>
+          <tr><th>6</th><td>本章全部写完后，<strong>才</strong>用 <code>novel_new_chapter</code>（或 write）把定稿写进正式章节文件</td></tr>
+          <tr><th>7</th><td>正式章节<strong>在用户确认前不要提前写</strong>；用户没回应时不要自己往下写</td></tr>
+          <tr><th>8</th><td>镜像<strong>只交给人管</strong>：不要读它、不要改它、不要清理它，也不要引用它的内容</td></tr>
+        </tbody>
+      </table>
+      <p>同一条约束还会以一句话的形式进开写包的检查清单（<code>CHAT_MODE_CHECKLIST</code>）：「实时聊天写作（硬约束）：每写完一段就 novel_draft commit 交出去；nextAction=continue 就继续写、=ask_user 才用提问工具问用户；镜像不读不改不清；提问时机由程序的字数阈值判定，不要自己决定」。</p>
+      <div class="warn">
+        <b>「程序判定」这四个字是契约，不是建议。</b>如果模型自己决定什么时候问人，<code>pendingChars</code> 与 <code>prompts</code> 就会与它实际问过的次数脱节；如果模型读了镜像再写，它引用的就是自己刚写下的文本（多一轮噪声）。这两件事都没有运行时可拦的判据——所以它们写进系统提示，并由回归测试断言提示词里必须出现 <code>nextAction</code> / <code>ask_user_question</code> / 「不要读它」等关键字。
+      </div>
+
+      <h2>与其它工具的关系</h2>
+      <h3>开写包（<code>novel_chapter_brief</code>）</h3>
+      <p><code>chatWriting</code> 开启时，开写包多一个字段 <code>chatWriting</code>（关闭时整个键省略）：</p>
+      <div class="formula">chatWriting = {
+  on: true,
+  mirrorDir,     // 独立目录绝对路径
+  draftFile,     // 本章镜像绝对路径（由 chapterKey 推出）
+  chapterKey,    // 由目标章文件名（去 .md）或 "第N章" 推出
+  threshold,     // 用户配置的阈值，未配置则 400
+  checklist,     // CHAT_MODE_CHECKLIST
+  howTo          // 一段操作说明
+}</div>
+      <p>渲染文本里对应分区是<strong>【实时聊天写作·逐段确认】</strong>，逐行打出镜像文件、镜像目录、「程序阈值：T 字（由程序判定何时提问，不要自己决定）」、<code>howTo</code>，末尾一条硬规矩：「每段写完用 novel_draft 交出去并照 nextAction 执行；用户说不对就只改他指出的那几段；确认前不要写正式章节文件」。同时 <code>plan.checklist</code> 追加 <code>CHAT_MODE_CHECKLIST</code>。</p>
+      <div class="note">
+        <b>开写包刻意不建目录。</b>它的契约是<strong>只读</strong>（不写任何文件），所以 <code>chatWriting</code> 只算出路径、不落盘；<code>drafts/&lt;书&gt;/</code> 由<strong>第一次 commit</strong> 创建（<code>mkdir(recursive)</code>）。同理，镜像路径计算失败只会在 <code>degraded</code> 里记一句「实时聊天写作：草稿镜像路径计算失败（本章不注入该模式）」，不影响其余材料。
+      </div>
+      <h3>定稿落盘（<code>novel_new_chapter</code>）</h3>
+      <p><code>chatWriting</code> 开启时，<a href="novel-new-chapter.html">novel_new_chapter</a> 在<strong>章节写盘成功后</strong>由<strong>插件自己</strong>往该章镜像里追加一条「定稿落盘」记录——这件事 AI 不需要、也不该管：</p>
+      <div class="formula">hasSegments = 镜像里存在 /^## 第\s*\d+\s*段/m
+追加内容 = 「## 定稿落盘 · 第N章 · &lt;时间戳&gt;」+ 一行「&gt; 本章已写入正式章节：&lt;文件名&gt;（N 字）。本文件是草稿镜像，只追加、只给人看。」
+hasSegments === true  → 只追加这条标记
+hasSegments === false → 标记 + 本次定稿正文（保证人打开镜像有东西可看）</div>
+      <p>规则的理由很实在：镜像<strong>只追加</strong>，如果每次都把整章正文再拷一遍，镜像就会与正文等长、看起来像「镜像没多写」；反之若 AI 根本没走 commit（刚开开关），镜像里一个字都没有，人也无从判断。</p>
+      <p>镜像写入失败<strong>不影响建章结果</strong>——只记一条 <code>silent_skip</code> 事件（「定稿镜像写入失败（本章照常保存）」），章照常保存、返回体照常。</p>
+      <h3>不受影响的部分</h3>
+      <ul>
+        <li><strong>章节扫描 / 摘要 / 伏笔 / 设定 / 语义索引</strong>：镜像不在 <code>novels/</code> 下，<code>scanChapters</code> 看不到它，所以章节数、字数、六维基线、语义索引与关键词统计都与它无关（这正是另起目录的目的）。</li>
+        <li><strong>工具开关</strong>：<code>novel_draft</code> 与其它工具一样受 <code>tools</code> 白名单与总开关约束，<code>execute</code> 第一行就是 <code>assertToolEnabled</code>，关闭时抛错。</li>
+        <li><strong>阈值配置入口</strong>：面板「实时聊天写作 → 提问节奏」与 <a href="novel-sentence-config.html">novel_sentence_config</a> 的 <code>chatThreshold</code> 是同一份状态字段。</li>
+      </ul>
+
+      <h2>面板预览（只读）</h2>
+      <p>镜像写在数据目录里，如果没有入口，「实时看到他在写什么」这一半就漏掉了——用户只能自己去文件管理器找。所以「诊断报告」页新增<strong>草稿镜像卡片</strong>：选书 → 章节输入框留空 = 列出该书<strong>所有</strong>镜像文件（章键 + 体积），填章号 = 显示该章<strong>逐段正文</strong>；另有「复制目录」按钮（只复制路径）。</p>
+      <p>数据来自只读路由 <code>GET /api/dsh-novel-writer/draft?book=&amp;chapter=</code>：</p>
+      <table>
+        <thead><tr><th>请求</th><th>返回</th></tr></thead>
+        <tbody>
+          <tr><th><code>?book=&lt;书&gt;</code>（<code>chapter</code> 留空）</th><td><code>{ ok, book, mirrorDir, items: [{ file, chapterKey, bytes, mtime }] }</code>——<code>items</code> 按文件名排序，<strong>最多 50 个</strong>；<code>chapterKey</code> 是文件名去掉 <code>__draft.md</code></td></tr>
+          <tr><th><code>?book=&lt;书&gt;&amp;chapter=&lt;章&gt;</code></th><td><code>{ ok, book, chapterKey, mirrorDir, draftFile, exists, segments: [{ index, text }], totalChars }</code>——<code>chapter</code> 先经 <code>resolveDraftTarget</code>（含同章认领）定位；<code>exists = 内容非空</code>；<code>segments</code> 由 <code>parseDraftSegments</code> 解析；<code>totalChars</code> 是各段文本长度之和</td></tr>
+        </tbody>
+      </table>
+      <ul>
+        <li><strong>只读</strong>：不写、不改、不清理，面板上也没有删除按钮（清理只有两条路：人工删文件，或按书删除时连带清掉）。</li>
+        <li><strong>仅回环</strong>：<code>isAllowedRequest(req, allowLanState)</code> 不通过直接 403；方法不是 <code>GET</code> 返回 405；<code>book</code> 为空返回 400「缺少 book 参数」。</li>
+        <li><strong>书库根</strong>取自面板同一套解析（<code>resolveUiRootInfo</code>），<strong>不接受 <code>root</code> 参数</strong>。</li>
+        <li>它不是工具：AI 拿不到这个路由，它只是面板的数据源。</li>
+      </ul>
+      <div class="warn">
+        <b>段数不再是 0（v7.3.0 已修正）。</b>预览的 <code>segments</code> 走 <code>parseDraftSegments</code>，而它最初要求段头行以「段」结尾、实际写盘带「· 时间戳」——那会让真实镜像解析出 0 段、<code>totalChars</code> 也是 0。合并时已放宽正则（允许可选的 <code>· 时间戳</code>），并有回归测试与 e2e 断言（真实写入格式 → 必须解析出 2 段）盯着。</p>
+      <p>它<strong>不能</strong>并入数据目录那 9 个扁平白名单子目录（<code>DELETE_DATA_SUBDIRS</code>：<code>analysis</code> / <code>audits</code> / <code>baseline</code> / <code>embedding</code> / <code>lexicon</code> / <code>plots</code> / <code>settings</code> / <code>style-reports</code> / <code>summaries</code>）——这是最容易搞错的一处：</p>
+      <div class="formula">那 9 个白名单的口径 = 目录下"扁平文件 + 书名前缀边界"
+    names.filter(name =&gt; isBookScopedName(name, keys))
+    → &lt;书&gt;.json / &lt;书&gt;-&lt;hash&gt;.json / &lt;书&gt;__style_2.json …
+
+drafts/ 的口径 = 每本书一个**子目录**
+    drafts/&lt;书&gt;/&lt;章键&gt;__draft.md
+    ├ 文件名是章键（第03章），**不含书名**
+    └ 子目录名才是书名
+
+把 "drafts" 放进那 9 个里 → isBookScopedName 永远命中 0 个文件
+                        → files === 0 → continue 跳过
+                        → 删除书之后留一份看不见的孤儿目录</div>
+      <p>所以它由 <code>planBookDelete</code> 里一个独立分支（③-b）登记：路径取 <code>draftBookDir(root, book)</code>，体积用 <code>pathSize</code> 递归统计，执行时与其它 <code>kind: "dir"</code> 条目一样<strong>整目录移入回收站</strong>（<code>.novel-writer/trash/&lt;书&gt;-&lt;时间戳&gt;/</code>），<code>restore</code> 原样移回。</p>
+      <div class="note">
+        <b>顺带一提：诊断也把它算进「数据目录」。</b><a href="novel-diagnose.html">novel_diagnose</a> 的子目录统计列表（<code>lib/diagnose.js</code>）已含 <code>drafts</code>，否则「半成品堆了多大」在诊断里完全不可见。
+      </div>
+
+      <h2>约束与边界</h2>
+      <ul>
+        <li><strong>接口面只有 <code>commit</code></strong>：没有读、没有清、没有「改第 N 段」。要改某段就再写一段新的（镜像只追加、不去重），然后把正式稿写对。</li>
+        <li><strong><code>text</code> 会被 trim</strong>：首尾空白不落盘，也不计入字数；纯空白视为未传并抛错。段落内部的换行原样保留。</li>
+        <li><strong>重复段落照写</strong>：同一个 <code>text</code> 提交两次就是两段（不去重、不覆盖）——这是「只追加」的直接后果。</li>
+        <li><strong>镜像永不被整篇重写</strong>：写入只有 <code>appendFile</code>，因此用户在镜像里手加的批注不会被抹掉；账本是<strong>另一个文件</strong>（<code>__state.json</code>），整体重写也只影响计数。</li>
+        <li><strong>提问次数的语义</strong>：<code>prompts</code> 记的是<strong>程序判定要提问的次数</strong>，不是模型实际问了几次。模型没照 <code>nextAction</code> 执行时两者会脱节，界面无从校验。</li>
+        <li><strong><code>remaining</code> 在 <code>ask_user</code> 时不表示「还差 0 字」</strong>：它等于阈值本身（批次已清零）。判断「还差多少」请看 <code>nextAction</code>，不要只看这个数字。</li>
+        <li><strong>章键不是章号</strong>：<code>未命名章</code>、哈希兜底名与标题式章名都可能是章键；同一本书里所有「未命名」提交会共用一个镜像与一份账本。</li>
+        <li><strong>镜像与账本不自动清理</strong>：没有 TTL、没有上限、没有「归档」。清理是人工动作（删文件）或按书删除。</li>
+        <li><strong>书库格式不变</strong>：不新增书库内的目录结构，所有新增内容都在既有的 <code>.novel-writer/</code> 数据目录下；工具数 21 → <strong>22</strong>（<code>ALL_TOOLS</code> 第 22 项，<code>TOOL_LABELS</code> 为「草稿镜像」）。</li>
+      </ul>
+
+      <h2>源码位置</h2>
+      <ul>
+        <li><span class="src">lib/core.js</span> —— 常量与路径：<code>DRAFT_DIRNAME</code>、<code>DRAFT_FILE_SUFFIX</code>、<code>DRAFT_STATE_SUFFIX</code>、<code>CHAT_PROMPT_THRESHOLD_CHARS</code>、<code>CHAT_THRESHOLD_MIN</code>、<code>CHAT_THRESHOLD_MAX</code>；函数：<code>normalizeChatThreshold</code>、<code>draftRootDir</code>、<code>draftBookDir</code>、<code>draftKeyFor</code>、<code>resolveDraftTarget</code>、<code>draftFileFor</code>、<code>draftStateFileFor</code>、<code>isInsideBookDir</code>、<code>draftMirrorHeader</code>、<code>parseDraftSegments</code>、<code>renderDraftMirror</code>（按函数名搜索；源码里有 v7.3.0 注释块，标题为「实时聊天写作的草稿镜像」）。</li>
+        <li><span class="src">lib/index.js</span> —— <code>registerNovelDraft</code>（工具定义、<code>execute</code> 与 <code>render</code>）；系统提示 section <code>novel-writing:chat-writing</code>；<code>novel_new_chapter</code> 里的「定稿落盘」镜像钩子（搜「定稿镜像」或注释里的 <code>v7.3.0：实时聊天写作</code>）；面板只读路由 <code>/api/dsh-novel-writer/draft</code> 的 handler。</li>
+        <li><span class="src">lib/prompts.js</span> —— <code>CHAT_WRITING_PROMPT</code>（八条纪律正文）、<code>CHAT_MODE_CHECKLIST</code>（一句话版硬约束）。</li>
+        <li><span class="src">lib/brief.js</span> —— 开写包的 <code>chatWriting</code> 字段（搜 <code>chatWriting</code>，注释「v7.3.0：实时聊天写作」）。</li>
+        <li><span class="src">lib/bookdelete.js</span> —— <code>planBookDelete</code> 里的 <code>data:drafts</code> 登记（③-b 分支）与 <code>DELETE_DATA_SUBDIRS</code>（<strong>不含</strong> <code>drafts</code>）。</li>
+        <li><span class="src">lib/client.js</span> —— 面板：功能开关 <code>feature.chatWriting</code>、提问节奏 <code>chatThreshold.*</code>、草稿镜像卡片 <code>draft.*</code> 文案与 <code>loadDraftPeek</code>。</li>
+        <li><span class="src">lib/diagnose.js</span> —— 数据目录子目录统计列表（已含 <code>drafts</code>）。</li>
+        <li><span class="src">test/chat-writing-test.mjs</span> —— 18 条回归用例：默认关 / 开写包与系统提示两侧 / 只有 commit / 短段累计与达阈值提问 / 只追加 / 独立目录不影响章节扫描 / 非法章名 / 账本持久与重建 / 建章定稿镜像两分支 / 同章不同写法收敛 / 阈值可配置 / 按书删除与诊断登记。</li>
+      </ul>
+    </article>
+
+    <nav class="docs__pager" id="docsPager"></nav>
+  </main>
+
+  <aside class="docs__toc" id="docsToc"></aside>
+</div>
+
+<script src="docs.js"></script>
+</body>
+</html>

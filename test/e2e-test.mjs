@@ -174,7 +174,10 @@ await (async function outputContractCheck() {
     novel_diagnose: { days: 7, root: testRoot },
     // v6.8.0：按书删除（第 21 个工具）。只用 preview 分支——它**只读不写盘**，
     // 不会破坏本套件的夹具书；apply/restore/purge 的破坏性路径由 delete-book-test 覆盖。
-    novel_delete_book: { book: "测试", action: "preview", root: testRoot }
+    novel_delete_book: { book: "测试", action: "preview", root: testRoot },
+    // v7.3.0：草稿镜像（第 22 个工具）。commit 只追加到 .novel-writer/drafts/，绝不碰 novels/<书>/；
+    // 章键给一个"未命名章"之外的固定值，避免与本套件其它断言抢同一个镜像文件。
+    novel_draft: { action: "commit", book: "测试", chapter: "契约校验", text: "这一段只用于输出契约校验。", root: testRoot }
   };
   // v4.0.0：这 4 个工具没有"循环调用样例"（analysis 会写缓存与 miss 断言冲突），改为在各自调用点断言契约
   const CONTRACT_AT_CALLSITE = ["novel_new_chapter", "novel_import", "novel_sentence_analysis", "novel_semantic_search"];
@@ -1587,3 +1590,94 @@ rmSync(testRoot, { recursive: true, force: true });
 console.warn = originalWarn;
 if (pluginWarnings.length > 0) throw new Error("插件运行期告警 " + pluginWarnings.length + " 条（v4.0.0 起视为失败）: " + pluginWarnings.join(" | "));
 console.log("\nALL E2E TESTS PASSED");
+
+// ===========================================================================
+
+// ===========================================================================
+// v7.3.0：草稿镜像只读预览路由 GET /api/dsh-novel-writer/draft?book=&chapter=
+//   章节留空 → {ok, book, mirrorDir, items[]}（列出该书所有镜像文件）
+//   给了章节 → {ok, book, chapterKey, mirrorDir, draftFile, exists, segments[], totalChars}
+// 只读：不改镜像、不落盘。章节不存在是**正常状态**（exists:false），不是 404。
+// ===========================================================================
+{
+  const DRAFT_PATH = "/api/dsh-novel-writer/draft";
+  const DRAFT_BOOK = "草稿路由书";
+  const draftRoute = routes.find((r) => r.path === DRAFT_PATH);
+  if (!draftRoute) throw new Error("草稿镜像路由未注册：" + DRAFT_PATH);
+  if (draftRoute.kind !== "exact") throw new Error("草稿镜像路由 kind 应为 exact，实际 " + draftRoute.kind);
+
+  // 夹具：用**真实写入格式**（段头带时间戳）——正是这条格式当初把 parseDraftSegments 打穿了
+  const draftBooksDir = join(testRoot, ".novel-writer", "drafts", DRAFT_BOOK);
+  mkdirSync(draftBooksDir, { recursive: true });
+  const draftFixture = "## 第1段 · 2026-11-10 21:00:00\n\n他在门口停了半秒。\n\n## 第2段 · 2026-11-10 21:01:00\n\n她没回头。\n\n";
+  const draftFile = join(draftBooksDir, "第03章__draft.md");
+  writeFileSync(draftFile, draftFixture, "utf8");
+
+  const mkDraftRes = () => ({ status: 0, body: "", writeHead(s) { this.status = s; }, end(b) { this.body = String(b); } });
+  const callDraft = async (query, method = "GET", headers) => {
+    const res = mkDraftRes();
+    const req = {
+      method,
+      url: DRAFT_PATH + (query === "" ? "" : "?" + query),
+      socket: { remoteAddress: "127.0.0.1" },
+      headers: Object.assign({ host: "127.0.0.1:51783" }, headers || {})
+    };
+    await draftRoute.handler(req, res);
+    let json = null;
+    try { json = JSON.parse(res.body); } catch { json = res.body; }
+    return { status: res.status, json };
+  };
+  const enc = encodeURIComponent;
+  let draftCases = 0;
+
+  // ① 章节留空 = 列镜像文件
+  const list = await callDraft("book=" + enc(DRAFT_BOOK));
+  if (list.status !== 200 || !Array.isArray(list.json?.items)) throw new Error("draft 列表分支异常：" + JSON.stringify(list));
+  if (!list.json.items.some((it) => it.chapterKey === "第03章")) throw new Error("draft 列表没列出 第03章：" + JSON.stringify(list.json.items));
+  draftCases += 1;
+
+  // ② 给章节 = 逐段正文（段数必须 2，不是 0）
+  const one = await callDraft("book=" + enc(DRAFT_BOOK) + "&chapter=" + enc("第03章"));
+  if (one.status !== 200 || !Array.isArray(one.json?.segments)) throw new Error("draft 逐段分支异常：" + JSON.stringify(one));
+  if (one.json.segments.length !== 2) throw new Error("draft 段数应为 2，实际 " + one.json.segments.length + "（parseDraftSegments 回归？）");
+  if (!String(one.json.segments[0].text).includes("他在门口停了半秒")) throw new Error("draft 第 1 段正文不对：" + JSON.stringify(one.json.segments[0]));
+  // "他在门口停了半秒。"(9) + "她没回头。"(5) = 14
+  if (one.json.totalChars !== 14) throw new Error("draft totalChars 应为 14（9+5），实际 " + one.json.totalChars);
+  draftCases += 1;
+
+  // ③ 不存在的章：200 + exists:false（「没有」是正常状态，不是错误）
+  const absent = await callDraft("book=" + enc(DRAFT_BOOK) + "&chapter=" + enc("第99章"));
+  if (absent.status !== 200 || absent.json?.exists !== false) throw new Error("draft 不存在的章应 200 + exists:false：" + JSON.stringify(absent));
+  draftCases += 1;
+
+  // ④ 缺 book → 400；非 GET → 405
+  if ((await callDraft("")).status !== 400) throw new Error("draft 缺 book 应 400");
+  if ((await callDraft("book=x", "POST")).status !== 405) throw new Error("draft 非 GET 应 405");
+  draftCases += 1;
+
+  // ⑤ 只读：调用后镜像逐字节未变
+  if (readFileSync(draftFile, "utf8") !== draftFixture) throw new Error("draft 预览改动了镜像文件（应当只读）");
+  draftCases += 1;
+
+  // ⑥ 非回环访问 → 403：与审计路由同口径，必须用 allowLanState:false 的独立注册 + 非回环来源地址
+  //    （只改 Host 头不够——守卫看的是 remoteAddress）
+  const lockedDraftRoutes = [];
+  const lockedDraftCtx = {
+    tools: { register: () => () => {} },
+    systemPrompt: { section: () => () => {} },
+    inject: (names, cb) => cb({ webServer: { register: (r) => { lockedDraftRoutes.push(r); return () => {}; } }, effect: (fn) => fn() })
+  };
+  apply(lockedDraftCtx, { root: testRoot, allowLanState: false });
+  const lockedDraftRoute = lockedDraftRoutes.find((r) => r.path === DRAFT_PATH);
+  if (!lockedDraftRoute) throw new Error("allowLanState=false 的注册里缺少草稿镜像路由");
+  const lockedRes = mkDraftRes();
+  await lockedDraftRoute.handler(
+    { method: "GET", url: DRAFT_PATH + "?book=" + enc(DRAFT_BOOK), socket: { remoteAddress: "192.168.1.5" }, headers: { host: "192.168.1.5:3080", origin: "http://192.168.1.5:3080" } },
+    lockedRes
+  );
+  if (lockedRes.status !== 403) throw new Error("draft 非回环访问未拦住（应 403），实际 " + lockedRes.status);
+  if (!/loopback-only/.test(lockedRes.body)) throw new Error("draft 403 错误文案不对：" + lockedRes.body);
+  draftCases += 1;
+
+  console.log("草稿镜像路由：" + draftCases + " 组（列表 / 逐段 2 段 / 不存在 exists:false / 缺 book 400 / 非 GET 405 / 只读 / 非回环 403）✓");
+}

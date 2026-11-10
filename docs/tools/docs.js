@@ -11,6 +11,7 @@
     { g: '章节与文稿', file: 'novel-read',         name: 'novel_read',         title: '阅读正文' },
     { g: '章节与文稿', file: 'novel-new-chapter',  name: 'novel_new_chapter',  title: '新建章节' },
     { g: '章节与文稿', file: 'novel-chapter-brief', name: 'novel_chapter_brief', title: '开写包' },
+    { g: '章节与文稿', file: 'novel-draft',        name: 'novel_draft',        title: '草稿镜像' },
     { g: '章节与文稿', file: 'novel-import',       name: 'novel_import',       title: '批量导入' },
     { g: '章节与文稿', file: 'novel-keywords',     name: 'novel_keywords',     title: '关键词统计' },
 

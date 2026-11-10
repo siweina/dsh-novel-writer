@@ -4,21 +4,21 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>技术文档总览｜dsh-novel-writer</title>
-<meta name="description" content="dsh-novel-writer 的 21 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
+<meta name="description" content="dsh-novel-writer 的 22 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
 <link rel="stylesheet" href="../styles.css">
 <link rel="stylesheet" href="docs.css">
 <link rel="canonical" href="https://siweina.github.io/dsh-novel-writer/tools/index.html">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="dsh-novel-writer">
 <meta property="og:title" content="技术文档总览｜dsh-novel-writer">
-<meta property="og:description" content="dsh-novel-writer 的 21 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
+<meta property="og:description" content="dsh-novel-writer 的 22 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
 <meta property="og:url" content="https://siweina.github.io/dsh-novel-writer/tools/index.html">
 <meta property="og:locale" content="zh_CN">
 <meta name="twitter:card" content="summary">
 <meta name="twitter:title" content="技术文档总览｜dsh-novel-writer">
-<meta name="twitter:description" content="dsh-novel-writer 的 21 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
+<meta name="twitter:description" content="dsh-novel-writer 的 22 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","name":"技术文档总览｜dsh-novel-writer","description":"dsh-novel-writer 的 21 个工具实现细节：参数契约、计算原理、约束边界与源码位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/index.html","inLanguage":"zh-CN","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.2.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer","url":"https://siweina.github.io/dsh-novel-writer/"}}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","name":"技术文档总览｜dsh-novel-writer","description":"dsh-novel-writer 的 22 个工具实现细节：参数契约、计算原理、约束边界与源码位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/index.html","inLanguage":"zh-CN","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer","url":"https://siweina.github.io/dsh-novel-writer/"}}</script>
 </head>
 <body class="docs">
 
@@ -33,9 +33,9 @@
   <main class="docs__main">
     <article class="doc">
       <h1>技术文档</h1>
-      <p class="doc__version">当前版本 <code>7.2.0</code> · 更新记录见 <a href="https://github.com/siweina/dsh-novel-writer/blob/main/CHANGELOG.md">CHANGELOG</a>（下方「版本说明」）</p>
+      <p class="doc__version">当前版本 <code>7.3.0</code> · 更新记录见 <a href="https://github.com/siweina/dsh-novel-writer/blob/main/CHANGELOG.md">CHANGELOG</a>（下方「版本说明」）</p>
       <p class="doc__lead">
-        <code>dsh-novel-writer</code> 的 21 个工具全部在本地运行，<strong>不使用在线大模型</strong>：所有指标由规则统计与本地 ONNX 推理得出。本组页面面向二次开发与集成方，逐工具说明参数契约、计算原理、约束边界与源码位置。
+        <code>dsh-novel-writer</code> 的 22 个工具全部在本地运行，<strong>不使用在线大模型</strong>：所有指标由规则统计与本地 ONNX 推理得出。本组页面面向二次开发与集成方，逐工具说明参数契约、计算原理、约束边界与源码位置。
       </p>
 
       <h2>阅读约定</h2>
@@ -55,6 +55,12 @@
       <ul class="doc__releases">
         <li>
           <details open>
+            <summary><code>7.3.0</code> · 2026-11-10 <span class="doc__rel-sum">实时聊天写作：逐段写、程序按字数阈值让你确认，草稿进独立目录（工具数 21 → 22）</span></summary>
+            <p>新增第 <b>22</b> 个工具 <a href="novel-draft.html">novel_draft</a>（草稿镜像）：AI 一段段地写，每写完一段就把<b>这一段正文</b>交给它，由<b>程序</b>追加进独立目录 <code>.novel-writer/drafts/&lt;书&gt;/</code> 并自行累计字数——<b>只追加，AI 不读、不改、不清</b>；正式章节在用户确认前<b>一个字节都不动</b>。它不生成正文，也<b>不判断该不该问人</b>：<code>action</code> 只有 <code>commit</code>，返回值里的 <code>nextAction</code>（<code>continue</code> / <code>ask_user</code>）由程序按字数阈值判定（默认 400，可在面板「提问节奏」填 100~5000），够阈值才把<b>本批合并后的正文</b>（<code>combinedText</code>）与固定文案的 <code>question</code> 一起交出去；计数存在该章的 <code>&lt;章键&gt;__state.json</code> 里，账本丢失时按镜像里的 <code>## 第N段</code> 段头重建。<b>为什么必须另起目录</b>：插件所有章节扫描都按 <code>novels/&lt;书&gt;/</code> 枚举并把每个 <code>.md</code> 当一章参与字数、六维基线与语义索引，半成品放进去会污染这些数字，而界面上只表现为「数字怪怪的」——工具层用 <code>isInsideBookDir</code> 硬断言拦死，路径落进正文目录直接拒绝。<b>章键归一</b>（能解析出章号就统一成 <code>第NN章</code>，并认领同章号的既有文件，避免升级后同一章多出一份）与<b>纪律</b>（开关 <code>features.chatWriting</code>，<b>默认关</b>；打开后系统提示注入八条硬约束，开写包多一个 <code>chatWriting</code> 分区；<code>novel_new_chapter</code> 定稿时<b>由插件自己</b>追加一条「定稿落盘」记录，已有逐段内容只写标记、一个字都没有才补正文）。<b>面板</b>：诊断报告页新增只读的「草稿镜像」卡片（选书 → 章节留空列文件、填章号看逐段正文），数据来自 <code>GET /api/dsh-novel-writer/draft?book=&amp;chapter=</code>，不提供修改/清理。<b>按书删除</b>把 <code>drafts/</code> 单独登记成 <code>data:drafts</code>（整目录移入回收站）——它不是扁平文件白名单的一员（放进去会永远命中 0 个文件而被跳过，留下孤儿目录）。工具数 21 → <b>22</b>，参数契约只加这一个工具，书库格式不变；详见 <a href="novel-draft.html">novel_draft</a>。</p>
+          </details>
+        </li>
+        <li>
+          <details>
             <summary><code>7.2.0</code> · 2026-11-07 <span class="doc__rel-sum">对抗性审计：改稿台新增严格对账、独立 AI 任务书与证据复核（编造的原文判废），工具数仍 21</span></summary>
             <p>新入口挂在 <a href="novel-fix-plan.html">novel_fix_plan</a> 上，<b>不新增工具</b>（仍为 21 个）：<code>action="audit"</code> <b>严格对账</b>——只跑八条<b>可机器判定</b>的契约（必用词 / 替身词、世界观禁用词、套话、原地打转、大纲兑现、章末收束、连续裸台词、伏笔登记），每条违约要么带 1-based 行号与原句片段、要么明确标成全章层面，契约没跑会写明原因（<code>ran: false</code>）而不是「查过没问题」；<code>action="audit_brief"</code> 生成给另一个<b>没有写作上下文</b>的 AI 的审计任务书（判据、取证 JSON 格式、「举不出证据一条都不许写」的硬约束，末尾附正文）；<code>action="audit_verify"</code> <b>逐条复核</b>它交回的 <code>claims</code>——行号错但原文确实在文中 → <code>corrected</code>（自动修正行号），全文找不到 → <code>rejected</code>（<b>疑似编造证据</b>），并给出 <code>score</code>（可信证据占比）。<b>明确不做文学评论</b>：抽象度 / 物件偏少 / 感官单通道这类风格症状仍在改稿台与开写包里作建议，但<b>不进审计</b>；审计永不修改正文，三个动作都不落盘。参数契约只加一个 <code>claims</code>，书库格式不变，详见 <a href="novel-fix-plan.html">novel_fix_plan</a> 的「严格对账的 8 条契约」与「为什么这不是文学评论」两节。</p>
           </details>
@@ -156,6 +162,7 @@
         <a class="tools__card" href="novel-read.html"><b>novel_read</b><span>按行号分段读取章节正文，返回带行号的内容与字数统计。</span></a>
         <a class="tools__card" href="novel-new-chapter.html"><b>novel_new_chapter</b><span>创建新章节文件，章号可显式指定或自动取下一个。</span></a>
         <a class="tools__card" href="novel-chapter-brief.html"><b>novel_chapter_brief</b><span>开写包：一次只读调用装配动笔前的全部材料（承接口、伏笔距离、基线、锚段与骨架、禁用清单）。</span></a>
+        <a class="tools__card" href="novel-draft.html"><b>novel_draft</b><span>草稿镜像：把「正在写的这一段」只追加进独立目录（正式章节确认前不动），由程序按字数阈值判定何时停下来问你。</span></a>
         <a class="tools__card" href="novel-import.html"><b>novel_import</b><span>扫描目录自动识别书名与章号并分组，支持复制或移动到书库。</span></a>
         <a class="tools__card" href="novel-keywords.html"><b>novel_keywords</b><span>统计中文相邻二字组、三字组与英文词的高频项。</span></a>
       </div>
@@ -187,7 +194,7 @@
       </div>
 
       <h2>该调哪个工具</h2>
-      <p>工具数到 21 之后，「选对工具」本身也有了成本。下表按<strong>你想回答的问题</strong>给出口径；其中三个分析类工具名字最像，一并说明区别。</p>
+      <p>工具数到 22 之后，「选对工具」本身也有了成本。下表按<strong>你想回答的问题</strong>给出口径；其中三个分析类工具名字最像，一并说明区别。</p>
       <table>
         <thead><tr><th>你想回答的问题</th><th>用哪个</th><th>主要输出</th></tr></thead>
         <tbody>
@@ -217,7 +224,7 @@
       <p>语义检索、语义风格距离与语义隐性情感依赖随包分发的 <code>bge-small-zh-v1.5</code> 量化模型（约 24MB）与 <code>onnxruntime-web</code>（WASM）。引擎不可用时这些能力自动降级为纯规则模式，其余功能不受影响；返回体会以 <code>skippedDims</code> 或专用文案说明降级原因，而非返回空结果。引擎相关的降级同样会记入事件日志，可由 <a href="novel-diagnose.html">novel_diagnose</a> 聚合查看（本工具只聚合已记录到的事件，<strong>不会主动跑一次推理去探测</strong>）。</p>
 
       <h3>MCP 形态的边界</h3>
-      <p>包内 <code>mcp/server.mjs</code> 把同样 21 个工具暴露为 stdio MCP 服务器（可用 Streamable HTTP 传输）。协议侧：未知工具返回 <code>-32602</code>（Protocol Error）；支持 2025-11-25 / 2025-06-18 / 2025-03-26 / 2024-11-05 版本协商并原样回显；JSON-RPC 批量请求自 2025-06-18 起按规范拒绝；单行报文上限 4 MiB；<code>novel_import</code> 的 <code>src</code> 默认限制在书库根内，需显式加 <code>--allow-external-src</code> 才能放开。</p>
+      <p>包内 <code>mcp/server.mjs</code> 把同样 22 个工具暴露为 stdio MCP 服务器（可用 Streamable HTTP 传输）。协议侧：未知工具返回 <code>-32602</code>（Protocol Error）；支持 2025-11-25 / 2025-06-18 / 2025-03-26 / 2024-11-05 版本协商并原样回显；JSON-RPC 批量请求自 2025-06-18 起按规范拒绝；单行报文上限 4 MiB；<code>novel_import</code> 的 <code>src</code> 默认限制在书库根内，需显式加 <code>--allow-external-src</code> 才能放开。</p>
     </article>
 
     <nav class="docs__pager" id="docsPager"></nav>

@@ -978,7 +978,8 @@ if (aActions.at(-1)[1].analyze !== false || aActions.at(-1)[1].settings !== true
 aStats = aRender({ loading: true });
 if (aSwitches(aStats).some((b) => !b.props.disabled)) fail("loading 时工具和全部开关必须禁用");
 aStats = aRender({ view: "features", loading: false, features: { semanticEmbedding: false } });
-if (aSwitches(aStats).length !== 6 || aStats.classes.has("nwSwitchWrap")) fail("功能页开关数或多余状态徽章错误");
+// v7.3.0：功能页开关 6 → 7（新增「实时聊天写作」）
+if (aSwitches(aStats).length !== 7 || aStats.classes.has("nwSwitchWrap")) fail("功能页开关数或多余状态徽章错误");
 const aModelLink = aStats.buttons.find((b) => vnodeText(b) === "模型设置 ›");
 if (!aModelLink) fail("功能页缺少行尾模型设置按钮");
 aModelLink.props.onClick({ stopPropagation() {} });
@@ -1538,3 +1539,25 @@ cleanupHooks(); // 执行 effect 清理（取消控制器订阅），避免残�
 // v6.3.0：成功标记原先被吞进上一行的行尾注释里（`…进程退出console.log("CLIENT OK");`），
 // 等于这一行从来没打印过——既有缺陷（v6.2.0 起就在），本次一并修掉。
 console.log("CLIENT OK");
+
+// ---------- v7.3.0：实时聊天写作 + 草稿镜像预览 ----------
+{
+  const dStats = aRender({ view: "diagnose", loading: false, diag: null, diagBusy: false, auditBooks: ["测试"], draftPeek: null });
+  if (!dStats.text.includes("草稿镜像")) fail("诊断页缺少「草稿镜像」卡片");
+  const dLoad = dStats.buttons.find((b) => vnodeText(b).includes("刷新镜像"));
+  if (!dLoad) fail("诊断页缺少「刷新镜像」按钮");
+  // 列文件态：有镜像时必须把章键与字节数渲染出来
+  const dList = aRender({ view: "diagnose", loading: false, draftPeek: { ok: true, book: "测试", mirrorDir: "/x/.novel-writer/drafts/测试", items: [{ file: "第03章__draft.md", chapterKey: "第03章", bytes: 42 }] } });
+  if (!dList.text.includes("第03章")) fail("草稿镜像列表未渲染章键");
+  // 逐段态：段头 + 正文都必须出现（这条盯着 parseDraftSegments 别回归成 0 段）
+  const dSeg = aRender({ view: "diagnose", loading: false, draftPeek: { ok: true, exists: true, segments: [{ index: 1, text: "他在门口停了半秒。" }], totalChars: 9 } });
+  if (!dSeg.text.includes("他在门口停了半秒。")) fail("草稿镜像逐段正文未渲染");
+  // 空态
+  const dNone = aRender({ view: "diagnose", loading: false, draftPeek: { ok: true, items: [] } });
+  if (!dNone.text.includes("还没有草稿镜像")) fail("草稿镜像空态文案缺失");
+  // 功能页：开关 + 提问节奏
+  const fStats = aRender({ view: "features", loading: false, chatThreshold: 400 });
+  if (!fStats.text.includes("实时聊天写作")) fail("功能页缺少「实时聊天写作」开关");
+  if (!fStats.text.includes("提问节奏")) fail("功能页缺少「提问节奏」一行");
+  console.log("草稿镜像预览：列表/逐段/空态 三态渲染 + 功能页开关与提问节奏 ✓");
+}

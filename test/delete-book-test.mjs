@@ -16,7 +16,7 @@
  *   · 恢复时原位置已存在 → **跳过并报告冲突**，绝不覆盖（同名重开是这里的典型场景）
  *
  * 工具层：
- *   · `novel_delete_book` 进 `ALL_TOOLS`（第 21 个），输出 schema `additionalProperties:false`
+ *   · `novel_delete_book` 进 `ALL_TOOLS`（第 21 个；v7.3.0 起总数为 22），输出 schema `additionalProperties:false`
  *     且 `required ⊆ properties`、返回体**无未声明键**（v6.6.x 踩过：cleanOutput 丢掉 undefined 键
  *     会让 required 缺项，`apply` 曾因此少一个 `profileRestored`）
  *   · 面板路由 `POST /api/dsh-novel-writer/delete-book` 与工具**同一实现**（deleteBookDispatch），
@@ -167,7 +167,10 @@ test("① 匹配口径：前缀边界与 fix-plan / 旧位置写法", () => {
 });
 
 test("①-b 数据子目录白名单与诊断的预期子目录一致（漏登记＝漏删）", () => {
-  // 诊断侧把 trash 当成"可缺省"的子目录；这里只要求按书删除覆盖 9 个既有子目录
+  // 诊断侧把 trash 当成"可缺省"的子目录；这里要求按书删除覆盖全部**扁平存书**的子目录。
+  // v7.3.0：drafts（草稿镜像）不在此列——它是"按书一个目录"，由 planBookDelete 单独登记成
+  // data:drafts（kind:"dir"）。放进这个白名单反而永远命中 0 个文件而被跳过。删除覆盖由
+  // chat-writing-test 的「按书删除必须清掉 drafts」断言盯着。
   assert.deepEqual([...bd.DELETE_DATA_SUBDIRS].sort(), ["analysis", "audits", "baseline", "embedding", "lexicon", "plots", "settings", "style-reports", "summaries"]);
 });
 
@@ -424,7 +427,7 @@ plugin.apply({
 }, { root: toolRoot });
 
 test("⑨ 工具：进 ALL_TOOLS 第 21 位，输出契约与 render 同源", async () => {
-  assert.equal(core.ALL_TOOLS.length, 21);
+  assert.equal(core.ALL_TOOLS.length, 22); // v7.3.0：21→22（novel_draft）
   assert.ok(core.ALL_TOOLS.includes("novel_delete_book"));
   assert.equal(core.TOOL_LABELS.novel_delete_book, "按书删除");
   const def = toolDefs.find((d) => d.name === "novel_delete_book");

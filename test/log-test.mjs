@@ -4,7 +4,7 @@
  * ## 本文件守的是什么
  *
  * v6.6.0 新增了三个互相咬合的东西：本地事件日志（lib/log.js）、注册层审计包装
- * （lib/index.js 的 installToolAudit）、第 20 个工具 + 诊断路由（lib/diagnose.js / index.js）。
+ * （lib/index.js 的 installToolAudit）、第 21 个工具 + 诊断路由（lib/diagnose.js / index.js）。
  * 它们的**唯一**对外承诺不是功能，而是两条：**不把正文带出本机**、**绝不抛错**。
  * 承诺型契约最容易在"顺手改一行"里悄悄失效，所以这里逐条设门禁：
  *
@@ -174,7 +174,7 @@ writeFixtureBook();
 // 走真实 apply() 注册的真工具（不直连内部函数）
 // ===========================================================================
 
-const toolDefs = [];                                  // apply 注册的 20 个真工具
+const toolDefs = [];                                  // apply 注册的 21 个真工具
 const probeDefs = new Map();                          // 测试后通过**审计包装**注册的合成探针
 const routes = [];
 let applyFinished = false;
@@ -583,7 +583,7 @@ test("⑦-b 超长事件：单行不超过 LOG_MAX_EVENT_BYTES，且**永远是�
 
 test("⑦-c F3 回归：全字段撑满的载荷（> LOG_MAX_EVENT_BYTES）必须落成完整 JSON 行、能被读回、带 truncated", async () => {
   // 为什么要单列一条：⑦-b 的载荷虽然也超限，但本条的载荷形状更贴近真实"病态输入"
-  // （每个自由文本字段顶到 160 字上限、20 个长数组项、多个长定位字段）。
+  // （每个自由文本字段顶到 160 字上限、21 个长数组项、多个长定位字段）。
   // ⚠ 教训（协调方第一版测试栽在这里）：载荷**必须真的超过 LOG_MAX_EVENT_BYTES**，
   //    否则测不到 F3 那条分支——下面第一段就是"前置非空"断言，先证明这道门是真的。
   await log.clearLogs();                      // ⑦ 故意往文件里写过坏行，这里要的是"干净文件 + 多行真值"
@@ -595,7 +595,7 @@ test("⑦-c F3 回归：全字段撑满的载荷（> LOG_MAX_EVENT_BYTES）必�
     book: "长书名".repeat(80), chapter: "长章号".repeat(80), path: "p".repeat(300), file: "f".repeat(300),
     name: "n".repeat(300), scope: "s".repeat(300), root: "r".repeat(300), action: "a".repeat(300),
     mode: "m".repeat(300), rootSource: "rootSource".repeat(40), source: "src".repeat(80),
-    // 20 个长数组项（sanitizeLogData 的数组上限就是 20）
+    // 21 个长数组项（sanitizeLogData 的数组上限就是 20）
     files: Array.from({ length: 20 }, (_, i) => "file-" + i + "-" + "w".repeat(300)),
     // 结构性字段
     ms: 999, count: 20, degradedCount: 3, bytes: 4096, contentChars: 12345, version: "6.6.0", plugin: "dsh-novel-writer"
@@ -774,7 +774,7 @@ test("⑨-d 异常原样抛出：与不装审计时逐字段一致，且是同�
   assert.ok(trace, "宿主只读 register 时应留一条 internal 事件说明审计已关闭");
   assert.equal(trace.status, "failed");
   assert.ok(String(trace.detail ?? "").includes("tools.register"), "留痕应点名原因");
-  console.log("   [审计降级] 宿主只读 register → 注册照常（20 个）+ 留痕：" + String(trace.detail).slice(0, 40) + "…");
+  console.log("   [审计降级] 宿主只读 register → 注册照常（21 个）+ 留痕：" + String(trace.detail).slice(0, 40) + "…");
 
   // 对照组调用不写 tool_call
   await log.clearLogs();
@@ -1033,10 +1033,11 @@ test("⑤-d F1 边界：34 字无标点原句完整落在**本机**日志；分�
 // ⑩ novel_diagnose 工具契约
 // ===========================================================================
 
-test("⑩ ALL_TOOLS=21 且与注册表一致；schema 是 additionalProperties:false 且 required ⊆ properties", () => {
-  assert.equal(ALL_TOOLS.length, 21, "v6.8.0 起第 21 个工具是 novel_delete_book（第 20 个是 v6.6.0 的 novel_diagnose）");
+test("⑩ ALL_TOOLS=22 且与注册表一致；schema 是 additionalProperties:false 且 required ⊆ properties", () => {
+  assert.equal(ALL_TOOLS.length, 22, "v7.3.0 起第 22 个工具是 novel_draft（第 21 个是 v6.8.0 的 novel_delete_book）");
   assert.ok(ALL_TOOLS.includes("novel_diagnose"));
   assert.ok(ALL_TOOLS.includes("novel_delete_book"));
+  assert.ok(ALL_TOOLS.includes("novel_draft"));
   assert.deepEqual([...toolDefs.map((d) => d.name)].sort(), [...ALL_TOOLS].sort(), "注册表与 ALL_TOOLS 单一事实源必须一致");
 
   const def = defs.novel_diagnose;
