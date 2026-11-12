@@ -27,7 +27,14 @@ const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
 const oldVer = pkg.version;
 if (oldVer !== NEW) {
   changes.push(`package.json: version ${oldVer} → ${NEW}`);
-  const txt = readFileSync(pkgPath, 'utf8').replace(`"version": "${oldVer}"`, `"version": "${NEW}"`);
+  const beforeTxt = readFileSync(pkgPath, 'utf8');
+  const txt = beforeTxt.replace(`"version": "${oldVer}"`, `"version": "${NEW}"`);
+  // v7.3.1 修（#74）：字面量替换必须校验命中——格式稍异时 replace 静默 no-op 却仍报"已提升"，
+  // 会把版本漂移掩盖成假成功。没命中直接报错退出（预演阶段同样拦截，避免养成假绿习惯）。
+  if (txt === beforeTxt) {
+    console.error(`✗ package.json 里找不到字面量 "version": "${oldVer}"（格式与预期不符），已中止（未写盘）`);
+    process.exit(1);
+  }
   w(pkgPath, txt);
 }
 

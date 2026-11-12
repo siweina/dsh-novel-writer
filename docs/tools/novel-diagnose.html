@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_diagnose — 诊断报告｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_diagnose 的实现细节：本地事件日志的字段白名单与两级隐私设计、错误文本一律归类成固定 code、五处体检（书库根 / 书库内容 / 数据目录损坏 / 语义引擎惰性探测 / 开关快照）、「工具 × 书名」反复失败聚合、512 KB 轮转与落点、调用审计的注册层包装、诊断路由与面板入口，以及读取预算与「不减少 bug、只加快定位」的边界。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_diagnose","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-diagnose.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_diagnose — 诊断报告｜dsh-novel-writer 技术文档","description":"novel_diagnose 的实现细节：本地事件日志的字段白名单与两级隐私设计、错误文本一律归类成固定 code、五处体检（书库根 / 书库内容 / 数据目录损坏 / 语义引擎惰性探测 / 开关快照）、「工具 × 书名」反复失败聚合、512 KB 轮转与落点、调用审计的注册层包装、诊断路由与面板入口，以及读取预算与「不减少 bug、只加快定位」的边界。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-diagnose.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_diagnose, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_diagnose — 诊断报告｜dsh-novel-writer 技术文档","description":"novel_diagnose 的实现细节：本地事件日志的字段白名单与两级隐私设计、错误文本一律归类成固定 code、五处体检（书库根 / 书库内容 / 数据目录损坏 / 语义引擎惰性探测 / 开关快照）、「工具 × 书名」反复失败聚合、512 KB 轮转与落点、调用审计的注册层包装、诊断路由与面板入口，以及读取预算与「不减少 bug、只加快定位」的边界。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-diagnose.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.1","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_diagnose, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -210,7 +210,8 @@ noteRoot（写操作之后记 lastRoot）另有三类留痕：
       <div class="formula">kinds（9 类，诊断按 kind 聚合；其中 degraded 目前由 tool_call 的 status 表达，独立事件暂未使用）：
   tool_call  root_resolve  silent_skip  degraded  cache
   engine     config        panel        internal
-轮转：单文件 512 KB（LOG_MAX_BYTES）→ events.jsonl → events.1.jsonl → … → events.3.jsonl（删除最旧）
+轮转：单文件 512 KB（LOG_MAX_BYTES）→ events.jsonl → events.1.jsonl → … → events.3.jsonl（删除最旧）；<b>合计上限 = 单文件 × (1 + 保留份数) ≈ 2 MB</b><br>
+        <b>「接近轮转上限」的触发线（v7.3.1 修正）</b>：改为<b>合计上限的 75%</b>（≈1.5 MB）。旧版写死 300 KB 触发、且报告里把上限算成「2 KB」（<code>Math.round((512*3)/1024)</code>——512 本已是 KB，再除 1024 差了三个数量级），两个数字互相矛盾；现在文案直接给出「单文件 512 KB × 最多 4 个文件 ≈ 2048 KB」，不用读者自己换算
   保留最近 3 份历史（LOG_KEEP_FILES），加当前文件共 4 份，总量有界
 单条事件：序列化后上限 4096 字节。超长时<strong>逐级丢弃信息量最低的字段</strong>（先 detail/note/suggestion/files/path/file/name/scope/root，
           仍超限就只留结构性骨架）并置 truncated:true —— <strong>永远写一整行合法 JSON</strong>

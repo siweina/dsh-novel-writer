@@ -272,9 +272,19 @@ test("⑧ 真物象（杯沿）仍然打断游程（豁免层没把真信号一�
 
 test("⑨ 第 1 行有「但他不知道」、末段停在「夜色渐深。」→ 不得报 ending_preach", () => {
   // 旧行为：读 scanSlop 的**全章** ending_preach，第 1 行的「但他不知道」被算到末段头上 → 误报。
-  const text = "但他不知道，客栈来了怪人。\n他推开木门拿起茶杯。\n夜色渐深。";
+  // v7.3.1 修（#40）：无空行的短章（内容行 ≤4）现在按 slop 口径视作**整章同一末段**（见下一个用例）；
+  // 要验「首行套话不能串台到末段」，这里用 >4 行内容（末段 = 最后 2 行内容行），与 slop.endingLineSet 一致。
+  const text = "但他不知道，客栈来了怪人。\n他推开木门拿起茶杯。\n他把外衣挂到墙上。\n灶火还温着。\n夜色渐深。";
   const got = diagnoseChapterSymptoms(text, null);
   assert.ok(!keysOf(got).includes("ending_preach"), "全章套话串台到末段了：" + JSON.stringify(got));
+});
+
+// v7.3.1 修（#40）：无空行且内容行 ≤4 的短章，slop 会把整章视作同一末段（其注释明说“短片段仍视作同一末段”），
+// chapter-diagnose 的取段必须同口径——否则这类短章的 ending_preach 永远漏报。
+test("⑨ 无空行短章（内容行 ≤4）：整章视作末段，首行的章末预告必须报出来（与 slop 同口径）", () => {
+  const text = "但他不知道，客栈来了怪人。\n他推开木门拿起茶杯。\n夜色渐深。";
+  assert.ok(keysOf(diagnoseChapterSymptoms(text, null)).includes("ending_preach"),
+    "≤4 行无空行短章的章末预告漏报（取段口径与 slop 不一致）：" + JSON.stringify(diagnoseChapterSymptoms(text, null)));
 });
 
 test("⑨ 末段换成真升华句 → 必须报 ending_preach", () => {

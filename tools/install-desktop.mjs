@@ -23,13 +23,15 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import os from 'node:os';
 
 const REPO = fileURLToPath(new URL('../', import.meta.url));
 const APPLY = process.argv.includes('--apply');
 const pkg = JSON.parse(readFileSync(join(REPO, 'package.json'), 'utf8'));
 const VER = pkg.version;
 
-const HOME = process.env.USERPROFILE || 'C:\\Users\\zg';
+// v7.3.1 修（#73）：不再把开发机用户目录写死进回退——没有 USERPROFILE 时交给 os.homedir()。
+const HOME = process.env.USERPROFILE || os.homedir();
 const PROFILES = join(HOME, '.dsh', 'profiles');
 const PROFILE = join(PROFILES, 'desktop');          // ← 写死：desktop 端
 const WEB_PROFILE_ROOT = PROFILES;                  // web 端共享根（profiles/node_modules）
@@ -152,6 +154,9 @@ try {
 }
 log(`${installCode === 0 ? '✓' : '✗'} pnpm install（exit ${installCode}）`);
 for (const l of installOut.trim().split('\n').slice(-6)) log('    ' + l);
+// v7.3.1 修（#68）：安装失败必须计入 problems——旧实现只 log，退出码只看事后文件检查，
+// 同版本重装且旧链接哈希未变时会把"安装失败"报成"✅ 安装完成"并 exit 0。
+if (installCode !== 0) problems.push(`pnpm install 失败（exit ${installCode}）`);
 
 // ---------- 6) 安装后验证 ----------
 console.log('\n=== 6) 安装后验证 ===');

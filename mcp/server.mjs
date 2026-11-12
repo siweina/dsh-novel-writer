@@ -652,10 +652,13 @@ process.stdout.on("error", (error) => {
 // 连续写入超时的计数：成功写出一个 chunk 就归零（见 writeAndWait）。
 let consecutiveWriteTimeouts = 0;
 
+/** 单次 write 的字节上限（v7.3.1 #67：与 writeAndWait 共用，避免两处 16KB 各自漂移） */
+const WRITE_CHUNK_BYTES = 16 * 1024;
+
 function writeChunk(frame, offset) {
   return new Promise((resolveWrite, rejectWrite) => {
     let settled = false;
-    const chunk = frame.subarray(offset, offset + Math.min(16 * 1024, frame.length - offset));
+    const chunk = frame.subarray(offset, offset + Math.min(WRITE_CHUNK_BYTES, frame.length - offset));
     // Writable.write 的回调只接收可选错误参数，不会返回写入字节数。
     // 这里按提交给 stdout 的 chunk 长度推进偏移，避免 offset 变成 NaN 后卡死。
     let timer = null;
@@ -696,12 +699,21 @@ function writeChunk(frame, offset) {
 }
 
 /**
- * v7.0.1（审查 #2）：单 chunk 超时不再直接致命退出。
+ * v7.0.1（审查 #2）：单 chunk 超时不再"每次都致命退出"。
  *
- * Node 的 Writable 不支持取消"某一次 write"，所以这里把"destroy 该次写入"落地为
- * **放弃本帧剩余部分**：已经进入 stdout 缓冲的部分最多一个 chunk（16KB），对进程无害；
- * 只有**连续** `MAX_WRITE_TIMEOUTS` 次超时（说明客户端真的不读了）才抛出错误，
- * 由 enqueueLine 的 catch 走既有的 process.exit(1) 路径。
+ * Node 的 Writable 不支持取消"某一次 write"：`stdout.write(chunk)` 一旦调用，这个 chunk 就已经
+ * 排进了 stdout 的缓冲，超时只代表"回调没在期限内回来"，**不代表它没写出去**——它仍会随 drain 刷出。
+ *
+ * v7.3.1 修（#67）：正因为如此，旧版"放弃本帧剩余部分、连接保留给后续请求"只对
+ * **最后一块**成立，对多 chunk 帧是**破坏行分帧**的：已提交的前缀会随 drain 刷出，变成半截 JSON，
+ * 与下一帧黏在同一行（实测 40046 字节的帧需 3 个 chunk，只提交首块就丢弃 → 半截 JSON 与下一响应黏连）。
+ * 现在的判据是"这一块写完之后本帧是否**已经整帧提交**"：
+ *   · 是（本帧剩余 ≤ WRITE_CHUNK_BYTES，即本块就是最后一块，含单 chunk 帧）→ 即使回调超时，
+ *     整帧字节都已进缓冲，分帧完好，只算"记账失败"：记一次连续超时后继续服务；
+ *   · 否（多 chunk 帧只写出了前缀）→ 流里已经躺着半帧且无法撤回，任何后续帧都会与它黏连 →
+ *     **立刻终止进程**（抛错走 enqueueLine 的 exit(1)），让客户端读到"连接断了"，
+ *     而不是收到两帧黏在一起的坏 JSON。分帧损坏不可恢复，能选的最优解只有"别再往坏流里写"。
+ * 连续 `MAX_WRITE_TIMEOUTS` 次超时（说明客户端真的不读了）同样抛错退出。
  */
 async function writeAndWait(payload) {
   const frame = Buffer.from(JSON.stringify(payload) + "\n", "utf8");
@@ -709,6 +721,8 @@ async function writeAndWait(payload) {
     throw new Error(`stdout 写入超时：响应帧 ${frame.length} 字节超过 ${MAX_OUTPUT_FRAME_BYTES} 字节安全上限，客户端未读取响应`);
   }
   for (let offset = 0; offset < frame.length;) {
+    // 本块覆盖的字节数（成功则推进这么多；失败时用来判断"是不是最后一块"）
+    const chunkLen = Math.min(WRITE_CHUNK_BYTES, frame.length - offset);
     try {
       offset += await writeChunk(frame, offset);
       // 写出成功 = 背压已恢复，连续超时计数归零
@@ -716,9 +730,21 @@ async function writeAndWait(payload) {
     } catch (error) {
       if (error && error.code === "WRITE_TIMEOUT") {
         consecutiveWriteTimeouts += 1;
-        log(`stdout 写入等待超时（连续第 ${consecutiveWriteTimeouts} 次，上限 ${MAX_WRITE_TIMEOUTS}）：`
-          + (consecutiveWriteTimeouts < MAX_WRITE_TIMEOUTS ? "放弃本帧剩余部分，连接保留给后续请求" : "客户端持续未读取，关闭连接"));
-        if (consecutiveWriteTimeouts < MAX_WRITE_TIMEOUTS) return;
+        const wholeFrameSubmitted = offset + chunkLen >= frame.length;
+        if (wholeFrameSubmitted) {
+          log(`stdout 写入等待超时（连续第 ${consecutiveWriteTimeouts} 次，上限 ${MAX_WRITE_TIMEOUTS}）：`
+            + `本帧 ${frame.length} 字节已整帧提交 stdout（最后一块），行分帧未受破坏`
+            + (consecutiveWriteTimeouts < MAX_WRITE_TIMEOUTS ? "，继续处理后续请求" : "；客户端持续未读取，关闭连接"));
+          if (consecutiveWriteTimeouts < MAX_WRITE_TIMEOUTS) return;
+        } else {
+          log(`stdout 写入等待超时（连续第 ${consecutiveWriteTimeouts} 次）：本帧 ${frame.length} 字节只写出前缀 `
+            + `（已提交 ${offset + chunkLen} / ${frame.length} 字节），剩余部分无法撤回——半截 JSON 会与下一个响应黏连，`
+            + "分帧不可恢复，立即终止进程");
+          const fatal = new Error("stdout 写入超时：响应帧已部分写出，行分帧不可恢复（终止进程以免半截 JSON 与后续帧黏连）");
+          fatal.code = "WRITE_TIMEOUT_FATAL";
+          fatal.cause = error;
+          throw fatal;
+        }
       }
       throw error;
     }

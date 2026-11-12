@@ -15,23 +15,26 @@
  *   node tools/package-release.mjs            预演（只报告将产出什么）
  *   node tools/package-release.mjs --apply    实际产出
  */
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync, rmSync, renameSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import os from 'node:os';
 
 const REPO = fileURLToPath(new URL('../', import.meta.url));
 const APPLY = process.argv.includes('--apply');
 const pkg = JSON.parse(readFileSync(join(REPO, 'package.json'), 'utf8'));
 const VER = pkg.version;
-const DESKTOP = join(process.env.USERPROFILE || 'C:\\Users\\zg', 'Desktop');
+// v7.3.1 修（#73）：不再把开发机用户目录写死进回退——没有 USERPROFILE 时交给 os.homedir()。
+const DESKTOP = join(process.env.USERPROFILE || os.homedir(), 'Desktop');
 
-// v7.0.0 修正（审查实测）：`_v2probe/` 与 `tools/audit/` 是**开发期探针**，
+// v7.0.0 修正（审查实测）：`_v2probe/` 与 `tools/audit/` 曾是**开发期探针**，
 // 里面写死了本机绝对路径（F:/doment/...、C:\Users\...）——打进交付物既污染包体，也会泄露本机目录结构。
-// 产物目录同样排除：它们是可随时重跑的产物，不属于发布内容。
+// v7.3.1（#62 连带）：`tools/audit/` 目录早已不存在，排除规则留着只是历史补丁；`_v2probe/` 同理保留
+// （它随时可能被重新建出来，规则本身无害）。产物目录同样排除：它们是可随时重跑的产物，不属于发布内容。
 const EXCLUDE_TOP = new Set(['.git', '.github', 'dist', 'docs', 'node_modules', 'tmp-route-book', '_v2probe']);
 const EXCLUDE_ANY = new Set(['node_modules', '.git', '.DS_Store', 'Thumbs.db']);
-const EXCLUDE_DIR_RE = /[\\/]tools[\\/]visual[\\/]shots(-[a-z0-9]+)?[\\/]|[\\/]tools[\\/]audit[\\/]/;
+const EXCLUDE_DIR_RE = /[\\/]tools[\\/]visual[\\/]shots(-[a-z0-9]+)?[\\/]/;
 
 const problems = [];
 const log = (m) => console.log('  ' + m);
@@ -129,25 +132,32 @@ for (const f of files) {
   writeFileSync(dest, readFileSync(f));
 }
 log(`暂存 ${files.length} 个文件到 dist/stage-v${VER}/${rootName}/`);
-rmSync(zipPath, { force: true });
-// ⚠️ 不要用 PowerShell 的 Compress-Archive：它写出的条目名是**反斜杠**分隔
-//    （`dsh-novel-writer-v6.5.0\lib\client.js`），而 ZIP 规范要求正斜杠 ——
-//    在 Linux/macOS 上解压会生成名字里带反斜杠的文件。历史交付物（v6.3.0.zip）用的是正斜杠。
-//    bsdtar（Windows 10+ 自带 `tar.exe`）写出的 zip 符合规范。
-execFileSync('tar', ['-a', '-c', '-f', zipPath, '-C', stage, rootName], { stdio: ['ignore', 'pipe', 'pipe'] });
-writeFileSync(mdPath, clOut, 'utf8');
-rmSync(stage, { recursive: true, force: true });
+// v7.3.1 修（#72）：先打到临时名，校验通过后再替换旧 zip——旧实现先 rmSync 旧包再 tar，
+// tar 失败时连上一版可用交付物一起毁掉。临时名必须以 .zip 结尾，tar -a 靠后缀决定压缩格式。
+const zipTmp = join(DESKTOP, `dsh-novel-writer-v${VER}.tmp-${process.pid}.zip`);
+rmSync(zipTmp, { force: true });
+let zipReady = false;
+try {
+  // ⚠️ 不要用 PowerShell 的 Compress-Archive：它写出的条目名是**反斜杠**分隔
+  //    （`dsh-novel-writer-v6.5.0\lib\client.js`），而 ZIP 规范要求正斜杠 ——
+  //    在 Linux/macOS 上解压会生成名字里带反斜杠的文件。历史交付物（v6.3.0.zip）用的是正斜杠。
+  //    bsdtar（Windows 10+ 自带 `tar.exe`）写出的 zip 符合规范。
+  execFileSync('tar', ['-a', '-c', '-f', zipTmp, '-C', stage, rootName], { stdio: ['ignore', 'pipe', 'pipe'] });
 
-// 自检：条目名必须是正斜杠，且不得混入 node_modules/.git
-{
-  const list = execFileSync('tar', ['-tf', zipPath], { encoding: 'utf8' }).trim().split('\n');
+  // 自检：条目名必须是正斜杠，且不得混入 node_modules/.git（全部针对临时包，通过后才替换旧包）
+  const list = execFileSync('tar', ['-tf', zipTmp], { encoding: 'utf8' }).trim().split('\n');
   const bad = list.filter((n) => n.includes('\\'));
   const leaked = list.filter((n) => /(^|\/)(node_modules|\.git)\//.test(n));
   log(`✓ 条目 ${list.length} 个；反斜杠条目 ${bad.length}；混入 node_modules/.git ${leaked.length}`);
   if (bad.length) problems.push(`zip 里有 ${bad.length} 个反斜杠条目（跨平台解压会出错）`);
   if (leaked.length) problems.push(`zip 里混入 ${leaked.length} 个 node_modules/.git 条目`);
-  if (problems.length) { console.error('\n✗ ' + problems.join('\n  - ')); process.exit(1); }
+  if (problems.length === 0) { renameSync(zipTmp, zipPath); zipReady = true; } // 包完整且自检通过，才替换旧交付物
+} finally {
+  rmSync(zipTmp, { force: true }); // 成功时已改名（force 无副作用）；失败时清掉半成品，旧 zip 原样保留
 }
+if (!zipReady) { console.error('\n✗ ' + problems.join('\n  - ')); process.exit(1); }
+writeFileSync(mdPath, clOut, 'utf8');
+rmSync(stage, { recursive: true, force: true });
 
 const zipSize = statSync(zipPath).size;
 log(`✓ ${zipPath}  ${(zipSize / 1048576).toFixed(1)} MB`);

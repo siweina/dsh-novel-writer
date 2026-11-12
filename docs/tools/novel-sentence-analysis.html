@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_sentence_analysis — 句式模式分析｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_sentence_analysis 的实现细节：九类句式的分类优先级与切句规则、句式转移与模板统计、句长分布、情感词扫描与净化、情感曲线与 Valence 量化、风格指纹、节奏建议，以及缓存键、上限与降级路径。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_sentence_analysis","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-analysis.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_sentence_analysis — 句式模式分析｜dsh-novel-writer 技术文档","description":"novel_sentence_analysis 的实现细节：九类句式的分类优先级与切句规则、句式转移与模板统计、句长分布、情感词扫描与净化、情感曲线与 Valence 量化、风格指纹、节奏建议，以及缓存键、上限与降级路径。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-analysis.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_sentence_analysis, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_sentence_analysis — 句式模式分析｜dsh-novel-writer 技术文档","description":"novel_sentence_analysis 的实现细节：九类句式的分类优先级与切句规则、句式转移与模板统计、句长分布、情感词扫描与净化、情感曲线与 Valence 量化、风格指纹、节奏建议，以及缓存键、上限与降级路径。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-analysis.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.1","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_sentence_analysis, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -71,7 +71,7 @@
           <tr><th><code>emotion</code></th><td>object</td><td><code>dominant</code>、<code>cleanDominant</code>、<code>confidence</code>、<code>caveat</code>、<code>aiAction</code>、<code>pollution</code>、<code>scores</code>、<code>cleanScores</code>、<code>intensity</code>、<code>topWords</code>（≤12）、<code>curve</code>、<code>quantification</code>（含 <code>complexity</code>：<code>score</code> / <code>level</code> / <code>entropy</code> / <code>diversity</code> / <code>conflict</code> / <code>chapterDrift</code> / <strong><code>reliable</code></strong> / <strong><code>reliabilityNote</code></strong>，<code>level</code> 可能为 <code>"unknown"</code>）</td></tr>
           <tr><th><code>chapterPatterns</code></th><td>array</td><td>全书分析时的分章压缩节奏序列，<code>{chapter, sequence}</code>；单章分析为空数组</td></tr>
           <tr><th><code>guidance</code></th><td>string</td><td>节奏建议多行文本，末尾可能附前缀截断提示</td></tr>
-          <tr><th><code>density</code></th><td>object</td><td><code>actionVerbsPer1000</code> / <code>actionChainRatio</code> / <code>actionChainExamples</code>（<strong>完整句，非截断</strong>：8~70 字、等距抽样 3 条） / <code>objectNounsPer1000</code> / <code>sensePer1000</code> / <code>sense</code>（五感官通道）</td></tr>
+          <tr><th><code>density</code></th><td>object</td><td><code>actionVerbsPer1000</code> / <code>actionChainRatio</code> / <code>actionChainExamples</code>（<strong>完整句，非截断</strong>：15~70 字、等距抽样 3 条） / <code>objectNounsPer1000</code> / <code>sensePer1000</code> / <code>sense</code>（五感官通道）</td></tr>
           <tr><th><code>fingerprint</code></th><td>string</td><td>一维风格指纹串，格式与 <code>novel_style_check</code> 一致</td></tr>
           <tr><th><code>reportFile</code> / <code>cache</code> / <code>cachedAt</code></th><td>string</td><td>报告落盘路径；<code>cache</code> 枚举 <code>hit</code> / <code>miss</code>；<code>cachedAt</code> 为 ISO 时间</td></tr>
           <tr><th><code>brief</code></th><td>string</td><td><code>brief:true</code> 时的单句摘要</td></tr>
@@ -226,10 +226,13 @@ densityOf(sampleText)：
   actionVerbsPer1000 / objectNounsPer1000 / sensePer1000 按千字归一（1 位小数）
   actionChainRatio = 动作链句 / 句数 × 100
   感官五通道：visual / auditory / tactile / olfactory / temperature（温度词只归 temperature，防双计）
-  搭配豁免（v7.0.0，collocation-guards 198 条 / 7 通道）：动作 / 物件 / 视觉 / 听觉 / 嗅觉 / 触觉 / 温度
-    命中「一点」「痛苦」「干净」「温柔」这类搭配时不计入，口径标识 METRIC_CALIBER = "v7.0.0"
+  搭配豁免（v7.0.0，collocation-guards 193 条 / 7 通道）：动作 / 物件 / 视觉 / 听觉 / 嗅觉 / 触觉 / 温度
+    命中「一点」「痛苦」「干净」「温柔」这类搭配时不计入，口径标识 METRIC_CALIBER = "v7.1.0"
     → 同一章细节密度下降约 15%~20%，新旧数值不可直接比较
-  actionChainExamples：候选只收 8~70 字完整句，末尾等距抽样 3 条，不截断、不恒取开头三句
+  v7.3.1 口径变化（#27）：sampleText 改用 "\n" 连接分句（此前 join("") 会把换行分句粘成一句）
+    → actionChainRatio 修正：逐行排版、无句末标点的文本不再虚增（「他推门 / 她拿书。」100% → 0%）
+    → actionVerbsPer1000 / objectNounsPer1000 / sensePer1000 会略降（分母含分句换行）；其余密度不变
+  actionChainExamples：候选只收 15~70 字完整句，末尾等距抽样 3 条，不截断、不恒取开头三句
 
 fingerprint = 九类短码占比(‰) + " | len:" + 均句长 + " subj:" + 主观性 + " emo:" + 主导情绪 + " | motif:" + 首选模板</div>
 

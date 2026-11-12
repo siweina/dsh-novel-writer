@@ -234,6 +234,13 @@ test("章号解析：五位以上不截尾，节/回/话 与归一同口径", ()
   assert.equal(normalizeChapterKey("第一节 初遇.md"), "第01章");
   // 旧清单 #5：cjkToNumber 补「万」分支后不再是"字符类里有万、函数里没有"
   assert.equal(parseChapterNumber("第一万章.md"), undefined, "一万章超出 numberToCjk 的 9999 上界 → 判为解析不出（而非截尾）");
+  // v7.3.1 修（#5）：纯数字分支与 parseChapterNumber 统一口径——5 位零填充章号必须归一到同一章
+  assert.equal(parseChapterNumber("00001"), 1);
+  assert.equal(normalizeChapterKey("00001"), "第01章", "「00001」与「第1章」同章，归一键不得原样返回");
+  assert.equal(normalizeChapterKey("00001"), normalizeChapterKey("第1章"));
+  assert.equal(normalizeChapterKey("000012-初遇"), "第12章", "分隔符分支同样吃 5 位零填充");
+  // 超出上界仍保持"解析不出"口径：归一键原样返回，不硬压成第 N 章
+  assert.equal(normalizeChapterKey("12345"), "12345");
 });
 
 test("nextFreeChapterFile 不返回已被占用的文件名", async () => {
@@ -241,8 +248,14 @@ test("nextFreeChapterFile 不返回已被占用的文件名", async () => {
   try {
     // 旧清单 #7：numberToCjk 返回 null 时 break 会把上一轮算出的"已存在"候选名返回出去
     await writeFile(join(dir, "第9999章 旧.md"), "x", "utf8");
-    const next = nextFreeChapterFile(dir, "第9999章 旧.md");
-    assert.notEqual(next, "第9999章 旧.md", "不得返回磁盘上已占用的文件名（否则调用方落盘即覆盖旧章）");
+    // v7.3.1 修（#6）：章号已占满 9999 时不再产出「第10000章」（parseChapterNumber 认不出的孤章），
+    // 改为显式报错。这条比 v6.2.1 的"不得返回已占用文件名"更硬：报错既不覆盖旧章，也不造孤章。
+    assert.throws(() => nextFreeChapterFile(dir, "第9999章 旧.md"), /章号已用尽/);
+    // 未到上界时正常改名避让必须不受影响（防止上界检查误伤常态）
+    await writeFile(join(dir, "第02章 旧.md"), "x", "utf8");
+    const bumped = nextFreeChapterFile(dir, "第02章 旧.md");
+    assert.equal(bumped, "第03章 旧.md");
+    assert.equal(parseChapterNumber(bumped), 3, "避让出的章名必须仍能解析出章号");
     // 超出章号上界（解析不出章号）不得静默加 "-2" 绕过去：显式报错
     assert.throws(() => nextFreeChapterFile(dir, "第10001章 远.md"), /章号超出支持范围/);
   } finally {
@@ -672,6 +685,13 @@ test("【#34】cjkToNumber 无权位叠字按十进制位权累加（「一二�
   assert.equal(cjkToNumber("二十"), 20);
   assert.equal(cjkToNumber("一千零一"), 1001);
   assert.equal(cjkToNumber("一万"), 10000);
+  // v7.3.1 修（#4）：「万」是**进位权**，它左边的整段数字要一起乘 10000。
+  // 旧实现只把「万」前最后一个数字段乘进去（已累计的 total 被丢掉）：「十二万」=10+2*10000=20010、「十万」=10010。
+  assert.equal(cjkToNumber("十二万"), 120000, "「十二万」必须是 120000（旧版 20010）");
+  assert.equal(cjkToNumber("十万"), 100000, "「十万」必须是 100000（旧版 10010）");
+  assert.equal(cjkToNumber("万"), 10000, "单字「万」按 1 万读");
+  assert.equal(cjkToNumber("一万二千"), 12000, "「万」之后的小段继续累加");
+  assert.equal(cjkToNumber("一千二百万"), 12000000, "「万」左边含百位小段时整段乘 10000");
 });
 
 test("【#35】「1984-第一章.md」按中文「第N章」解析，不再被分隔符数字抢成第 1984 章", () => {

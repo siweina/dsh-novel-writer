@@ -365,8 +365,13 @@ function buildCss(src, lineStarts, blk) {
   while ((cm = commentRe.exec(text)) !== null) comments.push([cm.index, cm.index + cm[0].length]);
   text = text.replace(commentRe, (m) => m.replace(/[^\n]/g, " "));
   if (blk.kind === "string") {
-    // 字符串形态的 CSS：把 \n 等转义还原（行号用近似映射即可）
-    text = text.replace(/\\n/g, "\n").replace(/\\t/g, "\t").replace(/\\"/g, '"').replace(/\\'/g, "'").replace(/\\\\/g, "\\");
+    // v7.3.1 修（#77）：字符串形态的 CSS 转义还原——**先认 `\\`（转义反斜杠），再认其余转义**。
+    // 旧实现是链式 replace（先 \n 后 \\），会把「转义反斜杠 + n」误当成换行；而单纯交换两条链式 replace
+    // 仍会把刚还原出的「反斜杠 + n」再吃一次。这里改成一次从左到右的扫描，`\\` 只解释一层，语义唯一。
+    // 行号用近似映射即可（字符数可能变化：\n 1 个字符对应原源码 2 个字符）。
+    text = text.replace(/\\([\\nt"'])/g, function (_m, ch) {
+      return ch === "n" ? "\n" : ch === "t" ? "\t" : ch;
+    });
   }
   return { text, lines, comments, ident: blk.ident, kind: blk.kind };
 }
@@ -726,9 +731,10 @@ function analyze(src, opts) {
       }
     }
     // JS 区域里的字符串也算（例如动态拼选择器）——只报提示
+    // v7.3.1 修（#71）：与文件头契约统一——「边界写法降级为提示」，这里只报 warn，不再判 FAIL。
     for (const s of strings) {
       if (/(prefers-color-scheme|\[data-ds-dark-theme\]|::-webkit-scrollbar)/.test(s.value)) {
-        rep.add(7, lineAt(lineStarts, s.start), "theme-js", snippet(s.value, 46), "JS 字符串里出现主题选择器/滚动条选择器", "error");
+        rep.add(7, lineAt(lineStarts, s.start), "theme-js", snippet(s.value, 46), "JS 字符串里出现主题选择器/滚动条选择器", "warn");
       }
     }
   }

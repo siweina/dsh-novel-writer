@@ -251,13 +251,15 @@ function renderElement(element, stats) {
   }
   // v5.1.1：收集按钮（vnode 级，不依赖 DOM 物化）——供"分段按钮必须可点"的断言使用
   if (element.type === "button") stats.buttons.push(element);
+  // v7.3.1（#80）：收集 input——提问节奏"未确认时显示空、不得冒充 400"只能从 vnode 的 value 断言
+  if (element.type === "input") stats.inputs.push(element);
   for (const child of element.children) renderElement(child, stats);
 }
 /** 驱动一次真实渲染：跑组件函数 + 遍历 vnode 树，返回统计（异常向上抛，由调用方 fail）。 */
 function runRender(element) {
   // v5.1.1：新增 buttons 收集——面板里的分段按钮（档位/场景）此前只被"渲染出来"而从未被断言，
   // 于是"场景按钮被 disabled 锁死"这个真机上立刻能看出来的问题，测试完全看不见。
-  const stats = { components: 0, nodes: 0, text: "", classes: new Set(), buttons: [] };
+  const stats = { components: 0, nodes: 0, text: "", classes: new Set(), buttons: [], inputs: [] };
   reactRenderDepth += 1;
   try {
     renderElement(element, stats);
@@ -928,7 +930,7 @@ console.log("v7 存储位置：打开/复制调用既有 controller | 两条路�
 const aTools = {
   analyze: ["novel_books", "novel_chapters", "novel_read", "novel_keywords", "novel_sentence_analysis", "novel_style_check", "novel_fix_plan", "novel_style_report", "novel_semantic_search", "novel_continuity_check", "novel_diagnose"],
   settings: ["novel_settings", "novel_plot", "novel_summary", "novel_import", "novel_delete_book"],
-  create: ["novel_chapter_brief", "novel_lexicon", "novel_new_chapter", "novel_outline"]
+  create: ["novel_chapter_brief", "novel_lexicon", "novel_new_chapter", "novel_draft", "novel_outline"]
 };
 const aGroupLabels = { analyze: "分析作品", settings: "整理资料", create: "开始创作" };
 const aPatches = [], aActions = [];
@@ -951,7 +953,17 @@ const aSwitches = (stats) => stats.buttons.filter((b) => b.props.role === "switc
 const aSwitch = (stats, label) => aSwitches(stats).find((b) => b.props["aria-label"] === label);
 const aChecked = (button) => String(button.props["aria-checked"]) === "true";
 let aStats = aRender();
-if (aSwitches(aStats).length !== 23) fail("工具页应有 20 个工具开关 + 3 个全部开关（v6.8.0 起新增 novel_delete_book）");
+// v7.3.1 修（#81）：工具页 20 → 21 行（补 novel_draft；= 22 个工具减去有意无 UI 的 novel_sentence_config）
+if (aSwitches(aStats).length !== 24) fail("工具页应有 21 个工具开关 + 3 个全部开关（v7.3.1 起补 novel_draft）");
+// v7.3.1 修（#81）：首页「工具开关」计数分母必须同步变成 21，且与工具页行数同源（TOOL_GROUPS 现算）。
+{
+  const aHome = aRender({ view: "main", tools: {} });
+  const toolsNav = aHome.buttons.find((b) => String(b.props.className || "").includes("nwNavEntry") && vnodeText(b).startsWith("工具开关"));
+  const toolsCount = toolsNav ? String((vnodeText(toolsNav).match(/(\d+)\/(\d+)/) || [])[0]) : "";
+  if (toolsCount !== "21/21") fail("首页「工具开关」计数应为 21/21（分母 = 21 行），实际 " + JSON.stringify(toolsCount));
+  console.log("v7.3.1 #81：工具页工具行 " + (aSwitches(aStats).length - 3) + " 行（另含 3 个分类全部开关）；首页工具计数 " + toolsCount + " ✓");
+  aStats = aRender({ view: "tools", tools: {} });
+}
 if (aSwitches(aStats).some((b) => !aChecked(b))) fail("未配置的工具必须默认开启");
 if (aStats.classes.has("nwToolRowOn") || aStats.classes.has("nwToolGroupBadge") || aStats.classes.has("nwPlotBox")) fail("工具页仍有蓝底、关闭徽章或行内路径");
 if (!aStats.classes.has("nwGCard") || !aStats.classes.has("nwPref") || !aStats.classes.has("nwStorage")) fail("工具页未复用统一卡片、偏好行或存储折叠区");
@@ -994,6 +1006,79 @@ if (aSwitches(aStats).some((b) => b.props.disabled)) fail("模型总开关关闭
 aSwitch(aStats, "语义风格对比").props.onClick();
 if (JSON.stringify(aPatches.at(-1)) !== JSON.stringify({ features: { semanticStyle: true } })) fail("模型子功能开关 patch 改变");
 console.log("v7-A：工具默认值/三组全开全关混合态/单工具 patch/分类折叠/loading/路径去重/模型设置/子功能行为 ✓");
+
+// v7.3.1 修（#80）：宿主 GET /state 不下发 chatThreshold → 未确认前界面必须显示空，
+// 不能拿默认 400 冒充当前值（用户照 400 保存会把 state.json 里真实的 150 覆盖掉）。
+{
+  const chatInput = (stats) => stats.inputs.find((n) => n.props && n.props["aria-label"] === "每写多少字停下来问你");
+  const unknown = aRender({ view: "features", loading: false, chatThreshold: null, chatThresholdDraft: null });
+  const in0 = chatInput(unknown);
+  if (!in0) fail("功能页缺少提问节奏输入框");
+  if (String(in0.props.value) !== "") fail("宿主未确认 chatThreshold 时不得用默认 400 冒充当前值，实际显示 " + JSON.stringify(in0.props.value));
+  const known = aRender({ chatThreshold: 150, chatThresholdDraft: null });
+  const in1 = chatInput(known);
+  if (!in1 || String(in1.props.value) !== "150") fail("宿主确认值 150 应原样显示，实际 " + JSON.stringify(in1 && in1.props.value));
+  // 未编辑直接保存：必须提交界面显示的 150，而不是回退成 400
+  const saveBtn = known.buttons.find((b) => vnodeText(b) === "保存");
+  if (!saveBtn) fail("功能页缺少提问节奏「保存」按钮");
+  saveBtn.props.onClick();
+  if (JSON.stringify(aPatches.at(-1)) !== JSON.stringify({ chatThreshold: 150 })) {
+    fail("未编辑时保存应提交当前显示值 150，实际 " + JSON.stringify(aPatches.at(-1)));
+  }
+  // 未确认且未填值：不提交（不得用编造的数字覆盖真实值），并如实提示
+  const empty = aRender({ chatThreshold: null, chatThresholdDraft: null });
+  controller.set({ revealMsg: "", revealErr: false }, { silent: true });
+  const patchesBefore2 = aPatches.length;
+  empty.buttons.find((b) => vnodeText(b) === "保存").props.onClick();
+  if (aPatches.length !== patchesBefore2) fail("未确认也没填值时不得提交保存");
+  if (controller.getSnapshot().revealErr !== true) fail("未填阈值时应如实提示无效（不能静默）");
+  console.log("提问节奏（chatThreshold）：未确认显示空 / 确认值 150 原样显示 / 空值不提交且提示无效 ✓");
+
+  // ② 保存失败必须如实回滚界面显示（旧实现只置 saveFailed，界面仍停在用户刚填的数，看着像成功）。
+  const realToggle = panelRender.element.props.toggle;
+  if (typeof realToggle !== "function") fail("#80 无法取到真实 toggle（回滚断言无法驱动）");
+  const savedFetch80 = globalThis.fetch;
+  try {
+    controller.set({ chatThreshold: 150, chatThresholdDraft: null, saveFailed: false, hostOk: true, revealMsg: "", revealErr: false }, { silent: true });
+    globalThis.fetch = () => Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({ error: "host rejected" }) });
+    await realToggle({ chatThreshold: 222 });
+    const failedSnap = controller.getSnapshot();
+    if (failedSnap.chatThreshold !== 150) fail("#80 保存失败必须回滚到宿主已确认值 150，实际 " + JSON.stringify(failedSnap.chatThreshold) + " / saveFailed=" + String(failedSnap.saveFailed) + " / msg=" + String(failedSnap.revealMsg));
+    if (String(failedSnap.chatThresholdDraft) !== "150") fail("#80 保存失败必须回滚显示值为 150，实际 " + JSON.stringify(failedSnap.chatThresholdDraft));
+    if (failedSnap.saveFailed !== true || failedSnap.revealErr !== true) fail("#80 保存失败必须如实提示失败");
+    // 成功路径：回读宿主确认值（可能被钳制）并清掉草稿
+    globalThis.fetch = () => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ ok: true, chatThreshold: 180 }) });
+    await realToggle({ chatThreshold: 222 });
+    const okSnap = controller.getSnapshot();
+    if (okSnap.chatThreshold !== 180) fail("#80 保存成功应回读宿主确认值 180，实际 " + JSON.stringify(okSnap.chatThreshold));
+    if (okSnap.chatThresholdDraft !== null) fail("#80 保存成功后必须清掉草稿，让界面显示宿主确认值");
+    console.log("#80 保存失败回滚 222→150 并提示失败 | 成功回读宿主值 180 且清草稿 ✓");
+  } finally {
+    globalThis.fetch = savedFetch80;
+    controller.set({ enabled: true, autoAnalyze: true, systemPromptMode: "brief", promptScene: "general", leanWorkflow: false, tools: {}, features: {}, hostOk: true, saveFailed: false, revealMsg: "", revealErr: false, chatThreshold: null, chatThresholdDraft: null }, { silent: true });
+  }
+}
+
+// v7.3.1 修（#79）：容差单侧填写必须真的拦住——旧表每行只有内部键，显示名恒 undefined，
+// 于是不提示、该维被丢，any 恒 false 时甚至 toggle(null) 把整份容差清掉。
+{
+  const before = aPatches.length;
+  const tolRender = aRender({
+    view: "baseline", loading: false, baselineBook: "测试书",
+    baselineDraft: { complexity: { low: 5, high: "" } },
+    baseline: null, baselineSaved: false, revealMsg: "", revealErr: false
+  });
+  const saveTolBtn = tolRender.buttons.find((b) => String(b.props.className || "").includes("nwBtnPrimary"));
+  if (!saveTolBtn) fail("#79 基线页缺少「保存容差」主按钮");
+  controller.set({ revealMsg: "", revealErr: false }, { silent: true });
+  saveTolBtn.props.onClick();
+  if (aPatches.length !== before) fail("#79 单侧填写的容差不得被提交（否则整份容差会被 toggle(null) 清掉）");
+  const tolSnap = controller.getSnapshot();
+  if (tolSnap.revealErr !== true || !String(tolSnap.revealMsg).includes("句长与结构")) {
+    fail("#79 单侧填写必须按显示名「句长与结构」提示拦截，实际：" + JSON.stringify(tolSnap.revealMsg));
+  }
+  console.log("v7.3.1 #79：单侧填写按显示名拦截、不提交（不再静默丢整份容差）✓");
+}
 
 // v7-C：只友好化展示，文件读取名不变；基线空态与唯一主按钮。
 const cViewSnapshot = Object.assign({}, controller.getSnapshot(), {
@@ -1534,6 +1619,53 @@ try {
 }
 controller.set({ view: "main", auditMsg: "", auditErr: false, auditResult: null, auditClaims: "" }, { silent: true });
 
+// v7.3.1 修（#82/#83/#88）：草稿预览与回收站列表的「陈旧响应」守卫 + 草稿失败用警告语义色。
+{
+  const savedFetch = globalThis.fetch;
+  const pending = [];
+  globalThis.fetch = (url, init) => new Promise((resolve) => pending.push({ url: String(url), init: init || {}, resolve }));
+  try {
+    // #83：连续两次 list，后发先回 → 先发的那次（旧快照）必须被丢弃
+    controller.set({ view: "trash" }, { silent: true });
+    const t1 = controller.trashLoad();
+    const t2 = controller.trashLoad();
+    if (pending.length !== 2) fail("#83 回收站列表应发出两次请求，实际 " + pending.length);
+    pending[1].resolve({ ok: true, status: 200, json: () => Promise.resolve({ ok: true, trash: [{ id: "new" }] }) });
+    await t2;
+    pending[0].resolve({ ok: true, status: 200, json: () => Promise.resolve({ ok: true, trash: [{ id: "old" }] }) });
+    await t1;
+    const tList = controller.getSnapshot().trashList;
+    if (!Array.isArray(tList) || tList.length !== 1 || tList[0].id !== "new") fail("#83 过期回收站响应覆盖了新列表：" + JSON.stringify(tList));
+
+    // #82：快切书时，旧书的预览响应不得覆盖新书
+    pending.length = 0;
+    controller.set({ view: "diagnose", draftBook: "第一本", draftChapter: "", draftPeek: null, draftErr: false }, { silent: true });
+    const d1 = controller.loadDraftPeek();
+    controller.set({ draftBook: "第二本" }, { silent: true });
+    const d2 = controller.loadDraftPeek();
+    if (pending.length !== 2) fail("#82 草稿预览应发出两次请求，实际 " + pending.length);
+    pending[1].resolve({ ok: true, status: 200, json: () => Promise.resolve({ ok: true, book: "第二本", items: [] }) });
+    await d2;
+    pending[0].resolve({ ok: true, status: 200, json: () => Promise.resolve({ ok: true, book: "第一本", items: [{ file: "旧书.md", chapterKey: "旧书", bytes: 1 }] }) });
+    await d1;
+    const peek = controller.getSnapshot().draftPeek;
+    if (!peek || peek.book !== "第二本") fail("#82 旧书预览覆盖了新书：" + JSON.stringify(peek));
+
+    // #88：草稿通道失败要置自己的 draftErr，并用警告语义色（复用 nwNoteWarn，不新增 CSS 类）
+    pending.length = 0;
+    const d3 = controller.loadDraftPeek();
+    pending[0].resolve({ ok: false, status: 500, json: () => Promise.resolve({ error: "镜像读不到" }) });
+    await d3;
+    if (controller.getSnapshot().draftErr !== true) fail("#88 草稿预览失败应置 draftErr=true");
+    const dErrRender = runRender(reactStub.createElement(panelRender.element.type, { controller, toggle: () => {} }));
+    if (!dErrRender.classes.has("nwNoteWarn")) fail("#88 草稿失败提示必须用警告语义色（nwNoteWarn）");
+    if (!dErrRender.text.includes("镜像读不到")) fail("#88 草稿失败原因必须显示出来");
+    controller.set({ draftErr: false, draftMsg: "", draftPeek: null, view: "main" }, { silent: true });
+  } finally {
+    globalThis.fetch = savedFetch;
+  }
+  console.log("v7.3.1 #82/#83/#88：草稿预览/回收站列表丢弃陈旧响应 | 草稿失败用 nwNoteWarn ✓");
+}
 
 cleanupHooks(); // 执行 effect 清理（取消控制器订阅），避免残留句柄影响进程退出
 // v6.3.0：成功标记原先被吞进上一行的行尾注释里（`…进程退出console.log("CLIENT OK");`），

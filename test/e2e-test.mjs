@@ -295,7 +295,11 @@ await defs.novel_settings.execute({ book: "测试", category: "worldview", actio
 const wv = await defs.novel_settings.execute({ book: "测试", category: "worldview", action: "list" }, exec);
 if (!wv.worldview.some((e) => e.name === "欧式中世纪")) throw new Error("worldview add broken");
 // v1.0.0 语用级：worldview 带 speechStyle（欧式）→ 扫描客套/仪式/称谓
-await defs.novel_settings.execute({ book: "测试", category: "worldview", action: "add", name: "欧式基准", basis: "western 风格", bannedWords: [], recommended: {}, speechStyle: { title: "Miss+名,不用XX小姐", honorBad: ["提点", "承蒙"], honorGood: { "提点": "提醒" }, ritualBadPatterns: ["上[一二三四五六七八九十百千]*柱?香"], ritualGoodNote: "点烛", tone: "口语化" } }, exec);
+// v7.3.1（#3 连带）：core.resolveStyleRule 的 bannedEntry 改成「**最近一个含 bannedWords 字段**的条目说了算」
+// ——显式空数组 `[]` 会遮蔽更早的非空表（这是「显式空 = 不要默认表」的正确语义）。
+// 本用例原本给「欧式基准」登记 `[]`，修好 #3 后它就会遮蔽上一行的 上香/老夫，导致下文「正文含上香必须命中用语冲突」失败。
+// 这里让后登记的条目**保留同一份禁用词**（本用例要测的是 speechStyle，不是"能否用空表清空"）。
+await defs.novel_settings.execute({ book: "测试", category: "worldview", action: "add", name: "欧式基准", basis: "western 风格", bannedWords: ["上香", "老夫"], recommended: { "上香": "点烛" }, speechStyle: { title: "Miss+名,不用XX小姐", honorBad: ["提点", "承蒙"], honorGood: { "提点": "提醒" }, ritualBadPatterns: ["上[一二三四五六七八九十百千]*柱?香"], ritualGoodNote: "点烛", tone: "口语化" } }, exec);
 // v1.0.2：detect 流派 + add/update 单条返回
 const det2 = await defs.novel_settings.execute({ book: "测试", category: "worldview", action: "detect" }, exec);
 console.log("v1.0.2 detect:", det2.culture, "| 流派:", det2.genre?.dominant ?? "unknown");

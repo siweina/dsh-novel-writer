@@ -139,7 +139,11 @@ test("镜像在独立目录，且不进入章节扫描", async () => {
   const r = await commit("第04章", "草稿内容。");
   assert.ok(r.draftFile.startsWith(core.draftRootDir(root)));
   assert.ok(!r.draftFile.startsWith(bookDir));
-  assert.equal(core.isInsideBookDir(root, BOOK, r.draftFile), false);
+  // v7.3.1（#1）：这里原先断言 false，而当时 isInsideBookDir 因为 core.js 没导入 resolve/sep
+  // 恒返回 false —— 于是这条断言"修前修后都通过"，等于没有保护力。现在两条一起断言：
+  // 镜像真的在 drafts（不在正文目录），而这个判定函数本身也必须真的在工作（正文目录内的路径要判 true）。
+  assert.equal(core.isInsideBookDir(root, BOOK, r.draftFile), false, "镜像不在正文目录内");
+  assert.equal(core.isInsideBookDir(root, BOOK, join(bookDir, "第01章.md")), true, "正文目录内的路径必须判 true（否则说明防护函数失效）");
   const after = (await core.scanChapters(bookDir)).length;
   assert.equal(after, before, "写草稿不得改变章节数");
   assert.equal(existsSync(join(root, ".novel-writer", "drafts", BOOK)), true);
@@ -159,7 +163,9 @@ test("非法/超长章名：哈希兜底、不越界、路径不超限", async (
 // ---------- 程序账本 ----------
 test("程序账本 __state.json：计数持久；丢失后按段头重建", async () => {
   const r = await commit("第05章", "甲段。");
-  const stateFileForChapter = core.draftStateFileFor(root, BOOK, "第05章");
+  // v7.3.1：draftStateFileFor 已删（生产零引用，且裸拼路径在"认领旧命名镜像"时会指错账本）；
+  // resolveDraftTarget 给出的 stateFile 才是与镜像配对的那个。
+  const stateFileForChapter = core.resolveDraftTarget(root, BOOK, "第05章").stateFile;
   assert.ok(existsSync(stateFileForChapter), "应有该章的计数账本");
   const meta = JSON.parse(readFileSync(stateFileForChapter, "utf8"));
   assert.equal(meta.segments, r.segmentIndex);

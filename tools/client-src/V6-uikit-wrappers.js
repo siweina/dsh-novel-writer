@@ -37,14 +37,11 @@ function DialogCard(el, h, t, NW_UI, props) {
   );
 }
 
-// 5) v7 导航计数：中性胶囊，不表达开关状态；保留 labelOn/labelOff 兼容旧调用。
+// 5) v7 导航计数：中性胶囊，不表达开关状态。
+// v7.3.1 修（#76）：删掉不可达的 on/labelOn/labelOff 回退分支——现存调用（client.js 三处）全部只传 label。
 function CountBadge(el, h, t, NW_UI, props) {
   var p = props || {};
-  var on = !!p.on;
-  var text = (p.label !== undefined && p.label !== null)
-    ? p.label
-    : t(on ? p.labelOn : p.labelOff);
-  return el("span", { className: "nwBadge nwCountBadge" }, text);
+  return el("span", { className: "nwBadge nwCountBadge" }, p.label);
 }
 
 // 6) 行分隔线: 单 div .nwRowDiv, 无子节点; props.key 透传(GroupCard children 数组需 React key).

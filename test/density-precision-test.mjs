@@ -81,7 +81,10 @@ test("③ 聚合锁定：固定语料的各通道计数（词表/豁免表一改
 });
 
 test("④ 豁免表元测：无死条目、每通道非空、总量受控", () => {
-  assert.ok(guardedEntryCount() > 0, "豁免表为空——等于没有去噪");
+  // v7.3.1 修（#64）：原来只断言 `> 0`——增删条目都不会变红，注释声称的「显式锁定」并不存在。
+  // 现在真锁定当前条数（193 = action 52 + object 24 + visual 28 + auditory 3 + olfactory 33 + tactile 26 + temperature 27）。
+  // 这个数字变化时不要随手改成新数：先复核精度（①②③ 与 test/density-precision-test 的陷阱语料）。
+  assert.equal(guardedEntryCount(), 193, "豁免表条数漂移（少一条=有噪声漏进来，多一条=可能挡住真词）：" + guardedEntryCount());
   assert.deepEqual([...DENSITY_GUARD_CHANNELS].sort(), ["action", "auditory", "object", "olfactory", "tactile", "temperature", "visual"], "通道名与 densityOf 的 sense 键不一致");
   for (const channel of DENSITY_GUARD_CHANNELS) {
     const list = DENSITY_GUARDED_BIGRAMS[channel];

@@ -35,7 +35,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import test from "node:test";
 
 // ===========================================================================
@@ -407,6 +407,89 @@ test("⑧ 保留名与非法 trashId 一律拒绝", async () => {
     await assert.rejects(() => bd.purgeTrash({ root, trashId }), /trashId/, "purge 也应拒绝：" + JSON.stringify(trashId));
   }
   await assert.rejects(() => bd.applyBookDelete({ root, book: "查无此书" }), /没找到/);
+});
+
+// ===========================================================================
+// ⑧-b v7.3.1（审查 #47 + 其姊妹漏洞）：删除与恢复都不得越出书库根
+// ===========================================================================
+
+/** p 是否落在 root 之内（root 本身不算"里面"——删除目标不该是根目录自己） */
+function inside(root, p) {
+  const rel = relative(root, p);
+  return rel !== "" && !rel.startsWith("..") && !rel.includes(":");
+}
+
+test("⑧-b #47：书名含 ../ 时删除目标必须落在书库根内，绝不搬走库外的东西", async () => {
+  const root = freshLib("traverse");
+  // 库外的受害者目录：`x/../../../<name>` 从 novels/ 出发正好落到它的父目录（ROOT）下。
+  // 修复前 `resolveBookFolder` 原样返回未清洗的书名，join 之后 chapterDir === victimDir，
+  // 于是"删一本不存在的书"会把库外的真实目录整个移进回收站（purge 后不可恢复）。
+  const tag = "victim-" + libSeq;
+  const victimDir = join(ROOT, tag);
+  mkdirSync(victimDir, { recursive: true });
+  writeFileSync(join(victimDir, "库外机密.txt"), "outside-root", "utf8");
+  const book = "x/../../../" + tag;
+
+  const plan = await bd.planBookDelete({ root, book });
+  // 策略：清洗后的书名（`x_victim-…`）——目标一律在 root 内；若将来改成"直接拒绝"，
+  // 断言 2 那一路（blocked）同样满足"绝不搬走库外内容"的契约。
+  if (!plan.blocked) {
+    assert.ok(inside(root, plan.folder === "" ? root : join(root, "novels", plan.folder)), "folder 必须在 root 内：" + plan.folder);
+    assert.equal(plan.folder.includes(".."), false, "folder 不得含父目录段：" + plan.folder);
+    for (const t of plan.targets) {
+      // profile 是"从 state.json 里摘掉本书那一条键"的**非文件**目标（kind:"state"），
+      // 位置本来就在书库根之外（插件全局设置），只摘键不搬文件——不在本断言范围内。
+      if (t.kind === "state") continue;
+      assert.ok(inside(root, t.path), "删除目标逃出书库根：" + t.key + " → " + t.path);
+      assert.notEqual(t.path, victimDir, "删除目标不得指向库外受害者目录");
+    }
+  }
+
+  // 无论如何，apply 都绝不能把库外目录搬走
+  const before = readFileSync(join(victimDir, "库外机密.txt"), "utf8");
+  await assert.rejects(() => bd.applyBookDelete({ root, book }), /没找到|无法删除/, "apply 应拒绝或判定无内容");
+  assert.equal(existsSync(victimDir), true, "库外目录被移走了（路径穿越）");
+  assert.equal(readFileSync(join(victimDir, "库外机密.txt"), "utf8"), before, "库外文件内容被改动了");
+});
+
+test("⑧-c v7.3.1（#47 姊妹漏洞）：回收站清单里的库外路径不得被 restore 搬回库外", async () => {
+  const root = freshLib("restoretraverse");
+  const stamp = "20260101-000000";
+  const trashId = "evil-" + stamp;
+  const entryDir = join(bd.trashDirPath(root), trashId);
+  mkdirSync(entryDir, { recursive: true });
+  // 库外的"落点"：修复前 restoreTrash 会按清单 from 原样 movePath 到这里
+  const outsideVictim = join(ROOT, "pwned-" + libSeq, "payload.txt");
+  mkdirSync(dirname(outsideVictim), { recursive: true });
+  assert.equal(existsSync(outsideVictim), false);
+  // 回收站里放一份真实存在的文件（清单说它"原本在库外"）
+  writeFileSync(join(entryDir, "payload.txt"), "restored-outside", "utf8");
+  const outsideDirVictim = join(ROOT, "pwned-dir-" + libSeq);
+  writeFileSync(join(entryDir, "made-elsewhere"), "dir-restore-outside", "utf8");
+  writeFileSync(join(entryDir, "manifest.json"), JSON.stringify({
+    schema: bd.TRASH_SCHEMA,
+    book: "越界书",
+    rawBook: "越界书",
+    safeBook: "越界书",
+    root,
+    createdAt: new Date().toISOString(),
+    items: [
+      { from: outsideVictim, to: join(entryDir, "payload.txt"), key: "data:analysis", files: 1, bytes: 15 },
+      { from: outsideDirVictim, to: join(entryDir, "made-elsewhere"), key: "chapters", dir: true, files: 1, bytes: 18 }
+    ],
+    profile: null,
+    files: 2,
+    bytes: 33
+  }, null, 2), "utf8");
+
+  const out = await bd.restoreTrash({ root, trashId });
+  assert.equal(out.restored, 0, "越界条目一个都不该恢复：" + JSON.stringify(out));
+  assert.ok(out.failed.length >= 2, "越界条目必须逐条报失败：" + JSON.stringify(out.failed));
+  assert.ok(out.failed.every((f) => f.error && f.error.length > 0), "失败项必须说明原因");
+  assert.equal(existsSync(outsideVictim), false, "文件被搬到库外了（restore 路径穿越）");
+  assert.equal(existsSync(outsideDirVictim), false, "目录被建到库外了（restore 路径穿越）");
+  // 原内容还在回收站里，可手动处理——不能因为拒绝就丢掉数据
+  assert.equal(existsSync(join(entryDir, "payload.txt")), true);
 });
 
 // ===========================================================================

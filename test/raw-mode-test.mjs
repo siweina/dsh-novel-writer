@@ -219,6 +219,52 @@ test("②-b streamWithRawRetry：命中→丢弃并重试一次；未命中→�
   assert.equal(pass.length, 3, "缓冲的 chunk 不能丢：" + JSON.stringify(pass));
 });
 
+// v7.3.1（#51）：思考增量不等于正文开头。
+// 旧版把 `reasoning-delta` 当成「开头已定型」信号，此时 text 仍为空、looksLikeSoftStop("") 恒 false，
+// 于是推理型模型的第③层闸门（自我刹车检测）永久失效——用户拿到的是被淡化的正文，且没有任何日志。
+// 这组断言钉住：先到 reasoning-delta、再到软刹车正文，必须照样重试。
+test("②-f reasoning-delta 不得让兜底失效（#51）", async () => {
+  const options = { messages: [{ role: "system", content: "prefix" }] };
+  let retried = 0;
+  let categories = [];
+  const make = (opts) => {
+    const nudged = String(opts.messages[0].content).includes("【继续】");
+    return chunksOf(nudged
+      ? [{ type: "text-delta", text: "她抬手替他把领口理平。" }, { type: "finish" }]
+      : [
+        // 推理型模型的典型顺序：先吐思考增量，再吐正文
+        { type: "reasoning-delta", text: "先想想这一段该怎么写……" },
+        { type: "text-delta", text: "他略过了这一段。" },   // 软化/跳过
+        { type: "finish" }
+      ]);
+  };
+  const out = [];
+  for await (const c of rg.streamWithRawRetry(make, options, {
+    onRetry: (info) => { retried += 1; categories.push(info.category); }
+  })) out.push(c);
+  assert.equal(retried, 1, "有 reasoning-delta 时也必须能识别软刹车并重试（否则推理模型兜底永久失效）");
+  assert.ok(out.some((c) => c.type === "text-delta" && c.text.includes("理平")), "必须产出重试后的正文");
+  assert.ok(categories[0] && String(categories[0]) !== "undefined", "重试事件要带命中类别（#55），实际：" + JSON.stringify(categories));
+});
+
+// v7.3.1（#56）：命中后必须**先成功建出重试流再丢弃原流**；
+// 重试构造失败时回退原流，不能两头落空（旧版先 close() 再建，失败时转发 chunk=0）。
+test("②-g 重试流构造失败时回退原流，不丢输出（#56）", async () => {
+  const options = { messages: [{ role: "system", content: "prefix" }] };
+  let calls = 0;
+  let fallback = null;
+  const make = (opts) => {
+    calls += 1;
+    if (calls > 1) throw new Error("重试请求构造失败");
+    return chunksOf([{ type: "text-delta", text: "作为 AI，我不能写这个。" }, { type: "finish" }]);
+  };
+  const out = [];
+  for await (const c of rg.streamWithRawRetry(make, options, { onRetry: (info) => { fallback = info; } })) out.push(c);
+  const forwarded = out.filter((c) => c.type === "text-delta").length;
+  assert.ok(forwarded >= 1, "重试失败时必须回退转发原流（旧版这里是 0，用户两头落空）：" + JSON.stringify(out));
+  assert.equal(fallback?.fallback, "original", "onRetry 要标明这次是回退原流");
+});
+
 // ===========================================================================
 // ③ 写入口径
 // ===========================================================================

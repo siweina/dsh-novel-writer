@@ -7,7 +7,8 @@
  * 做法：改坏一处 → 跑测试 → **必须失败** → 立刻还原 → 校验 sha256。
  * 还原用「先备份再覆盖」，**不用 git checkout**（工作区改动未提交，checkout 会毁掉它们）。
  */
-import { readFileSync, writeFileSync, copyFileSync, mkdirSync, rmSync, existsSync } from 'node:fs';
+// v7.3.1 修（#78）：删掉未使用的 existsSync 导入（全文件零引用）。
+import { readFileSync, writeFileSync, copyFileSync, mkdirSync, rmSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
@@ -61,7 +62,8 @@ const MUTATIONS = [
 
 const runTest = () => {
   try {
-    const out = execFileSync(process.execPath, ['test/style-rule-test.mjs'], { cwd: REPO, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    // v7.3.1 修（#70）：加 timeout——测试挂起时不再永久卡在这里（超时抛错 → finally 仍会还原源码）
+    const out = execFileSync(process.execPath, ['test/style-rule-test.mjs'], { cwd: REPO, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: 180000 });
     return { code: 0, out };
   } catch (e) {
     return { code: e.status === undefined ? 1 : e.status, out: String(e.stdout || '') + String(e.stderr || '') };
@@ -73,21 +75,33 @@ const baseline = runTest();
 console.log(`  exit=${baseline.code}  ${baseline.out.trim().split('\n').pop()}`);
 if (baseline.code !== 0) { console.error('✗ 基线不是绿的，先修好再变异'); process.exit(1); }
 
-let caught = 0, missed = [];
+let caught = 0, missed = [], unverified = 0;
 for (const m of MUTATIONS) {
   const p = join(REPO, m.file);
   const bak = join(BAK, m.file.replace(/[\\/]/g, '__'));
   const before = sha(p);
   copyFileSync(p, bak);
 
-  const txt = readFileSync(p, 'utf8');
-  if (!txt.includes(m.from)) { console.log(`  ⚠ ${m.name}\n      替换目标未命中，跳过（可能被上游改动）`); copyFileSync(bak, p); continue; }
-  writeFileSync(p, txt.replace(m.from, m.to), 'utf8');
+  let r = null;
+  let hit = false;
+  let restored = false;
+  try {                              // v7.3.1 修（#70）：变异与还原包 try/finally——异常/超时/中断也先还原源码
+    const txt = readFileSync(p, 'utf8');
+    if (!txt.includes(m.from)) {
+      // v7.3.1 修（#69）：未命中不再"跳过"——那会让全部漂移时仍输出"全部抓住"并 exit 0（假绿）。
+      console.log(`  ⚠ ${m.name}\n      替换目标未命中（可能被上游改动），本次未验证`);
+      unverified += 1;
+    } else {
+      hit = true;
+      writeFileSync(p, txt.replace(m.from, m.to), 'utf8');
+      r = runTest();
+    }
+  } finally {
+    copyFileSync(bak, p);            // 立刻还原（无论上面成功、抛错还是超时）
+    restored = before === sha(p);
+  }
 
-  const r = runTest();
-  copyFileSync(bak, p);              // 立刻还原
-  const after = sha(p);
-  const restored = before === after;
+  if (!hit) { missed.push(m.name + '（替换目标未命中，本次未验证）'); continue; }
 
   const failedNames = m.expectFail.filter((n) => r.out.includes(n));
   const okCaught = r.code !== 0 && failedNames.length > 0;
@@ -97,7 +111,7 @@ for (const m of MUTATIONS) {
   else missed.push(m.name + (restored ? '' : '（还原失败）'));
 }
 
-console.log(`\n变异测试：${caught}/${MUTATIONS.length} 被抓到`);
-if (missed.length) { console.error('漏过的变异：\n  - ' + missed.join('\n  - ')); process.exit(1); }
+console.log(`\n变异测试：${caught}/${MUTATIONS.length} 被抓到${unverified ? `；${unverified} 个目标未命中（本次未验证）` : ''}`);
+if (missed.length) { console.error('漏过/未验证的变异：\n  - ' + missed.join('\n  - ')); process.exit(1); }
 console.log('全部变异均被断言抓住 → 测试具备鉴别力');
 rmSync(BAK, { recursive: true, force: true });

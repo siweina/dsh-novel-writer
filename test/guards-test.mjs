@@ -138,7 +138,9 @@ test("结构：守卫词条来自真实词表，字段与数据形状合法", ()
       }
     }
 
-    // 兼容字段 evidence（扁平数组，供 tools/audit/guard-probe.mjs 使用）必须与 evidenceBy 严格一致
+    // v7.3.1 修（#62）：注释此前指向 tools/audit/guard-probe.mjs，而那个文件全仓库不存在。
+    // 事实是 evidence（扁平数组）**生产无消费方、只有本测试读**（见 guards.js 文件头）。
+    // 保留这条断言是为了防两份数据漂移：evidenceBy 改了却忘了同步 evidence 时立刻红。
     const union = [...new Set(Object.values(g.evidenceBy).flat())];
     assert.deepEqual(g.evidence, union,
       "「" + word + "」的扁平 evidence 与 evidenceBy 的并集不一致（数据漂移）");
