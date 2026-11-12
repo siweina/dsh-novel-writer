@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="技术文档总览｜dsh-novel-writer">
 <meta name="twitter:description" content="dsh-novel-writer 的 22 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","name":"技术文档总览｜dsh-novel-writer","description":"dsh-novel-writer 的 22 个工具实现细节：参数契约、计算原理、约束边界与源码位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/index.html","inLanguage":"zh-CN","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.1","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer","url":"https://siweina.github.io/dsh-novel-writer/"}}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","name":"技术文档总览｜dsh-novel-writer","description":"dsh-novel-writer 的 22 个工具实现细节：参数契约、计算原理、约束边界与源码位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/index.html","inLanguage":"zh-CN","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.2","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer","url":"https://siweina.github.io/dsh-novel-writer/"}}</script>
 </head>
 <body class="docs">
 
@@ -33,7 +33,7 @@
   <main class="docs__main">
     <article class="doc">
       <h1>技术文档</h1>
-      <p class="doc__version">当前版本 <code>7.3.1</code> · 更新记录见 <a href="https://github.com/siweina/dsh-novel-writer/blob/main/CHANGELOG.md">CHANGELOG</a>（下方「版本说明」）</p>
+      <p class="doc__version">当前版本 <code>7.3.2</code> · 更新记录见 <a href="https://github.com/siweina/dsh-novel-writer/blob/main/CHANGELOG.md">CHANGELOG</a>（下方「版本说明」）</p>
       <p class="doc__lead">
         <code>dsh-novel-writer</code> 的 22 个工具全部在本地运行，<strong>不使用在线大模型</strong>：所有指标由规则统计与本地 ONNX 推理得出。本组页面面向二次开发与集成方，逐工具说明参数契约、计算原理、约束边界与源码位置。
       </p>
@@ -55,6 +55,15 @@
       <ul class="doc__releases">
         <li>
           <details open>
+            <summary><code>7.3.2</code> · 2026-11-12 <span class="doc__rel-sum">修 7.3.1 自己引入的 4 个回归（开写包假降级 / 重试流泄漏 / 纯本地阈值存不进 / 回收站加载态），清 22 条残留，并更正上版日志里 3 处不实说法（工具数仍 22）</span></summary>
+            <p>只修 bug。上一版修完 79 条之后，独立复审发现<b>修复本身基本属实</b>（75/83 真修好、7 条刻意保留且依据充分），
+            但<b>我在修的过程中新引入了 4 个问题</b>，最重的一条是：修「读失败被谎报成未初始化」时把披露条件写反了
+            （<code>!read.missing</code> 成功时也为真），于是<b>任何创作资料已初始化的书，每次开写包都会多出 2~4 条假降级</b>。
+            这个 bug 能过测，是因为当时只测了「坏了要报」、没测「好了不能报」——本版补了
+            <code>test/brief-degrade-test.mjs</code> 做三态对照（套件 36→37），并验证过它在旧条件上会红。
+            另三条：重试的 LLM 流在用户取消时不释放、纯本地模式下「提问节奏」永远存不进、回收站「加载中」会卡死。
+            同时<b>更正上一版更新日志里 3 处与源码不符的说法</b>（一个被列为「已清理」其实被保留的组件、
+            只改了一半的 <code>8~70</code> 注释、声称覆盖但实际没覆盖的建章自动章号）。</p>
             <summary><code>7.3.1</code> · 2026-11-12 <span class="doc__rel-sum">修第三方源码审计里 79 条能举证的缺陷：删除/恢复越界、审计渲染返回类型、面板阈值显示、草稿镜像防护恒失效、推理型模型兜底失效（工具数仍 22）</span></summary>
             <p>这一版只修 bug，不加功能。起点是一份 88 条的外部审计清单：<b>79 条成立</b>、3 条误报（清单自己已标出）、
             6 条「代码属实但影响不成立」。三条最该知道的：<b>①</b> 书名里写 <code>../..</code> 时删除目标能逃出 <code>novels/</code>，

@@ -33,7 +33,7 @@
 
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import test from "node:test";
@@ -490,6 +490,95 @@ test("⑧-c v7.3.1（#47 姊妹漏洞）：回收站清单里的库外路径不�
   assert.equal(existsSync(outsideDirVictim), false, "目录被建到库外了（restore 路径穿越）");
   // 原内容还在回收站里，可手动处理——不能因为拒绝就丢掉数据
   assert.equal(existsSync(join(entryDir, "payload.txt")), true);
+});
+
+// ===========================================================================
+// ⑧-d / ⑧-e v7.3.2（审查 N5 / N15）：符号链接边界 + 预览不得探库外
+// ===========================================================================
+
+test("⑧-d N5：根内指向库外的 junction/symlink 不得被删除或恢复穿过", async (t) => {
+  const mkLink = (target, link) => {
+    try {
+      symlinkSync(target, link, process.platform === "win32" ? "junction" : "dir");
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  // —— 删除侧：novels/创作资料 整个是指向库外的 junction ——
+  // 词法上 `novels/创作资料/穿越书` 在书库根内，realpath 之后它在库外。
+  const root = freshLib("junctions");
+  const outside = join(ROOT, "junction-out-" + libSeq);
+  mkdirSync(join(outside, "穿越书"), { recursive: true });
+  writeFileSync(join(outside, "穿越书", "库外设定.md"), "outside-secret", "utf8");
+  if (!mkLink(outside, join(root, "novels", "创作资料"))) {
+    t.skip("本机无法创建 junction/symlink（权限策略），无法验证 N5");
+    return;
+  }
+  const plan = await bd.planBookDelete({ root, book: "穿越书" });
+  if (plan.blocked) {
+    // 修复后的策略：边界解析出"逃出 novels/" → 拒绝执行
+    await assert.rejects(() => bd.applyBookDelete({ root, book: "穿越书" }), /无法删除/);
+  } else {
+    // 若将来改成"允许但不动链接目标"，最低契约仍是库外内容不得被搬走
+    await bd.applyBookDelete({ root, book: "穿越书" }).catch(() => {});
+  }
+  assert.equal(existsSync(join(outside, "穿越书", "库外设定.md")), true, "库外文件被删/被搬走了（删除穿过了 junction）");
+  assert.equal(readFileSync(join(outside, "穿越书", "库外设定.md"), "utf8"), "outside-secret");
+
+  // —— 恢复侧：根内 junction + 不存在的子路径 → 清单的 from 词法在根内、实际落到库外 ——
+  const root2 = freshLib("junctionrestore");
+  const outside2 = join(ROOT, "junction-restore-" + libSeq);
+  mkdirSync(outside2, { recursive: true });
+  const link2 = join(root2, "linkout");
+  if (!mkLink(outside2, link2)) {
+    t.skip("本机无法创建 junction/symlink（权限策略），无法验证 N5");
+    return;
+  }
+  const trashId = "穿越书-20260101-000000";
+  const entryDir = join(bd.trashDirPath(root2), trashId);
+  mkdirSync(entryDir, { recursive: true });
+  writeFileSync(join(entryDir, "payload.txt"), "should-stay-in-trash", "utf8");
+  const escapeDest = join(link2, "write-through", "payload.txt");
+  writeFileSync(join(entryDir, "manifest.json"), JSON.stringify({
+    schema: bd.TRASH_SCHEMA,
+    book: "穿越书",
+    rawBook: "穿越书",
+    safeBook: "穿越书",
+    root: root2,
+    createdAt: new Date().toISOString(),
+    items: [{ from: escapeDest, to: join(entryDir, "payload.txt"), key: "data:analysis", files: 1, bytes: 19 }],
+    profile: null,
+    files: 1,
+    bytes: 19
+  }, null, 2), "utf8");
+  const out = await bd.restoreTrash({ root: root2, trashId });
+  assert.equal(out.restored, 0, "穿出库外的条目一个都不该恢复：" + JSON.stringify(out));
+  assert.ok(out.failed.length >= 1 && out.failed.every((f) => f.error && f.error.length > 0), "越界条目必须逐条报失败：" + JSON.stringify(out.failed));
+  assert.equal(existsSync(join(outside2, "write-through")), false, "恢复穿过了 junction，在库外写了文件");
+  assert.equal(existsSync(join(entryDir, "payload.txt")), true, "拒绝恢复后数据必须留在回收站里");
+});
+
+test("⑧-e N15：书名含 ../ 时删除预览不得列出库外文件", async () => {
+  const root = freshLib("legacytraverse");
+  mkdirSync(join(root, ".novel-writer"), { recursive: true });
+  const tag = "evil-" + libSeq;
+  // `.novel-writer/x/../../../<tag>.json` 从数据目录出发正好落到 **ROOT**（书库根的父目录）
+  const outsideFile = join(ROOT, tag + ".json");
+  writeFileSync(outsideFile, "outside-secret", "utf8");
+  const book = "x/../../../" + tag;
+
+  const plan = await bd.planBookDelete({ root, book });
+  assert.ok(!plan.items.includes(outsideFile), "删除预览列出了库外文件：" + outsideFile);
+  for (const t of plan.targets) {
+    if (t.kind === "state") continue; // 设定库条目不是文件目标（见 ⑧-b 的说明）
+    assert.ok(inside(root, t.path), "删除预览的目标逃出书库根：" + t.key + " → " + t.path);
+  }
+  assert.equal(plan.targets.some((t) => t.key === "legacy"), false, "库外的旧位置伏笔表不该被列成清理项");
+  // 预览不写盘：库外文件必须原样还在
+  assert.equal(existsSync(outsideFile), true, "预览动了库外文件");
+  assert.equal(readFileSync(outsideFile, "utf8"), "outside-secret");
 });
 
 // ===========================================================================

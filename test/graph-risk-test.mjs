@@ -208,3 +208,24 @@ test("#54 反证：2 字共享实体「林昭」仍能正常聚类（过滤只�
     assert.equal(graph.threadActivity.length, 1, "2 字共享实体应当合并：" + JSON.stringify(graph.threadActivity));
   });
 });
+
+// ── ⑤ N16：「存在但读不出」不得再被说成「不存在」 ────────────────────────────
+
+test("N16 伏笔表读不动时不得再追加「未登记伏笔（…不存在）」", async () => {
+  const chapters = { "第01章.md": "他取出" + INLINE_CONTENT + "，借着灯光细看。" };
+  const root = await makeLibrary("读不动", { chapters, settings: EMPTY_SETTINGS });
+  try {
+    // 用**目录**占住主表路径：readFile 报 EISDIR = "文件在、但读不动"；
+    // 旧位置伏笔表不存在（ENOENT）→ found 保持 false，正是 #52/#53 重构后两条披露打架的边缘场景。
+    await mkdir(join(root, ".novel-writer", "plots", "读不动.json"), { recursive: true });
+    const graph = await buildStoryGraph(root, "读不动", {});
+    const lines = graph.degraded ?? [];
+    assert.ok(lines.some((l) => l.includes("伏笔表读不动")), "必须如实报「读不动」：" + JSON.stringify(lines));
+    assert.ok(
+      !lines.some((l) => l.includes("未登记伏笔") && l.includes("不存在")),
+      "同一次装配里「读不动」与「不存在」自相矛盾：" + JSON.stringify(lines)
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

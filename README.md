@@ -302,7 +302,7 @@ npx -y -p dsh-novel-writer dsh-novel-writer-mcp --root /你的小说库路径
 - 语义引擎不可用（模型缺失或 WASM 初始化失败）时自动回退纯规则模式，其余功能不受影响；
 - 分析结果落盘失败不阻塞工具返回；缓存损坏按"无缓存"处理并重建；
 - **「读不到」不等于「没有」**：只有文件真的不存在（`ENOENT`）才说「尚未初始化 / 未登记 / 尚未保存 / 无创作资料」；文件存在却读不出来（损坏 / 无权限 / 编码识别不了）时只说事实并给出路径与原因，并说明不必去 `init`——同时记一条事件日志，可用 `novel_diagnose` 查真因；
-- **已知残留（下版处理，如实记下）**：把某章文件换成**同名目录**时，`scanChapters` 里那句 `if (!entry.isFile()) continue` 会**静默跳过**它——该章从章表消失（`novel_chapters` 少一章）、`novel_diagnose` 的「读不出来的文件」计数为 0、`novel_chapter_brief` 的 `degraded` 里也**没有**「读取章节失败」。也就是**这一条路径上「读不到」仍被讲成「没有」**；遇到「章数莫名少了一章」时，先确认该书目录下是不是有一个**叫章节名的目录**；
+- **已知残留（v7.3.1 起部分改善，如实记下）**：把某章文件换成**同名目录**时，`scanChapters` 里那句 `if (!entry.isFile()) continue` 仍会跳过它——该章从章表消失（`novel_chapters` 少一章）、`novel_diagnose` 的「读不出来的文件」计数仍为 0、`novel_chapter_brief` 的 `degraded` 里也**没有**「读取章节失败」。**v7.3.1 起**：目录名带章扩展名（`.md` / `.markdown` / `.txt`）时会记一条 `silent_skip` 事件日志（"章节目录被跳过"），可用 `novel_diagnose action=events` 查到——**但「不进章表、不进 degraded」这一点没有变**，遇到「章数莫名少了一章」时，仍请先确认该书目录下是不是有一个**叫章节名的目录**；
 - 插件加载失败不影响 DSH 主进程：工具注册与提示词注入相互独立。
 
 **兼容范围**：Node.js >= 22.3（`engines.node`）；DSH >= 0.1.1-rc.2（`dsh.engines.dsh`）。

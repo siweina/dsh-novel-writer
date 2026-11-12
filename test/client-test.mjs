@@ -324,8 +324,6 @@ const stubPrimitives = {
   }, props.children),
   Tag: (props) => reactStub.createElement("span", { "data-stub-tone": props.tone, className: props.className }, props.children),
   Tooltip: (props) => props.children,
-  Modal: (props) => (props.open ? reactStub.createElement("div", { role: "dialog" }, props.title, props.children) : null),
-  RiskConfirmation: (props) => (props.open ? reactStub.createElement("div", { role: "dialog" }, props.description) : null),
   DisclosureRow: (props) => {
     const [open] = reactStub.useState(props.defaultOpen === true); // ← hook
     return reactStub.createElement("div", null, props.title, open ? props.children : null);
@@ -346,6 +344,17 @@ if (!injectOk) fail("inject 声明应为 [\"slots\",\"locale\"]，实际 " + JSO
 console.log("inject 声明:", JSON.stringify(exported.inject), "✓");
 if (typeof exported.apply !== "function") fail("apply 类型应为 function，实际 " + typeof exported.apply);
 console.log("apply 类型:", typeof exported.apply);
+
+// v7.3.2 修（N9）：NW_UI 只应导出 render 真正用到的 6 个原语——#84 删适配器后残留的 available 自检标志
+// （以及测试桩里的 Modal/RiskConfirmation 键）一并清掉；多出来的导出等于又留了一个没人读的假契约。
+{
+  const uiKeys = Object.keys(exported.__internals.NW_UI || {}).sort();
+  const expectUI = ["Button", "DisclosureRow", "SegmentedControl", "Switch", "Tag", "Tooltip"];
+  if (JSON.stringify(uiKeys) !== JSON.stringify(expectUI)) {
+    fail("#N9 NW_UI 导出面应为 " + JSON.stringify(expectUI) + "，实际 " + JSON.stringify(uiKeys));
+  }
+  console.log("#N9 NW_UI 导出面：", uiKeys.join("/"), "✓（available / Modal / RiskConfirmation 已清除）");
+}
 
 let slotRegistered = null;
 // v5.2.0：假宿主也要如实建模宿主的"槽位声明表"——未声明的槽位 register 会抛错、
@@ -1053,6 +1062,83 @@ console.log("v7-A：工具默认值/三组全开全关混合态/单工具 patch/
     if (okSnap.chatThreshold !== 180) fail("#80 保存成功应回读宿主确认值 180，实际 " + JSON.stringify(okSnap.chatThreshold));
     if (okSnap.chatThresholdDraft !== null) fail("#80 保存成功后必须清掉草稿，让界面显示宿主确认值");
     console.log("#80 保存失败回滚 222→150 并提示失败 | 成功回读宿主值 180 且清草稿 ✓");
+
+    // v7.3.2 修（N3）：旧实现「catch 先回滚 → finally 再持久化」→ 纯本地模式下 chatThreshold 永远存不进
+    // （其余字段都保留乐观值并成功降级持久化，它是唯一改不动的字段）。两个方向都必须钉住：
+    //   ① 宿主不可达 / 路由不可用 = 本地降级模式，用户填的值**就是**本地生效值 → 不回滚、存新值、重开读回；
+    //   ② 宿主明确拒绝（400 校验这类可操作错误）→ 回滚到已确认值并提示失败。
+    const savedLSn3 = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+    const lsStore = new Map();
+    globalThis.localStorage = {
+      getItem: (k) => (lsStore.has(k) ? lsStore.get(k) : null),
+      setItem: (k, v) => { lsStore.set(k, String(v)); },
+      removeItem: (k) => { lsStore.delete(k); }
+    };
+    try {
+      // ① 宿主不可达（网络层 TypeError，与 errorText 的「不可达」分支同口径）
+      controller.set({ chatThreshold: 150, chatThresholdDraft: null, saveFailed: false, hostOk: true, revealMsg: "", revealErr: false }, { silent: true });
+      globalThis.fetch = () => Promise.reject(new TypeError("Failed to fetch"));
+      await realToggle({ chatThreshold: 300 });
+      const degraded = controller.getSnapshot();
+      if (degraded.chatThreshold !== 300) fail("N3 宿主不可达时应保留用户填的 300（本地值即生效值），实际 " + JSON.stringify(degraded.chatThreshold));
+      if (degraded.chatThresholdDraft !== null) fail("N3 本地降级时应清掉草稿（显示即生效值），实际 " + JSON.stringify(degraded.chatThresholdDraft));
+      if (degraded.hostOk !== false || degraded.saveFailed !== true) fail("N3 宿主不可达必须标记本地降级（hostOk=false / saveFailed=true）");
+      const persisted = JSON.parse(lsStore.get("dsh.novelWriter.state.v1") || "{}");
+      if (persisted.chatThreshold !== 300) fail("N3 宿主不可达时 localStorage 必须存用户填的 300（旧实现存的是回滚后的 150），实际 " + JSON.stringify(persisted.chatThreshold));
+      // 用户看得见的结果：草稿已清空 → 输入框由生效值渲染出 300
+      controller.set({ view: "features", loading: false }, { silent: true });
+      const degradedStats = runRender(reactStub.createElement(panelRender.element.type, { controller, toggle: () => {} }));
+      const degradedInput = chatInput(degradedStats);
+      if (!degradedInput || String(degradedInput.props.value) !== "300") {
+        fail("N3 本地降级后输入框应回显 300，实际 " + JSON.stringify(degradedInput && degradedInput.props.value));
+      }
+      controller.set({ view: "main" }, { silent: true });
+
+      // ① 关掉重开：新模块实例走同一条降级路径，必须从 localStorage 读回 300（而不是回落空/400）
+      const reloadSeats = [];
+      const reloadCtx = {
+        effect: () => () => {},
+        slots: {
+          inject: (name, fn) => { fn(); return () => {}; },
+          register: (opts, component) => { reloadSeats.push({ opts, component }); return () => {}; },
+          specDynamic: () => ({}),
+          subscribe: () => () => {}
+        }
+      };
+      loaded.factory(fakeRequire).apply(reloadCtx);
+      const reloadMain = reloadSeats.find((s) => s.opts.name === "main");
+      if (!reloadMain) fail("N3 重开实例未注册主栏页面，无法验证 localStorage 回读");
+      const reloadController = reloadMain.opts.inject().controller;
+      for (let i = 0; i < 50 && reloadController.getSnapshot().loading !== false; i += 1) await new Promise((r) => setImmediate(r));
+      const reloaded = reloadController.getSnapshot();
+      if (reloaded.hostOk !== false) fail("N3 重开实例应走宿主不可达的降级分支（hostOk=false），实际 " + JSON.stringify(reloaded.hostOk));
+      if (reloaded.chatThreshold !== 300) fail("N3 宿主不可达时填的 300 关掉重开后丢了（localStorage 回读失败），实际 " + JSON.stringify(reloaded.chatThreshold));
+
+      // ② 宿主明确拒绝（400 校验）：回滚到已确认值 + 提示失败，本地缓存保留已确认值
+      controller.set({ chatThreshold: 300, chatThresholdDraft: null, saveFailed: false, hostOk: true, revealMsg: "", revealErr: false }, { silent: true });
+      globalThis.fetch = () => Promise.resolve({ ok: false, status: 400, json: () => Promise.resolve({ error: "chatThreshold must be 100..5000" }) });
+      await realToggle({ chatThreshold: 999999 });
+      const rejected = controller.getSnapshot();
+      if (rejected.chatThreshold !== 300) fail("N3 宿主 400 拒绝时必须回滚到已确认值 300，实际 " + JSON.stringify(rejected.chatThreshold));
+      if (String(rejected.chatThresholdDraft) !== "300") fail("N3 宿主拒绝时必须回滚显示值为 300，实际 " + JSON.stringify(rejected.chatThresholdDraft));
+      if (rejected.saveFailed !== true || rejected.revealErr !== true) fail("N3 宿主拒绝必须如实提示失败");
+      if (!String(rejected.revealMsg).includes("chatThreshold must be 100..5000")) fail("N3 宿主拒绝的具体原因必须透传，实际：" + rejected.revealMsg);
+      if (rejected.hostOk !== true) fail("N3 宿主拒绝说明宿主可达，hostOk 应保持 true（横幅改报「保存到宿主端失败」）");
+      const persistedRejected = JSON.parse(lsStore.get("dsh.novelWriter.state.v1") || "{}");
+      if (persistedRejected.chatThreshold !== 300) fail("N3 宿主拒绝后本地缓存应保留已确认值 300，实际 " + JSON.stringify(persistedRejected.chatThreshold));
+
+      // ③ 路由不可用（404：老宿主 / 未注册路由）：与宿主不可达同属本地降级，同样不回滚
+      controller.set({ chatThreshold: 300, chatThresholdDraft: null, saveFailed: false, hostOk: true, revealMsg: "", revealErr: false }, { silent: true });
+      globalThis.fetch = () => Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) });
+      await realToggle({ chatThreshold: 500 });
+      if (controller.getSnapshot().chatThreshold !== 500) {
+        fail("N3 路由不可用（404）属本地降级，必须保留用户填的 500，实际 " + JSON.stringify(controller.getSnapshot().chatThreshold));
+      }
+      console.log("v7.3.2 N3：不可达 150→300 不回滚且存进 localStorage、重开读回 300 | 400 拒绝回滚到 300 并提示 | 404 按降级处理 ✓");
+    } finally {
+      if (savedLSn3) Object.defineProperty(globalThis, "localStorage", savedLSn3);
+      else { try { delete globalThis.localStorage; } catch { /* ignore */ } }
+    }
   } finally {
     globalThis.fetch = savedFetch80;
     controller.set({ enabled: true, autoAnalyze: true, systemPromptMode: "brief", promptScene: "general", leanWorkflow: false, tools: {}, features: {}, hostOk: true, saveFailed: false, revealMsg: "", revealErr: false, chatThreshold: null, chatThresholdDraft: null }, { silent: true });
@@ -1078,6 +1164,16 @@ console.log("v7-A：工具默认值/三组全开全关混合态/单工具 patch/
     fail("#79 单侧填写必须按显示名「句长与结构」提示拦截，实际：" + JSON.stringify(tolSnap.revealMsg));
   }
   console.log("v7.3.1 #79：单侧填写按显示名拦截、不提交（不再静默丢整份容差）✓");
+  // v7.3.2 修（N24⑥）：NW_METRICS 只存内部键，显示名统一由 i18n 的 t("base.metric."+key) 提供。
+  // 六行显示名必须全部来自词条（漏一个 key 这里就会露馅），且页面不得把内部键当显示名。
+  const METRIC_NAMES = ["句长与结构", "修饰用词", "抽象表达", "动作描写", "不确定语气", "叙述留白"];
+  for (const name of METRIC_NAMES) {
+    if (!tolRender.text.includes(name)) fail("N24⑥ 基线容差行缺少 i18n 显示名：" + name);
+  }
+  for (const key of ["complexity", "modifierDensity", "abstractDensity", "actionDensity", "hedgeDensity", "gapIndex"]) {
+    if (tolRender.text.includes(key)) fail("N24⑥ 基线页把内部键当显示名渲染了：" + key);
+  }
+  console.log("v7.3.2 N24⑥：六行显示名全部来自 base.metric.* 词条（NW_METRICS 只存内部键）✓");
 }
 
 // v7-C：只友好化展示，文件读取名不变；基线空态与唯一主按钮。
@@ -1665,6 +1761,95 @@ controller.set({ view: "main", auditMsg: "", auditErr: false, auditResult: null,
     globalThis.fetch = savedFetch;
   }
   console.log("v7.3.1 #82/#83/#88：草稿预览/回收站列表丢弃陈旧响应 | 草稿失败用 nwNoteWarn ✓");
+}
+
+// v7.3.2 修（N4）：回收站「加载中」卡死 + seq bump 时机。旧实现两处错：
+//   ① 恢复/彻底删除成功后的重列**从不写 trashLoading:false**，被 seq 作废的在途 trashLoad 同样不复位
+//      → 「加载中」常驻到重新进页；
+//   ② seq 在重列**响应到达**时才 +1（不是发起时），重列在途期间新发起的 trashLoad 会被这个 bump 误作废
+//      → 列表停在旧快照。
+{
+  const savedFetch = globalThis.fetch;
+  const pending = [];
+  globalThis.fetch = () => new Promise((resolve) => pending.push({ resolve }));
+  const settle = async () => { for (let i = 0; i < 12; i += 1) await new Promise((r) => setImmediate(r)); };
+  const listResponse = (ids) => ({ ok: true, status: 200, json: () => Promise.resolve({ ok: true, trash: ids.map((id) => ({ id })) }) });
+  const okResponse = (body) => ({ ok: true, status: 200, json: () => Promise.resolve(body) });
+  const firstId = (snap) => (Array.isArray(snap.trashList) && snap.trashList[0] ? snap.trashList[0].id : null);
+  try {
+    controller.set({
+      view: "trash", trashLoading: false, trashError: "", trashNote: "", trashBusyId: "", trashList: [],
+      delBook: "", delPlan: null, delSel: {}, delAck: false, delBusy: false, refreshing: false
+    }, { silent: true });
+
+    // 场景①：在途加载时点恢复 → 加载态必须能正常结束
+    pending.length = 0;
+    const inflight = controller.trashLoad();               // pending[0] = 列表
+    const restore = controller.trashRestore("id-restore");  // pending[1] = 恢复（发起时就 bump seq）
+    if (pending.length !== 2) fail("N4 场景①应发出 2 个请求（列表 + 恢复），实际 " + pending.length);
+    if (controller.getSnapshot().trashLoading !== true) fail("N4 场景①进入回收站应置 trashLoading=true");
+    pending[1].resolve(okResponse({ ok: true, restored: 1, conflicts: [] }));
+    await settle();                                         // → pending[2] = 恢复后的重列
+    pending[2].resolve(listResponse(["after-restore"]));
+    await restore;
+    // 旧实现在重列响应到达时才 bump seq、且重列自己不写 trashLoading:false → 「加载中」从这里开始常驻
+    if (controller.getSnapshot().trashLoading !== false) {
+      fail("N4 场景①恢复后的重列必须复位 trashLoading（旧实现让「加载中」常驻）");
+    }
+    pending[0].resolve(listResponse(["stale"]));             // 被作废的在途加载最后才回来
+    await inflight;
+    if (controller.getSnapshot().trashLoading !== false) {
+      fail("N4 场景①被作废的在途加载同样必须复位 trashLoading");
+    }
+    const s1 = controller.getSnapshot();
+    if (s1.trashLoading !== false) fail("N4 场景①恢复后的重列必须落定 trashLoading:false，实际 " + JSON.stringify(s1.trashLoading));
+    if (s1.trashBusyId !== "") fail("N4 场景①恢复完成后 trashBusyId 必须清空，实际 " + JSON.stringify(s1.trashBusyId));
+    if (firstId(s1) !== "after-restore") fail("N4 场景①重列结果应是恢复后的新列表，实际 " + JSON.stringify(s1.trashList));
+
+    // 场景②：重列在途时再发起一次 trashLoad → 新请求不得被重列的 seq bump 误作废
+    pending.length = 0;
+    const restore2 = controller.trashRestore("id-restore-2"); // pending[0] = 恢复
+    pending[0].resolve(okResponse({ ok: true, restored: 0, conflicts: [] }));
+    await settle();                                           // → pending[1] = 重列（旧快照）
+    const freshLoad = controller.trashLoad();                 // pending[2] = 用户随后刷新的新请求
+    pending[1].resolve(listResponse(["relist-old"]));
+    await restore2;
+    pending[2].resolve(listResponse(["fresh-new"]));
+    await freshLoad;
+    const s2 = controller.getSnapshot();
+    if (firstId(s2) !== "fresh-new") {
+      fail("N4 场景②新发起的 trashLoad 被重列的 seq bump 误作废（列表停在 " + JSON.stringify(s2.trashList) + "）");
+    }
+    if (s2.trashLoading !== false) fail("N4 场景②加载态必须落定，实际 " + JSON.stringify(s2.trashLoading));
+
+    // 场景③：彻底删除（purge 分支，代码与恢复分支对称）同样受本条修复覆盖
+    pending.length = 0;
+    const savedConfirmN4 = globalThis.confirm;
+    globalThis.confirm = () => true;
+    let purge;
+    try { purge = controller.trashPurge("id-purge"); } finally {
+      if (savedConfirmN4 === undefined) delete globalThis.confirm; else globalThis.confirm = savedConfirmN4;
+    }
+    if (pending.length !== 1) fail("N4 场景③彻底删除应先发 1 个请求，实际 " + pending.length);
+    pending[0].resolve(okResponse({ ok: true, purged: true }));
+    await settle();                                            // → pending[1] = 重列
+    const freshLoad2 = controller.trashLoad();                 // pending[2] = 更新的请求
+    pending[1].resolve(listResponse(["purge-relist-old"]));
+    await purge;
+    pending[2].resolve(listResponse(["purge-fresh"]));
+    await freshLoad2;
+    const s3 = controller.getSnapshot();
+    if (firstId(s3) !== "purge-fresh") fail("N4 场景③彻底删除的重列盖掉了新发起的 trashLoad：" + JSON.stringify(s3.trashList));
+    if (s3.trashLoading !== false) fail("N4 场景③彻底删除后加载态必须落定，实际 " + JSON.stringify(s3.trashLoading));
+    if (String(s3.trashNote) === "") fail("N4 场景③彻底删除应留下结果提示");
+    console.log("v7.3.2 N4：在途加载时点恢复 → 加载态复位 | 重列在途再发 trashLoad → 新请求不被误作废 ✓");
+  } finally {
+    globalThis.fetch = savedFetch;
+    controller.set({
+      view: "main", trashLoading: false, trashBusyId: "", trashList: null, trashNote: "", trashError: "",
+      refreshing: false
+    }, { silent: true });
+  }
 }
 
 cleanupHooks(); // 执行 effect 清理（取消控制器订阅），避免残留句柄影响进程退出

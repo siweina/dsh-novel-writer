@@ -1,6 +1,6 @@
 // v3.9.5 端到端测试：16 工具注册、缓存、伏笔、风格自检、路由、语用扫描（v0.6.0 起持续扩展）
 
-import { mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, readdirSync } from "node:fs";
+import { mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, readdirSync, symlinkSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { apply } from "../lib/index.js";
@@ -1368,6 +1368,25 @@ await (async function v500PostAuditFixes() {
   console.log("【#9】建章章号上限 9999：10000 被拒且报上限 ✓ | 9999 放行 ✓");
 }
 
+// v7.3.2 修（N8）：自动分配章号也必须有上界（novel_new_chapter 不经过 nextFreeChapterFile）。
+// 做法：只造**一份**「第9999章.md」——自动号取的是 maxNumber+1（与中间空号无关），所以无需真造 9999 章，
+// 成本一个文件；随后断言自动建章被拒、且磁盘上没有产出「第10000章.md」孤章。
+{
+  const bookAutoMax = "自动章号封顶书";
+  const autoMaxDir = join(testRoot, "novels", bookAutoMax);
+  mkdirSync(autoMaxDir, { recursive: true });
+  writeFileSync(join(autoMaxDir, "第9999章.md"), "旧稿正文。\n", "utf8");
+  let autoRejected = "";
+  try { await defs.novel_new_chapter.execute({ book: bookAutoMax, root: testRoot }, exec); }
+  catch (e) { autoRejected = String(e?.message ?? e); }
+  if (!autoRejected.includes("章号已用尽") || !autoRejected.includes("9999")) {
+    throw new Error("自动章号越过 9999 时必须报「章号已用尽…9999」，实际：" + (autoRejected || "未拒绝"));
+  }
+  if (existsSync(join(autoMaxDir, "第10000章.md"))) throw new Error("自动章号越过上界后仍产出了第10000章孤章");
+  rmSync(autoMaxDir, { recursive: true, force: true });
+  console.log("【N8】自动章号上界：9999 已占满时拒绝且不产出第10000章 ✓");
+}
+
 // 【#32】裸 catch 不得吞掉 AbortError：取消必须上抛，而不是伪装成"成功但不全"
 {
   const abortIgnore = (e) => e?.name === "AbortError" || e?.code === "ABORT_ERR";
@@ -1663,6 +1682,44 @@ console.log("\nALL E2E TESTS PASSED");
   if (readFileSync(draftFile, "utf8") !== draftFixture) throw new Error("draft 预览改动了镜像文件（应当只读）");
   draftCases += 1;
 
+  // ⑦ v7.3.2 修（N22）：列镜像分支的两种「读不动」不能伪装成「没有草稿 / 0 字节」
+  //   a) readdir 失败（同名文件挡路 → ENOTDIR）必须 500 + 明确错误，而不是 200 空列表
+  const blockedBook = "草稿路由挡路书";
+  const blockedPath = join(testRoot, ".novel-writer", "drafts", blockedBook);
+  writeFileSync(blockedPath, "这个名字被文件占了", "utf8");
+  const blockedList = await callDraft("book=" + enc(blockedBook));
+  if (blockedList.status !== 500 || !String(blockedList.json?.error || "").includes("列出草稿镜像目录失败")) {
+    throw new Error("draft 列镜像读取失败应 500 + 明确错误，实际 " + blockedList.status + " " + JSON.stringify(blockedList.json));
+  }
+  rmSync(blockedPath, { force: true });
+  draftCases += 1;
+
+  //   b) stat 失败（悬空链接）不得报 bytes:0 / mtime:0——应当省略这两个键并给出 statError
+  let danglingMade = false;
+  const danglingLink = join(draftBooksDir, "第09章__draft.md");
+  try {
+    symlinkSync(join(testRoot, "不存在的目标"), danglingLink, "junction");
+    danglingMade = true;
+  } catch { /* 本机不允许创建链接：跳过这一小段（不影响其它断言） */ }
+  if (danglingMade) {
+    const danglingList = await callDraft("book=" + enc(DRAFT_BOOK));
+    const metaMissing = (danglingList.json?.items || []).find((it) => it.chapterKey === "第09章");
+    if (!metaMissing) throw new Error("draft 列表漏掉了 stat 失败的镜像：" + JSON.stringify(danglingList.json));
+    if ("bytes" in metaMissing || "mtime" in metaMissing) throw new Error("stat 失败不得伪造 bytes/mtime：" + JSON.stringify(metaMissing));
+    if (!metaMissing.statError) throw new Error("stat 失败必须给出 statError：" + JSON.stringify(metaMissing));
+    unlinkSync(danglingLink);
+    draftCases += 1;
+  } else {
+    console.log("  （本机不允许创建符号链接/junction，stat 失败分支未实测）");
+  }
+
+  //   c) 无镜像（ENOENT）是正常状态：200 + 空列表，不是 500
+  const noMirror = await callDraft("book=" + enc("草稿路由无镜像书"));
+  if (noMirror.status !== 200 || !Array.isArray(noMirror.json?.items) || noMirror.json.items.length !== 0) {
+    throw new Error("没有镜像的书应 200 + 空 items：" + JSON.stringify(noMirror));
+  }
+  draftCases += 1;
+
   // ⑥ 非回环访问 → 403：与审计路由同口径，必须用 allowLanState:false 的独立注册 + 非回环来源地址
   //    （只改 Host 头不够——守卫看的是 remoteAddress）
   const lockedDraftRoutes = [];
@@ -1683,5 +1740,5 @@ console.log("\nALL E2E TESTS PASSED");
   if (!/loopback-only/.test(lockedRes.body)) throw new Error("draft 403 错误文案不对：" + lockedRes.body);
   draftCases += 1;
 
-  console.log("草稿镜像路由：" + draftCases + " 组（列表 / 逐段 2 段 / 不存在 exists:false / 缺 book 400 / 非 GET 405 / 只读 / 非回环 403）✓");
+  console.log("草稿镜像路由：" + draftCases + " 组（列表 / 逐段 2 段 / 不存在 exists:false / 缺 book 400 / 非 GET 405 / 只读 / 列镜像读不动 500 / stat 失败不伪造 0 字节 / 无镜像 200 空列表 / 非回环 403）✓");
 }

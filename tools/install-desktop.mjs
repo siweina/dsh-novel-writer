@@ -70,7 +70,9 @@ if (gate !== 0) problems.push('产物与构建源不一致（先跑 npm run buil
 // ---------- 2) 待复制清单（与 package-release.mjs 同口径） ----------
 const EXCLUDE_TOP = new Set(['.git', '.github', 'dist', 'docs', 'node_modules', 'tmp-route-book', '_v2probe']);
 const EXCLUDE_ANY = new Set(['node_modules', '.git', '.DS_Store', 'Thumbs.db']);
-const EXCLUDE_DIR_RE = /[\\/]tools[\\/]visual[\\/]shots(-[a-z0-9]+)?[\\/]|[\\/]tools[\\/]audit[\\/]/;
+// v7.3.2 修（N24⑤）：与 package-release.mjs 统一——`tools/audit/` 目录早已不存在，
+// 排除分支留着只会让两个脚本的口径越走越偏；真正需要排除的是 visual 快照目录。
+const EXCLUDE_DIR_RE = /[\\/]tools[\\/]visual[\\/]shots(-[a-z0-9]+)?[\\/]/;
 function walk(dir, acc = []) {
   if (EXCLUDE_DIR_RE.test(dir + '\\')) return acc;
   for (const e of readdirSync(dir)) {

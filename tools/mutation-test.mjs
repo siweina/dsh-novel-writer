@@ -85,7 +85,10 @@ for (const m of MUTATIONS) {
   let r = null;
   let hit = false;
   let restored = false;
-  try {                              // v7.3.1 修（#70）：变异与还原包 try/finally——异常/超时/中断也先还原源码
+  // v7.3.2 修（N6）：这里是 try/finally，只覆盖「抛错 / 超时 / 正常结束」三种路径。
+  // **硬中断（Ctrl+C 的 SIGINT、SIGKILL）不会执行 finally**——全文件没有信号处理器，所以那种情况下
+  // 改坏的源码会留在工作区（可人工用 :83 的 .bak 还原）。上一版注释写成「中断也先还原」，承诺过强。
+  try {
     const txt = readFileSync(p, 'utf8');
     if (!txt.includes(m.from)) {
       // v7.3.1 修（#69）：未命中不再"跳过"——那会让全部漂移时仍输出"全部抓住"并 exit 0（假绿）。

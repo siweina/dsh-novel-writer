@@ -30,8 +30,10 @@ const DESKTOP = join(process.env.USERPROFILE || os.homedir(), 'Desktop');
 
 // v7.0.0 修正（审查实测）：`_v2probe/` 与 `tools/audit/` 曾是**开发期探针**，
 // 里面写死了本机绝对路径（F:/doment/...、C:\Users\...）——打进交付物既污染包体，也会泄露本机目录结构。
-// v7.3.1（#62 连带）：`tools/audit/` 目录早已不存在，排除规则留着只是历史补丁；`_v2probe/` 同理保留
-// （它随时可能被重新建出来，规则本身无害）。产物目录同样排除：它们是可随时重跑的产物，不属于发布内容。
+// v7.3.2 修（N24⑤）：上一版这段注释与同一笔改动自相矛盾——注释说「`tools/audit` 排除规则留着」，
+// 而那次改动恰恰把该分支从正则里删掉了（install-desktop 那边还留着，两边口径漂移）。现在两边统一：
+// `tools/audit/` 已确认不存在，从两个脚本一并移除；`_v2probe/` 仍在 EXCLUDE_TOP 里保留（它随时可能被重新建出来）。
+// 产物目录同样排除：它们是可随时重跑的产物，不属于发布内容。
 const EXCLUDE_TOP = new Set(['.git', '.github', 'dist', 'docs', 'node_modules', 'tmp-route-book', '_v2probe']);
 const EXCLUDE_ANY = new Set(['node_modules', '.git', '.DS_Store', 'Thumbs.db']);
 const EXCLUDE_DIR_RE = /[\\/]tools[\\/]visual[\\/]shots(-[a-z0-9]+)?[\\/]/;

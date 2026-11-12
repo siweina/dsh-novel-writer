@@ -147,7 +147,7 @@ manifest 的 `shots[].driver` 如实记录用了哪条路：
 
 1. **官方原语走的是插件的回退实现**。`@deepseek-ai/dsh-client-ui-primitives` 在 desktop asar 内（ESM + 大量
    `*.module.css`），本装置以 `file://` + 经典脚本运行，无法加载 ESM 依赖图（`file://` 下 ESM 被 CORS 拦）。
-   因此 `NW_UI.available === false`，面板用插件自注入 CSS + `nw*` 类名渲染。
+   因此面板走「自注入 CSS + `nw*` 类名」的渲染路径（v7.3.2 起 `NW_UI.available` 标志已随死适配器一并删除，见 `lib/client.js` 头注释）。
    **对重构比对是自洽的**（前后用同一装置），但**不等于真机的官方原语外观**。
    留了口子：只要在 `fixture.html` 里于 `fixture-boot.js` 之前挂 `window.__NW_PRIMITIVES__`，
    `requireShim` 就会改用官方原语路径，`manifest.fixture.primitivesPath` 会记成 `official`。

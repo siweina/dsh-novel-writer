@@ -265,6 +265,65 @@ test("②-g 重试流构造失败时回退原流，不丢输出（#56）", async
   assert.equal(fallback?.fallback, "original", "onRetry 要标明这次是回退原流");
 });
 
+// v7.3.2（N2）：重试流必须在下游**任何**退出路径被关闭。
+// 上一版把成功路改成手动 `retryIterator.next()` 转发后，finally 只 close 原流，从不 `retryIterator.return()`——
+// for await 会自动关闭被迭代的生成器，但手动 next() 不会替我们把 return 转发给重试流，取消时 LLM 连接泄漏。
+// 这里用桩流记录 return() 调用次数：正常消费完必须恰好关一次（不重复），early break 必须关到。
+function trackedStream(list, stats) {
+  let i = 0;
+  return {
+    [Symbol.asyncIterator]() {
+      return {
+        async next() {
+          if (i >= list.length) return { done: true, value: void 0 };
+          return { done: false, value: list[i++] };
+        },
+        async return() {
+          stats.returns += 1;
+          return { done: true, value: void 0 };
+        }
+      };
+    }
+  };
+}
+
+test("②-h 重试流正常消费完：输出完整、两个流各关一次、不抛错（N2）", async () => {
+  const options = { messages: [{ role: "system", content: "prefix" }] };
+  const orig = { returns: 0 };
+  const retry = { returns: 0 };
+  const make = (opts) => {
+    const nudged = String(opts.messages[0].content).includes("【继续】");
+    return nudged
+      ? trackedStream([{ type: "text-delta", text: "她抬手把门推开。" }, { type: "finish" }], retry)
+      : trackedStream([{ type: "text-delta", text: "作为 AI，我无法描写这类内容。" }, { type: "finish" }], orig);
+  };
+  const out = [];
+  for await (const c of rg.streamWithRawRetry(make, options)) out.push(c);
+  assert.ok(out.some((c) => c.type === "text-delta" && c.text.includes("把门推开")), "必须完整转发重试后的正文：" + JSON.stringify(out));
+  assert.equal(retry.returns, 1, "重试流应恰好被关闭 1 次（已 done 后再 return 无害，但不能重复关）");
+  assert.equal(orig.returns, 1, "原流也只该关 1 次（close() 幂等）");
+});
+
+test("②-i 消费方拿到第 1 块就 break：重试流的 return() 必须被调用（N2）", async () => {
+  const options = { messages: [{ role: "system", content: "prefix" }] };
+  const orig = { returns: 0 };
+  const retry = { returns: 0 };
+  const make = (opts) => {
+    const nudged = String(opts.messages[0].content).includes("【继续】");
+    return nudged
+      ? trackedStream([{ type: "text-delta", text: "第一块" }, { type: "text-delta", text: "第二块" }], retry)
+      : trackedStream([{ type: "text-delta", text: "这一段我不展开。" }, { type: "finish" }], orig);
+  };
+  const out = [];
+  for await (const c of rg.streamWithRawRetry(make, options)) {
+    out.push(c);
+    break; // 模拟用户取消 / 下游提前截断
+  }
+  assert.equal(out.length, 1, "只应拿到重试流的第一块");
+  assert.equal(retry.returns, 1, "early break 时重试流的 return() 必须被调用（旧版这里是 0 → 连接泄漏）");
+  assert.equal(orig.returns, 1, "原流同样只关 1 次");
+});
+
 // ===========================================================================
 // ③ 写入口径
 // ===========================================================================

@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_new_chapter — 新建章节｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_new_chapter 的实现细节：章号解析与文件名归一、wx 独占写入的防覆盖语义、标题与正文的合成文本口径、风格基线 μ 摘要（含取样范围披露）与风格锚包的生成规则、「基线怎么用」的非强制口径，以及对调用方模型的约束。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_new_chapter","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-new-chapter.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_new_chapter — 新建章节｜dsh-novel-writer 技术文档","description":"novel_new_chapter 的实现细节：章号解析与文件名归一、wx 独占写入的防覆盖语义、标题与正文的合成文本口径、风格基线 μ 摘要（含取样范围披露）与风格锚包的生成规则、「基线怎么用」的非强制口径，以及对调用方模型的约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-new-chapter.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.1","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_new_chapter, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_new_chapter — 新建章节｜dsh-novel-writer 技术文档","description":"novel_new_chapter 的实现细节：章号解析与文件名归一、wx 独占写入的防覆盖语义、标题与正文的合成文本口径、风格基线 μ 摘要（含取样范围披露）与风格锚包的生成规则、「基线怎么用」的非强制口径，以及对调用方模型的约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-new-chapter.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.2","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_new_chapter, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -44,7 +44,7 @@
         <thead><tr><th>参数</th><th>类型</th><th>必填</th><th>说明</th></tr></thead>
         <tbody>
           <tr><th><code>book</code></th><td>string</td><td>是</td><td>书名，即 <code>novels/</code> 下的子目录名。经 <code>sanitizeSegment</code> 清洗：剥离 <code>\ / : * ? " &lt; &gt; |</code>、首尾点与空白，Windows 保留名（CON / NUL 等）加下划线前缀；清洗后为空则报错。目录不存在时自动创建。</td></tr>
-          <tr><th><code>chapter</code></th><td>integer</td><td>否</td><td>显式章号，须为 <strong>1–99999 的整数</strong>。省略时取现有最大可解析章号 + 1。</td></tr>
+          <tr><th><code>chapter</code></th><td>integer</td><td>否</td><td>显式章号，须为 <strong>1–9999 的整数</strong>（<code>MAX_CHAPTER_NUMBER</code>；旧版文档写的 99999 是漂移）。省略时取现有最大可解析章号 + 1，<strong>并同样受 9999 上界约束</strong>——占满后显式报错「章号已用尽…请拆书」，而不是产出 <code>第10000章</code> 这种 <code>parseChapterNumber</code> 认不出的孤章（v7.3.2 修）</td></tr>
           <tr><th><code>title</code></th><td>string</td><td>否</td><td>章节标题，写为正文首行 <code># 标题</code>，并（v5.0.0 起）<strong>一并进文件名</strong>：<code>第NN章 标题.md</code>。空串或纯空白视为未提供。</td></tr>
           <tr><th><code>plan</code></th><td>string</td><td>否</td><td><strong>v7.0.0</strong>：动笔前针对本章各事件子句的<strong>具象执行计划</strong>（每行对应一条子句，写明具体器物名词、肢体动作与这一幕停在哪）。<strong>绝不写入正文文件</strong>——它只用于写盘后核对「写没写出来」（结果进 <code>postWriteAudit</code>）。参数声明里它<strong>排在 <code>content</code> 之前</strong>，因为多数模型按 schema 顺序生成参数，计划先落笔会形成一层「自我承诺」；这只是<strong>经验做法、不是协议保证</strong>——模型把它生成在 <code>content</code> 之后时兑现核对照常工作，只是承诺效应弱一些，所以不要依赖顺序做逻辑判断。</td></tr>
           <tr><th><code>content</code></th><td>string</td><td>否</td><td>初始正文。空串或纯空白视为未提供。</td></tr>
@@ -191,7 +191,7 @@ postWriteAudit = 取前 5 条 → 按 severity 降序</div>
       <h2>约束与边界</h2>
       <ul>
         <li><strong>同号即失败，不覆盖</strong>：<code>第1章.md</code> / <code>第01章.md</code> / <code>第一章.md</code> 都按章号 1 拦截。需要改写既有章节时应另选章号或先由调用方删除旧文件——本工具不提供任何覆盖或更新通道。</li>
-        <li><strong>chapter 的取值范围是硬断言</strong>：非整数（浮点、数字字符串）、0、负数、大于 99999 一律被拒绝并报错，而不是截断到边界。</li>
+        <li><strong>chapter 的取值范围是硬断言</strong>：非整数（浮点、数字字符串）、0、负数、<strong>大于 9999</strong> 一律被拒绝并报错，而不是截断到边界。<strong>自动分配（省略 chapter）同样有上界</strong>：最大章号已是 9999 时显式报错——旧版这里没有校验，会建出 <code>第10000章.md</code>，而该文件名 <code>parseChapterNumber</code> 认不出，于是从章表里消失、摘要归一对不上（v7.3.2 修）。</li>
         <li><strong>并发只报错不重试</strong>：独占创建失败时返回「刚被并发创建」，需调用方自行重试或改用其它章号。</li>
         <li><strong>建目录是前置副作用</strong>：即使后续因同号失败，书目录也已被创建。</li>
         <li><strong>基线/锚包均为可选增强</strong>：任一环节抛错都被吞掉，返回体中相应字段缺失或为空数组。调用方不应假定 <code>baseline</code> 恒有值——单章作品、基线计算失败、锚包抽取失败都会导致缺失。<strong>本工具没有 <code>degraded</code> 通道</strong>，所以这些失败对调用方是沉默的；v6.6.0 起它们会在<strong>事件日志</strong>里留痕（<code>silent_skip</code>：如「建章时的原著锚段/句式骨架不可用（返回空 anchors/skeletons）」），可用 <code>novel_diagnose</code> 区分「这本书抽不出锚段」与「生成过程失败了」——前者不是故障，后者要查日志。</li>

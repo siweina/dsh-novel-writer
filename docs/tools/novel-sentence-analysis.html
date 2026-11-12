@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_sentence_analysis — 句式模式分析｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_sentence_analysis 的实现细节：九类句式的分类优先级与切句规则、句式转移与模板统计、句长分布、情感词扫描与净化、情感曲线与 Valence 量化、风格指纹、节奏建议，以及缓存键、上限与降级路径。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_sentence_analysis","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-analysis.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_sentence_analysis — 句式模式分析｜dsh-novel-writer 技术文档","description":"novel_sentence_analysis 的实现细节：九类句式的分类优先级与切句规则、句式转移与模板统计、句长分布、情感词扫描与净化、情感曲线与 Valence 量化、风格指纹、节奏建议，以及缓存键、上限与降级路径。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-analysis.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.1","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_sentence_analysis, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_sentence_analysis — 句式模式分析｜dsh-novel-writer 技术文档","description":"novel_sentence_analysis 的实现细节：九类句式的分类优先级与切句规则、句式转移与模板统计、句长分布、情感词扫描与净化、情感曲线与 Valence 量化、风格指纹、节奏建议，以及缓存键、上限与降级路径。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-analysis.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.2","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_sentence_analysis, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -180,6 +180,8 @@ intensity   = 段内情感总命中 / 段内字符数 × 1000（2 位小数）</
       <h3>8 · Valence 量化与隐性情感</h3>
       <div class="formula">valenceSeries(text, win = 100 字)：
   效价表 149 条，最长优先 + 区间消费；否定命中不计词也不进正负计数
+  窗口按**正文字符**切分（v7.3.2 起）：分句用的换行符不进入窗口计量
+    → 同一段正文无论「一行到底」还是「逐行排版」，窗口数/归窗位置都相同（旧版会随排版漂移）
   每窗口均值仅由「有命中的窗口」构成（series，零命中窗口不产生 0 以免稀释均值）
   seriesFull = 全窗口等距序列（零命中窗口记 0）；hasHit[w] 标记该窗口是否有命中
 
