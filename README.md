@@ -10,6 +10,8 @@
 [![GitHub stars](https://img.shields.io/github/stars/siweina/dsh-novel-writer.svg?style=flat-square&color=orange)](https://github.com/siweina/dsh-novel-writer/stargazers)
 [![siweina/dsh-novel-writer MCP server](https://glama.ai/mcp/servers/siweina/dsh-novel-writer/badges/score.svg)](https://glama.ai/mcp/servers/siweina/dsh-novel-writer)
 
+MCP Market 安全评级 **[A（92/100）](https://mcp.market/server/siweina-dsh-novel-writer)** —— 截至 2026-11-13，共 48,159 个已评级 server 中排在前 7%；它自己说明「评级按公开数据与公开评分标准算出、不可购买，也没有任何付费排名」。
+
 **22 个工具，覆盖「动笔前取材料 → 写完量化自检 → 改稿按优先级复测 → 跨章结构体检 → 收尾清理与诊断」整条流程。**
 动笔前**一次调用取齐 16 项材料**（漏读一样就漂移）；改稿不再只丢给你一堆数字，而是**按严重度排好的待办**（带原句行号、当前值与目标值、原著锚段，**只给方向不代写**）；跨章层面能查「线断了、人丢了、伏笔忘了」。
 句式 / 情感 / 语义全部**在本地算**：24MB 中文模型随包分发，**零 API 花费、正文不出本机**。
