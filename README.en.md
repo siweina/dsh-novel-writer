@@ -10,8 +10,6 @@ English | [中文](./README.md)
 [![GitHub stars](https://img.shields.io/github/stars/siweina/dsh-novel-writer.svg?style=flat-square&color=orange)](https://github.com/siweina/dsh-novel-writer/stargazers)
 [![siweina/dsh-novel-writer MCP server](https://glama.ai/mcp/servers/siweina/dsh-novel-writer/badges/score.svg)](https://glama.ai/mcp/servers/siweina/dsh-novel-writer)
 
-MCP Market safety grade **[A (92/100)](https://mcp.market/server/siweina-dsh-novel-writer)** — as of 2026-11-13, ahead of 93% of 48,159 graded servers. Per MCP Market, grades are computed from public data with a public rubric, cannot be bought, and there is no sponsored placement.
-
 **22 tools covering the whole loop: gather inputs before you write → quantify & self-check → work a prioritised fix list → audit the cross-chapter structure → clean up and diagnose.**
 One call before writing gathers **16 inputs** (missing one is how style drift starts); after you write, you don't just get numbers — you get a **priority-ordered to-do list** (line-anchored original text, current vs. target values, reference passages, **direction only, never ghost-written prose**); across chapters you can finally see "the thread snapped, a character vanished, a hook was forgotten".
 Sentence, emotion and semantic analysis all run **on your machine**: a 24MB Chinese model ships with the package,
