@@ -229,3 +229,62 @@ test("N16 伏笔表读不动时不得再追加「未登记伏笔（…不存在�
     await rm(root, { recursive: true, force: true });
   }
 });
+
+// ── ⑥ v7.3.3 #17：大纲「读不出来」≠「没有大纲」 ─────────────────────────────
+
+test("#17 大纲文件不存在（ENOENT）：仍说「无创作资料大纲 / 先 init」，不得说「读不出来」", async () => {
+  await withLibrary({
+    book: "无纲书",
+    chapters: { "第01章.md": "他推门进屋，壁炉里还有余温。" },
+    settings: EMPTY_SETTINGS
+  }, async (root) => {
+    const graph = await buildStoryGraph(root, "无纲书", {});
+    const lines = (graph.degraded ?? []).filter((l) => l.includes("创作资料大纲"));
+    assert.equal(lines.length, 1, "ENOENT 应只有一条大纲降级：" + JSON.stringify(graph.degraded));
+    assert.ok(lines[0].includes("无创作资料大纲"), "ENOENT 才是「还没建」：" + lines[0]);
+    assert.ok(lines[0].includes("novel_outline init"), "ENOENT 仍应给出 init 指引：" + lines[0]);
+    assert.ok(!lines[0].includes("读不出来"), "ENOENT 不得说「读不出来」：" + lines[0]);
+  });
+});
+
+test("#17 大纲路径被目录占位（EISDIR）：必须说「读不出来」并给原因，不得建议去 init", async () => {
+  const root = await makeLibrary("读不出书", {
+    chapters: { "第01章.md": "他推门进屋，壁炉里还有余温。" },
+    settings: EMPTY_SETTINGS
+  });
+  try {
+    // 用目录占住「剧情大纲.md」：readFile 抛 EISDIR（不是 ENOENT）
+    const creation = join(root, "novels", "创作资料", "读不出书");
+    await mkdir(join(creation, "剧情大纲.md"), { recursive: true });
+    const graph = await buildStoryGraph(root, "读不出书", {});
+    const lines = (graph.degraded ?? []).filter((l) => l.includes("创作资料大纲"));
+    assert.equal(lines.length, 1, "读失败应只有一条大纲降级：" + JSON.stringify(graph.degraded));
+    assert.ok(lines[0].includes("读不出来"), "必须如实说「读不出来」：" + lines[0]);
+    assert.ok(lines[0].includes("剧情大纲.md"), "必须带路径：" + lines[0]);
+    // 原因不能是空串：文案须给出系统错误（EISDIR / illegal operation …）
+    const afterColon = lines[0].split("）：").pop();
+    assert.ok(afterColon && afterColon.trim() !== "", "必须给出读取失败的原因：" + lines[0]);
+    assert.ok(!lines[0].includes("无创作资料大纲"), "读失败不得再讲成「没有大纲」：" + lines[0]);
+    assert.ok(!lines[0].includes("novel_outline init"), "读失败不得建议去 init（文件其实在）：" + lines[0]);
+    assert.deepEqual(graph.planVsActual, [], "计划对照仍应为空（只是原因不同）");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("#17 反证：大纲可读且有方向行时，不得出现任何大纲降级（假阳性防线）", async () => {
+  await withLibrary({
+    book: "好纲书",
+    chapters: {
+      "第01章.md": "他推门进屋，壁炉里还有余温。",
+      "第02章.md": "她在廊下追上了他，两人低声争执。"
+    },
+    outline: ["# 剧情大纲", "", "- 1 推门进屋", "- 2 廊下争执", ""].join("\n")
+  }, async (root) => {
+    const graph = await buildStoryGraph(root, "好纲书", {});
+    assert.equal(graph.planVsActual.length, 2, JSON.stringify(graph.planVsActual));
+    const lines = (graph.degraded ?? []).filter((l) => l.includes("创作资料大纲"));
+    assert.deepEqual(lines, [], "可读的大纲不得报降级：" + JSON.stringify(lines));
+  });
+});
+

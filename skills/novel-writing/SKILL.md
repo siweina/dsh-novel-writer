@@ -62,7 +62,7 @@ whenToUse: 用户提到小说、网文、章节、续写、改稿、文风、句
 
 ## 伏笔登记表（v0.6.0 新增）
 
-- `novel_plot`：list / add / update / done / delete 管理伏笔与剧情钩子；
+- `novel_plot`：list / add / update / done / delete / scan / graph 管理伏笔与剧情钩子（共 7 个动作）；
 - 续写前先 `novel_plot list` 查看未回收伏笔，续写中主动回收；
 - 存储于 `<书库根>/.novel-writer/plots/<书名>.json`。
 
@@ -83,7 +83,7 @@ whenToUse: 用户提到小说、网文、章节、续写、改稿、文风、句
 动笔前的一次调用材料装配。核心动机：这些材料原先分散在 6–8 次工具调用里、靠提示词叮嘱模型去取，**漏读正是文风漂移与设定矛盾的头号来源**。
 
 - 参数：`book`（必填）、`chapter`（默认 `next` = 当前最大章号 + 1，文件可尚未创建；也可给章号 / 文件名 / 标题子串）、`budget`（`compact` 默认 / `full`）、`root`。
-- 返回：`anchor`（上一章结尾原文，即**承接口**）｜`previousHook`｜`outlineDirection`｜`characters`｜`openPlots`（每条带 `distance` = 埋了多久没回收）｜`worldview`｜`baseline`（六维 μ/σ/容差）｜`anchors` + `skeletons`（**锚段只校准语感，不要照骨架造句**）｜`lastVerdict`｜`avoid`（**本章禁用清单**：已回收伏笔 ∩ 本章方向行的关键词、世界观禁词、已退场角色）｜`plan.checklist`｜`degraded`。
+- 返回：`anchor`（上一章结尾原文，即**承接口**）｜`previousHook`｜`outlineDirection`｜`characters`｜`openPlots`（每条带 `distance` = 埋了多久没回收）｜`worldview`｜`lexicon`（必用词硬清单；`lexiconFirst` 开且词表非空时才出现）｜`baseline`（六维 μ/σ/容差）｜`baselineScope` / `baselineMode`（基线取样范围文案与档位）｜`anchors` + `skeletons`（**锚段只校准语感，不要照骨架造句**）｜`lastVerdict`｜`avoid`（**本章禁用清单**：已回收伏笔 ∩ 本章方向行的关键词、世界观禁词、已退场角色）｜`actionChains`｜`clauseFrames`｜`prevChapterIssues`｜`symptomPrescriptions`｜`referenceProvenance`（后五项 v7.0.0 近距护航材料，可能是空数组）｜`plan.checklist`｜`degraded`。<br>条件键：`rawMode`（仅 `features.rawWriting` 开启时）、`chatWriting`（仅 `features.chatWriting` 开启时）；`chapter` / `lexicon` / `baseline` 取不到时整键省略。
 - **只读**：不写任何文件（仅复用既有分析缓存）。
 - **优雅降级**：没有大纲 / 没有伏笔 / 没有设定表 / 书只有 1 章 —— 一律返回空值并在 `degraded` 说明原因，**绝不抛错**（唯一例外：书名目录不存在）。
 - 用法要点：拿到之后**先读锚段再动笔**；`baseline` 的数字只做事后校验，不要把数字翻译成写作规则；`avoid` 里的东西不要写。
@@ -104,10 +104,13 @@ whenToUse: 用户提到小说、网文、章节、续写、改稿、文风、句
 
 把风格诊断从「数据」变成「按优先级排好的待办」，并支持改完复测。`novel_style_check` 给的是**判定**，本工具给的是**行动**。
 
-- `action="plan"`（默认）：返回 `items[]`，每条含 `id`｜`type`｜`locate{lineStart,lineEnd,excerpt}`（原句位置）｜`current` → `target`｜`anchor`（原著锚段）｜`severity`(1–5)｜`effort`(1–3)｜`hint`（改写**方向**）。排序：严重度降序 → 难度升序 → 行号升序。
-- `action="verify"`：对当前正文复测，返回三态 `resolved` / `pending` / `new`。
+- `action="plan"`（默认）：返回 `items[]`，每条含 `id`｜`type`｜`locate{lineStart,lineEnd,excerpt}`（原句位置）｜`current` → `target`｜`anchor`（原著锚段）｜`severity`(1–5)｜`effort`(1–3)｜`hint`（改写**方向**）。排序：严重度降序 → 难度升序 → 行号升序 → `id` 字典序。
+- `action="verify"`：对当前正文复测，返回三态 `resolved` / `pending` / `new`（配对要求同 `type` **且**同一稳定问题身份 `issueIdentity`，不是只要同类型就算）。
 - `action="mark"`：标记单项处置状态，需 `itemId`（取自 plan）+ `state`（`done` 已按 hint 改过 / `skip` 有意不改）。
-- 覆盖 8 类问题：句式偏离 / 抽象度过高 / 留白异常 / 情感过直 / 禁用词 / 语用不符 / 衔接缺失 / 伏笔未回收（阈值 20 章）。
+- `action="audit"`（v7.2.0）：**严格对账**——只跑 8 条可机器判定的契约（`lexicon` / `banned` / `slop` / `loop` / `outline` / `ending` / `bare_dialogue` / `plot`），每条违约带 1-based 行号与原句片段，或明确标成全章层面（`line: 0`）；没跑的契约写 `ran:false` + 原因。只读、不评价文笔。
+- `action="audit_brief"`（v7.2.0）：生成给**没有写作上下文的 AI** 的审计任务书（Markdown + 机器可读 `protocol`），末尾附本章正文（行号从 1 开始）；不派 AI、不发网络请求。
+- `action="audit_verify"`（v7.2.0）：复核审计者交回的 `claims`（`{contract,line,text,why}`；`text` 必须是该行原文的连续子串）——行号错但原文在文中 → `corrected`；全文查不到 → `rejected`（编造证据）；最后给 `score`。只验存在性，不判断「算不算违约」。
+- 覆盖 **11 类**待办：句式偏离 / 抽象度过高 / 留白异常 / 情感过直 / 禁用词 / 语用不符 / 衔接缺失 / 伏笔未回收（阈值 20 章）/ AI套话 / 原地打转 / 大纲漏写（后三类 v7.0.0；向量两类受 `features.semanticEmbedding` 开关与本地引擎可用性双重门控）。
 - 行号是**段落级**归因：宁可粗（整段）也不给错的行号；定位不到时给 `lineStart=lineEnd=0` 并在 `hint` 里说明是全章层面。
 - 落盘 `<root>/.novel-writer/audits/fix-plan-<书>-<归一化章号>.json`；重跑保留人工 `done`/`skip` 状态。
 - **边界**：`hint` 只给方向，**绝不生成改写后的正文**——生成是宿主模型的事。这是本插件"零 token、正文不出本机"的立身之本。
@@ -145,7 +148,7 @@ whenToUse: 用户提到小说、网文、章节、续写、改稿、文风、句
 |---|---|---|
 | 档位 `systemPromptMode` | `off` / `brief` / `full` | **注入多少**：不注入 / 一句话 / 完整流程 |
 | 场景 `promptScene` | `general` / `writing` / `revising` / `auditing` / `setup` | **注入什么**：通用 / 写新章 / 改稿 / 审计（只体检不改稿）/ 建资料（只维护设定与创作资料） |
-| 精简工作流 `leanWorkflow` | `true` / `false`（默认 `false`） | **要不要催促动作**（v5.1.0 新增）：打开后注入 380 字符的精简档，只保留"工具按需调用"一条原则，去掉自检/复测/登记的全部催促 |
+| 精简工作流 `leanWorkflow` | `true` / `false`（默认 `false`） | **要不要催促动作**（v5.1.0 新增）：打开后注入约 480 字符（当前 `LEAN_TEXT` 实测 474 字符）的精简档，只保留"工具按需调用"一条原则，去掉自检/复测/登记的全部催促 |
 
 - 场景**仅 `full` 档下生效**；`brief` 档与场景无关。
 - **精简工作流优先于档位与场景**：打开后无论选了什么档位/场景，注入的都是精简档（`off` 除外）；它**任何时候都能切换**，不受 `full` 档限制。
@@ -157,7 +160,7 @@ whenToUse: 用户提到小说、网文、章节、续写、改稿、文风、句
 
 用户说「删掉这本书 / 放弃这个项目 / 清掉测试数据 / 想用同名重开」时才用。**默认先预览，不要直接 apply**。
 
-- 一本书的资料散在 **12 处**（正文 / 创作资料 / 数据目录 9 个按书子目录 / 旧位置的平铺伏笔表 / 设定库条目）。`action:"preview"` 会列出全部位置、文件数、体积与样例文件名，且**不动磁盘**；`action:"apply"` 才执行。
+- 一本书的资料散在 **13 处主位置 + `legacy`**（正文 / 创作资料 / 数据目录 10 个按书子目录（含 v7.3.0 的 `drafts`）/ 旧位置的平铺伏笔表 / 设定库条目）。`action:"preview"` 会列出全部位置、文件数、体积与样例文件名，且**不动磁盘**；`action:"apply"` 才执行。
 - **只想删某一类**（例如只清报告历史 / 缓存，正文留着）：把 `preview` 返回的 `targets[].key` 中要清的那些作为 `keys` 传给 `apply`（如 `keys:["data:audits","data:style-reports","data:analysis"]`）；省略 `keys` = 全选 = 删整本书。返回体的 `partial` / `skipped` 说明哪些是**按选择保留**（不是残留），别再补一句"还有残留文件"。
 - 默认**移入回收站** `<书库根>/.novel-writer/trash/<书>-<时间戳>/` 并写 `manifest.json`：`action:"restore" trashId=…` 可原样移回（目标已存在则逐文件跳过、**绝不覆盖**），`action:"purge"` 才彻底删除。回收站**不自动清理**，且回收站里的内容仍占磁盘——所以删书后面板「数据目录」体积会变大而不是变小，这是可恢复的代价。
 - 只处理所选书籍：全局词表 `_global.json`、`state.json` 里的开关/容差/其他书条目、事件日志、其他书的文件都不动（返回体的 `notTouched` 会逐条写明）。

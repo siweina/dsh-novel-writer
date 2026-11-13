@@ -9,6 +9,10 @@ import {
 } from "../lib/analysis.js";
 import { chunkText } from "../lib/embedding.js";
 import { semanticStyleDiagnostics, semanticStyleDistances } from "../lib/vibe.js";
+// v7.3.3：套话 / 向量审计 / 单章症状的换行口径回归（#14 / M12 / #20）
+import { scanSlop } from "../lib/lexicons/slop.js";
+import { checkOutlineFulfillment } from "../lib/vector-audit.js";
+import { diagnoseChapterSymptoms } from "../lib/chapter-diagnose.js";
 
 const paragraph = "甲句一。\n甲句二。\n\n乙句一。\n乙句二。";
 const extraBlank = "甲句一。\n甲句二。\n\n\n乙句一。\n乙句二。";
@@ -183,5 +187,52 @@ assert.equal(emotionCount("这味道真令人恶心。", "anger"), 0);
 // ② negatedAt 单字否定词前缀防误判（淹没/苏莫）
 const suMo = analyzeText("苏莫大吃一惊。").emotion.scores.find((e) => e.emotion === "surprise")?.count ?? 0;
 assert.ok(suMo > 0, "苏莫中的「莫」不得把「大吃一惊」当成被否定情绪反转");
+
+// ─────────────────────────────────────────────────────────────────────────────
+// v7.3.3 修（#14）：scanSlop 入口归一 CRLF / CR —— 三种换行的 lines / hit.line / densityPer1000 必须一致
+// ─────────────────────────────────────────────────────────────────────────────
+{
+  // 5 行正文：命中落在第 1/3/5 行；章末类 ending_preach 只在最后 2 行允许（第 5 行）
+  const base = "他眼中闪过一丝慌乱。\n她走了。\n全场哗然，不知道的是，一切才刚刚开始。\n他停下。\n命运的齿轮转动。";
+  const expectedHits = [["eye_cliche", 1], ["shock_crowd", 3], ["ending_preach", 5]];
+  const results = {};
+  for (const [tag, nl] of [["LF", "\n"], ["CRLF", "\r\n"], ["CR", "\r"]]) {
+    const text = base.replace(/\n/g, nl);
+    const r = scanSlop(text);
+    results[tag] = r;
+    // 旧行为（红）：CRLF 密度 56.6（分子/分母含 \r）、纯 CR lines=1 且所有 hit.line 塌成 1
+    assert.equal(r.lines, 5, tag + "：行数必须是 5（纯 CR 旧版为 1）：" + r.lines);
+    assert.deepEqual(r.hits.map((h) => [h.category, h.line]), expectedHits, tag + "：命中行号必须与 novel_read 一致：" + JSON.stringify(r.hits.map((h) => [h.category, h.line])));
+    assert.equal(r.densityPer1000, 61.2, tag + "：密度按归一后的长度算（三种换行同值）：" + r.densityPer1000);
+  }
+  assert.deepEqual(
+    results.LF.hits.map((h) => h.line),
+    results.CR.hits.map((h) => h.line),
+    "纯 CR 与 LF 的行号必须完全一致"
+  );
+
+  // M12：chapter-diagnose 的章末判定在三种换行下必须同结论（旧版纯 CR 时整章 1 行 → 章末类命中被行区间过滤掉）
+  const endingBase = "他推开门走出去。\n\n夜色渐深。\n\n她在门口停住。\n\n多年以后，她还是站在门口。\n";
+  for (const [tag, nl] of [["LF", "\n"], ["CRLF", "\r\n"], ["CR", "\r"]]) {
+    const symptoms = diagnoseChapterSymptoms(endingBase.replace(/\n/g, nl));
+    assert.deepEqual(symptoms.map((x) => x.key), ["ending_preach"], tag + "：章末升华必须稳定检出（旧版纯 CR 为 0 条）：" + JSON.stringify(symptoms.map((x) => x.key)));
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// v7.3.3 修（#20）：checkOutlineFulfillment 的 opts.maxClauses 必须真正生效
+// ─────────────────────────────────────────────────────────────────────────────
+{
+  const direction = "甲甲，乙乙，丙丙，丁丁，戊戊，己己，庚庚，辛辛"; // 8 条合法子句
+  const text = "他没有说话，只是把灯芯挑亮了一点，屋里于是又亮了一些，墙上的影子也跟着晃动。".repeat(6);
+  const embed = async () => [1, 0, 0, 0, 0, 0, 0, 0];
+  const base = { embed, isAvailable: async () => true };
+  // 旧行为（红）：传 2 / 10 都恒得 6 条
+  assert.equal((await checkOutlineFulfillment(direction, text, base)).clauses, 6, "默认仍取 6 条（DEFAULTS 不变）");
+  assert.equal((await checkOutlineFulfillment(direction, text, { ...base, maxClauses: 2 })).clauses, 2, "maxClauses=2 必须生效");
+  assert.equal((await checkOutlineFulfillment(direction, text, { ...base, maxClauses: 10 })).clauses, 8, "maxClauses 大于子句数时取全部（8）");
+  assert.equal((await checkOutlineFulfillment(direction, text, { ...base, maxClauses: 0 })).clauses, 6, "非法值（0）回退默认");
+  assert.equal((await checkOutlineFulfillment(direction, text, { ...base, maxClauses: 2.5 })).clauses, 6, "非法值（小数）回退默认");
+}
 
 console.log("Analysis regression tests passed");

@@ -68,7 +68,7 @@
 
 ### 2.4 Note（提示）
 
-统一四种：`nwNote`（默认灰底）、`nwNoteAccent`（品牌浅色）、`nwNoteWarn`（警告浅色）、`nwNoteDanger` 或沿用现有 `nwPlotErr` 作为错误。全部 radius-md、内边距 10px 12px、12.5px/18px。**不许把原始错误串（如 `book is required`）直接给用户**：要映射成人话（如「先在上面选择一本书」），原始信息可以放在灰色小字里。
+统一三种：`nwNote`（默认灰底）、`nwNoteAccent`（品牌浅色）、`nwNoteWarn`（警告浅色）；**错误一律用 `nwPlotErr`**（v7.3.3 起 `nwNoteDanger` 已作为死类删除——它在源码与测试里零引用，只在这份规范里被提到过，别再加回来）。全部 radius-md、内边距 10px 12px、12.5px/18px。**不许把原始错误串（如 `book is required`）直接给用户**：要映射成人话（如「先在上面选择一本书」），原始信息可以放在灰色小字里。
 
 ### 2.5 图标与 emoji
 

@@ -1,10 +1,10 @@
 // v3.9.5 端到端测试：16 工具注册、缓存、伏笔、风格自检、路由、语用扫描（v0.6.0 起持续扩展）
 
 import { mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, readdirSync, symlinkSync, unlinkSync } from "node:fs";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { apply } from "../lib/index.js";
-import { ALL_TOOLS, explorerSpawnFailed } from "../lib/core.js"; // v5.0.0：工具清单的单一事实源；v5.2.0：explorer 误报修正的判据
+import { ALL_TOOLS, FEATURE_DEFAULTS, explorerSpawnFailed } from "../lib/core.js"; // v5.0.0：工具清单的单一事实源；v5.2.0：explorer 误报修正的判据；v7.3.3：#16 功能键全量清单
 
 // v3.9.5 修正（H3）：先隔离 env、再解析 STATE_FILE——旧版在模块加载时先绑定了用户真实 ~/.dsh 路径，
 // 退出处理器可能写回/删除真实用户配置；testRoot 也移出仓库目录（不再在 test/ 下留残渣）
@@ -1741,4 +1741,270 @@ console.log("\nALL E2E TESTS PASSED");
   draftCases += 1;
 
   console.log("草稿镜像路由：" + draftCases + " 组（列表 / 逐段 2 段 / 不存在 exists:false / 缺 book 400 / 非 GET 405 / 只读 / 列镜像读不动 500 / stat 失败不伪造 0 字节 / 无镜像 200 空列表 / 非回环 403）✓");
+}
+
+// ===========================================================================
+// v7.3.3 修复回归（#4 / #6 / #7 / #8 / #9 / #10 / #16 / #26 / #28 / #34 / 漏报②）
+// 说明：上面的「清理缓存」已把 testRoot 删掉，这里按需重建；本节只读写 testRoot 下的夹具。
+// ===========================================================================
+{
+  const FIX_ROOT = testRoot;
+  mkdirSync(join(FIX_ROOT, "novels"), { recursive: true });
+  const enc = (s) => encodeURIComponent(String(s));
+  const mkRes = () => ({ status: 0, body: "", writeHead(s) { this.status = s; }, end(b) { this.body = String(b); } });
+  const mkReq = (path, method = "GET", bodyText, extraHeaders) => {
+    const req = {
+      method,
+      url: path,
+      socket: { remoteAddress: "127.0.0.1" },
+      headers: Object.assign({ host: "127.0.0.1:51783" }, extraHeaders || {})
+    };
+    if (bodyText !== void 0) {
+      req[Symbol.asyncIterator] = async function* () { yield Buffer.from(bodyText); };
+    }
+    return req;
+  };
+  const jsonOf = (res) => { try { return JSON.parse(res.body); } catch { return null; } };
+
+  // ---- #10：最小宿主（无 ctx.inject）不得中断 apply ----
+  {
+    const minimalRegistry = [];
+    const minimalSections = [];
+    const minimalCtx = {
+      tools: { register: (d) => { minimalRegistry.push(d); return () => {}; } },
+      systemPrompt: { section: (def) => { minimalSections.push(def); return () => {}; } }
+    };
+    apply(minimalCtx, { root: FIX_ROOT });
+    if (minimalRegistry.length !== ALL_TOOLS.length) throw new Error("#10 最小宿主下工具注册数不对：" + minimalRegistry.length + " / " + ALL_TOOLS.length);
+    if (minimalSections.length !== 3) throw new Error("#10 最小宿主下 systemPrompt.section 应注册 3 条，实际 " + minimalSections.length);
+    console.log("【#10】最小宿主（无 ctx.inject）：工具 " + minimalRegistry.length + " 个 + systemPrompt.section " + minimalSections.length + " 条 ✓");
+  }
+
+  // ---- #16 / #34：schema 描述与 FEATURE_DEFAULTS / 宿主 null 约束一致 ----
+  {
+    const featDescIn = defs.novel_sentence_config.parameters.properties.features.description;
+    const featDescOut = defs.novel_sentence_config.output.schema.properties.features.description;
+    for (const key of Object.keys(FEATURE_DEFAULTS)) {
+      if (!featDescIn.includes(key)) throw new Error("#16 入参 features 描述缺少键：" + key);
+      if (!featDescOut.includes(key)) throw new Error("#16 出参 features 描述缺少键：" + key);
+    }
+    if (Object.keys(FEATURE_DEFAULTS).length !== 11) throw new Error("#16 FEATURE_DEFAULTS 不再是 11 个键，测试需同步");
+    for (const key of ["styleTolerance", "creationProfile", "creationProfiles"]) {
+      const desc = defs.novel_sentence_config.parameters.properties[key].description;
+      if (!desc.includes("空对象 {} 表示清除")) throw new Error("#34 " + key + " 描述未写明「空对象 {} 表示清除」：" + desc);
+    }
+    console.log("【#16/#34】features 入/出参描述覆盖 11 个键；三行对象参数均写明「空对象 {} 表示清除」✓");
+  }
+
+  // ---- #8 + 漏报②：delete-book GET 只读动作白名单，且固定仅回环 ----
+  {
+    const DEL_PATH = "/api/dsh-novel-writer/delete-book";
+    const delRoute = routes.find((r) => r.path === DEL_PATH);
+    if (!delRoute) throw new Error("#8 delete-book 路由未注册");
+    const victim = "GET删书测试";
+    const victimDir = join(FIX_ROOT, "novels", victim);
+    const victimFile = join(victimDir, "第01章.md");
+    mkdirSync(victimDir, { recursive: true });
+    writeFileSync(victimFile, "这一章不能被 GET 删掉。\n", "utf8");
+    const call = async (query, method = "GET", bodyText, headers) => {
+      const res = mkRes();
+      await delRoute.handler(mkReq(DEL_PATH + (query ? "?" + query : ""), method, bodyText, headers), res);
+      return { status: res.status, json: jsonOf(res) };
+    };
+    // preview 仍可用，且如实列出正文
+    const preview = await call("action=preview&book=" + enc(victim));
+    if (preview.status !== 200 || !preview.json?.found) throw new Error("#8 GET preview 失效：" + JSON.stringify(preview));
+    const chaptersTarget = (preview.json.targets || []).find((t) => t.key === "chapters");
+    if (!chaptersTarget || chaptersTarget.files !== 1) throw new Error("#8 preview 未列出正文：" + JSON.stringify(preview.json.targets));
+    // GET apply / restore / purge 一律 400，且磁盘未变
+    for (const act of ["apply", "restore", "purge"]) {
+      const got = await call("action=" + act + "&book=" + enc(victim) + "&trashId=x");
+      if (got.status !== 400) throw new Error("#8 GET action=" + act + " 应 400，实际 " + got.status + " " + JSON.stringify(got.json));
+      if (!/POST/.test(String(got.json?.error || ""))) throw new Error("#8 GET 拒绝文案未点明必须用 POST：" + JSON.stringify(got.json));
+      if (!existsSync(victimFile) || readFileSync(victimFile, "utf8") !== "这一章不能被 GET 删掉。\n") {
+        throw new Error("#8 GET action=" + act + " 改动了磁盘（书被删/正文被改）");
+      }
+    }
+    const listed = await call("action=list");
+    if (listed.status !== 200) throw new Error("#8 GET list 失效：" + listed.status);
+    // 漏报②：config.allowLanState=true 也不能让非回环访问删书入口
+    const lan = await call("action=preview&book=" + enc(victim), "GET", void 0, { host: "192.168.1.5:3080", origin: "http://192.168.1.5:3080" });
+    if (lan.status !== 403) throw new Error("漏报② 非回环访问 delete-book 应 403（不跟随 allowLanState），实际 " + lan.status);
+    // 拒绝之后 preview 仍正常（没有把路由打成不可用）
+    const again = await call("action=preview&book=" + enc(victim));
+    if (again.status !== 200 || !again.json?.found) throw new Error("#8 拒绝写动作后 preview 失效：" + JSON.stringify(again));
+    console.log("【#8/漏报②】GET preview/list 200；GET apply/restore/purge 400 且磁盘逐字节未变；非回环 403（allowLanState=true 也不放行）✓");
+  }
+
+  // ---- #9：空目录计入可清理项；纯空目录可删；空目录+其它文件时不留残目录 ----
+  {
+    const emptyBook = "空目录书";
+    const emptyDir = join(FIX_ROOT, "novels", emptyBook);
+    mkdirSync(emptyDir, { recursive: true });
+    const pv = await defs.novel_delete_book.execute({ book: emptyBook, action: "preview", root: FIX_ROOT }, exec);
+    if (!pv.found) throw new Error("#9 纯空目录预览 found 应为 true");
+    const ct = (pv.targets || []).find((t) => t.key === "chapters");
+    if (!ct || ct.exists !== true || ct.files !== 0) throw new Error("#9 纯空目录预览未如实列出 chapters：" + JSON.stringify(ct));
+    if (!(pv.keys || []).includes("chapters")) throw new Error("#9 空目录未进可清理 keys：" + JSON.stringify(pv.keys));
+    const applied = await defs.novel_delete_book.execute({ book: emptyBook, action: "apply", root: FIX_ROOT }, exec);
+    if (existsSync(emptyDir)) throw new Error("#9 纯空目录 apply 后仍残留：" + emptyDir);
+    if (!/空目录/.test(String(applied.message || ""))) throw new Error("#9 纯空目录 apply 结论未说明：" + applied.message);
+
+    const mixedBook = "空目录混合书";
+    const mixedDir = join(FIX_ROOT, "novels", mixedBook);
+    const summaryFile = join(FIX_ROOT, ".novel-writer", "summaries", mixedBook + ".json");
+    mkdirSync(mixedDir, { recursive: true });
+    mkdirSync(dirname(summaryFile), { recursive: true });
+    writeFileSync(summaryFile, "[]", "utf8");
+    const pv2 = await defs.novel_delete_book.execute({ book: mixedBook, action: "preview", root: FIX_ROOT }, exec);
+    if (!pv2.found || pv2.totals.files !== 1) throw new Error("#9 混合场景预览不对：" + JSON.stringify({ found: pv2.found, totals: pv2.totals }));
+    if (!(pv2.keys || []).includes("chapters")) throw new Error("#9 混合场景空正文目录未进 keys：" + JSON.stringify(pv2.keys));
+    const applied2 = await defs.novel_delete_book.execute({ book: mixedBook, action: "apply", root: FIX_ROOT }, exec);
+    if (existsSync(mixedDir)) throw new Error("#9 空正文目录在 apply 后残留：" + mixedDir);
+    if (existsSync(summaryFile)) throw new Error("#9 摘要文件未被清理：" + summaryFile);
+    if ((applied2.failed || []).length !== 0) throw new Error("#9 正常清理不应有失败项：" + JSON.stringify(applied2.failed));
+    if (!/空目录/.test(String(applied2.message || ""))) throw new Error("#9 混合场景结论未说明空目录处理：" + applied2.message);
+
+    // v7.3.3 修（#9 交叉）：目录里还有子目录 → rmdir ENOTEMPTY。
+    // applyBookDelete 内部会记一条；index.js 的旧实现又会补一条 → 同一路径 failed.length=2。
+    // 现在 apply 分支不再重复 rmdir，另按 path 去重作为防御：必须恰好 1 条。
+    const deepBook = "深目录书";
+    const deepDir = join(FIX_ROOT, "novels", deepBook);
+    const deepChild = join(deepDir, "子目录");
+    const deepSummary = join(FIX_ROOT, ".novel-writer", "summaries", deepBook + ".json");
+    mkdirSync(deepChild, { recursive: true });
+    mkdirSync(dirname(deepSummary), { recursive: true });
+    writeFileSync(deepSummary, "[]", "utf8");
+    const applied3 = await defs.novel_delete_book.execute({ book: deepBook, action: "apply", root: FIX_ROOT }, exec);
+    if (!existsSync(deepDir)) throw new Error("#9 ENOTEMPTY 场景不得递归删除非空目录：" + deepDir);
+    if (existsSync(deepSummary)) throw new Error("#9 ENOTEMPTY 场景摘要文件应被清理：" + deepSummary);
+    const failed3 = applied3.failed || [];
+    if (failed3.length !== 1) throw new Error("#9 ENOTEMPTY 失败项应恰好 1 条（去重），实际 " + failed3.length + "：" + JSON.stringify(failed3));
+    if (!/ENOTEMPTY/.test(String(failed3[0].error || "")) || failed3[0].path !== deepDir) throw new Error("#9 ENOTEMPTY 失败项未指向真实原因/路径：" + JSON.stringify(failed3));
+    console.log("【#9】纯空目录：预览 found=true/keys 含 chapters → apply 删除；空目录+摘要文件：failed=0 且空正文目录被删；子目录挡路（ENOTEMPTY）：failed 恰好 1 条（不递归删、不重复报）✓");
+  }
+
+  // ---- #4：超长 newTerm 整体失败（不谎报、不暗改 enabled）；正常 update 仍生效 ----
+  {
+    const lexBook = "词条更新书";
+    await defs.novel_lexicon.execute({ action: "add", book: lexBook, terms: [{ term: "旧名", note: "原备注" }], root: FIX_ROOT }, exec);
+    const normal = await defs.novel_lexicon.execute({ action: "update", book: lexBook, term: "旧名", newTerm: "新名", note: "新备注", root: FIX_ROOT }, exec);
+    if (!(normal.updated || []).includes("新名") || !/新名/.test(normal.message || "")) throw new Error("#4 正常 update 失效：" + JSON.stringify(normal));
+    const tooLong = "长".repeat(61);
+    let errText = "";
+    try {
+      await defs.novel_lexicon.execute({ action: "update", book: lexBook, term: "新名", newTerm: tooLong, note: "不该写入", enabled: false, root: FIX_ROOT }, exec);
+    } catch (e) { errText = String(e?.message ?? e); }
+    if (!/60|规范化/.test(errText)) throw new Error("#4 超长 newTerm 应明确报错，实际：" + JSON.stringify(errText));
+    const listed = await defs.novel_lexicon.execute({ action: "list", book: lexBook, scope: "book", root: FIX_ROOT }, exec);
+    const entry = (listed.entries || []).find((e) => e.term === "新名");
+    if (!entry) throw new Error("#4 失败后原词条消失：" + JSON.stringify(listed.entries));
+    if (entry.enabled === false) throw new Error("#4 失败后 enabled 被暗改为 false（要求整体失败）");
+    if (entry.note !== "新备注") throw new Error("#4 失败后 note 被部分写入：" + entry.note);
+    // 双向：合法 enabled:false 仍然生效；再开回来
+    const off = await defs.novel_lexicon.execute({ action: "update", book: lexBook, term: "新名", enabled: false, root: FIX_ROOT }, exec);
+    if (off.enabled === false) throw new Error("#4 合法 update enabled:false 未落到该层回包");
+    const offList = await defs.novel_lexicon.execute({ action: "list", book: lexBook, scope: "book", root: FIX_ROOT }, exec);
+    if ((offList.entries || []).find((e) => e.term === "新名")?.enabled !== false) throw new Error("#4 合法 enabled:false 未生效");
+    await defs.novel_lexicon.execute({ action: "update", book: lexBook, term: "新名", enabled: true, root: FIX_ROOT }, exec);
+    console.log("【#4】超长 newTerm 报错且词条原样（enabled/note 均未被暗改）；正常改名与合法 enabled:false 仍生效 ✓");
+  }
+
+  // ---- #6：POST lexicon op=save 尊重显式 enabled ----
+  {
+    const LEX_PATH = "/api/dsh-novel-writer/lexicon";
+    const lexRoute = routes.find((r) => r.path === LEX_PATH);
+    if (!lexRoute) throw new Error("#6 lexicon 路由未注册");
+    const lexBook = "词表保存开关书";
+    const post = async (body) => {
+      const res = mkRes();
+      await lexRoute.handler(mkReq(LEX_PATH, "POST", JSON.stringify(body)), res);
+      return { status: res.status, json: jsonOf(res) };
+    };
+    const off = await post({ book: lexBook, scope: "book", op: "toggle", enabled: false });
+    if (off.status !== 200 || off.json?.enabled !== false) throw new Error("#6 预置 toggle 关层失败：" + JSON.stringify(off));
+    const saved = await post({ book: lexBook, scope: "book", op: "save", entries: [{ term: "保存开关词" }], enabled: true });
+    if (saved.status !== 200 || saved.json?.enabled !== true) throw new Error("#6 save 显式 enabled:true 未生效：" + JSON.stringify(saved));
+    const got = await (async () => {
+      const res = mkRes();
+      await lexRoute.handler(mkReq(LEX_PATH + "?book=" + enc(lexBook) + "&scope=book"), res);
+      return { status: res.status, json: jsonOf(res) };
+    })();
+    if (got.status !== 200 || got.json?.enabled !== true || (got.json?.entries || []).length !== 1) throw new Error("#6 保存后读回不对：" + JSON.stringify(got));
+    // 缺省 enabled 时保持原值（现为 true）
+    const saved2 = await post({ book: lexBook, scope: "book", op: "save", entries: [{ term: "保存开关词" }, { term: "第二词" }] });
+    if (saved2.status !== 200 || saved2.json?.enabled !== true) throw new Error("#6 save 缺省 enabled 应保持 true：" + JSON.stringify(saved2));
+    console.log("【#6】op=toggle 关层 → op=save 显式 enabled:true 成功并读回 true；缺省 enabled 保持原值 ✓");
+  }
+
+  // ---- #28：register/update 时就校验仪式正则 ----
+  {
+    const book = "语用正则书";
+    let errText = "";
+    try {
+      await defs.novel_settings.execute({ book, category: "worldview", action: "add", name: "规范", speechStyle: { ritualBadPatterns: ["(a+)+"] }, root: FIX_ROOT }, exec);
+    } catch (e) { errText = String(e?.message ?? e); }
+    if (!/ritualBadPatterns/.test(errText)) throw new Error("#28 非法仪式正则应登记时报错，实际：" + JSON.stringify(errText));
+    const okAdd = await defs.novel_settings.execute({ book, category: "worldview", action: "add", name: "规范", speechStyle: { ritualBadPatterns: ["上香"] }, root: FIX_ROOT }, exec);
+    if (!/已登记/.test(String(okAdd.message || ""))) throw new Error("#28 合法仪式正则登记失败：" + JSON.stringify(okAdd));
+    let updateErr = "";
+    try {
+      await defs.novel_settings.execute({ book, category: "worldview", action: "update", name: "规范", speechStyle: { ritualBadPatterns: ["(a+)+"] }, root: FIX_ROOT }, exec);
+    } catch (e) { updateErr = String(e?.message ?? e); }
+    if (!/ritualBadPatterns/.test(updateErr)) throw new Error("#28 非法仪式正则应 update 时报错，实际：" + JSON.stringify(updateErr));
+    const okUpdate = await defs.novel_settings.execute({ book, category: "worldview", action: "update", name: "规范", speechStyle: { ritualBadPatterns: ["烧香"] }, root: FIX_ROOT }, exec);
+    if (!/已更新/.test(String(okUpdate.message || ""))) throw new Error("#28 合法 update 失效：" + JSON.stringify(okUpdate));
+    // 扫描仍正常（不会因校验接线而误报/炸）
+    mkdirSync(join(FIX_ROOT, "novels", book), { recursive: true });
+    writeFileSync(join(FIX_ROOT, "novels", book, "第01章.md"), "他点起一炷香。\n", "utf8");
+    const cont = await defs.novel_continuity_check.execute({ book, chapter: "1", root: FIX_ROOT }, exec);
+    if (!Array.isArray(cont.candidates)) throw new Error("#28 continuity 扫描回归");
+    console.log("【#28】add/update 非法仪式正则当场报错；合法模式登记/更新与扫描均正常 ✓");
+  }
+
+  // ---- #26：detect 纳入事务后功能不变（scan 仍只读可用） ----
+  {
+    const book = "检测事务书";
+    mkdirSync(join(FIX_ROOT, "novels", book), { recursive: true });
+    writeFileSync(join(FIX_ROOT, "novels", book, "第01章.md"), "老爷坐在堂前，丫鬟奉上香茶，小姐在庙里上香祈福。\n", "utf8");
+    const det = await defs.novel_settings.execute({ book, action: "detect", root: FIX_ROOT }, exec);
+    if (det.culture !== "eastern") throw new Error("#26 detect 回归：" + det.culture);
+    const scan = await defs.novel_settings.execute({ book, category: "character", action: "scan", root: FIX_ROOT }, exec);
+    if (!Array.isArray(scan.candidates)) throw new Error("#26 scan 回归");
+    console.log("【#26】detect 仍判东方 / scan 仍返回候选；detect 已走 withFileTx（scan 保持只读不占写锁）✓");
+  }
+
+  // ---- #7：POST /state 统一 resolveUiRootInfo（trim + 不信过期 lastRoot） ----
+  {
+    const STATE_PATH = "/api/dsh-novel-writer/state";
+    const staleRoot = join(FIX_ROOT, "过期-lastRoot");
+    mkdirSync(staleRoot, { recursive: true });
+    writeFileSync(STATE_FILE, JSON.stringify({ lastRoot: staleRoot }), "utf8");
+    const fixRoutes = [];
+    const fixCtx = {
+      tools: { register: () => () => {} },
+      systemPrompt: { section: () => () => {} },
+      inject: (names, cb) => cb({ webServer: { register: (r) => { fixRoutes.push(r); return () => {}; } }, effect: (fn) => fn() })
+    };
+    apply(fixCtx, { root: "   " }); // 纯空格：旧版 length>0 会当成有效根
+    const stateRoute = fixRoutes.find((r) => r.path === STATE_PATH);
+    if (!stateRoute) throw new Error("#7 state 路由未注册");
+    const body = JSON.stringify({ creationProfiles: { "根解析书": { worldview: "末日测试" } } });
+    const res = mkRes();
+    const oldCwd = process.cwd();
+    process.chdir(FIX_ROOT); // 让 resolveUiRootInfo 的 cwd 回退命中真正的书库根
+    try {
+      await stateRoute.handler(mkReq(STATE_PATH, "POST", body), res);
+    } finally {
+      process.chdir(oldCwd);
+    }
+    if (res.status !== 200) throw new Error("#7 POST state 失败：" + res.status + " " + res.body);
+    const expected = join(FIX_ROOT, "novels", "创作资料", "根解析书", "创作设定.md");
+    if (!existsSync(expected)) throw new Error("#7 创作资料未写入 resolveUiRootInfo 的根：" + expected);
+    if (existsSync(join(FIX_ROOT, "   "))) throw new Error("#7 「   」被当成有效路径（应 trim 后回退）");
+    if (existsSync(join(staleRoot, "novels"))) throw new Error("#7 创作资料写进了过期的 lastRoot：" + staleRoot);
+    console.log("【#7】config.root=\"   \" + 过期 lastRoot：创作资料落在 cwd 书库根，未写进「   」或 stale lastRoot ✓");
+  }
+
+  console.log("v7.3.3 修复回归：#4/#6/#7/#8/#9/#10/#16/#26/#28/#34/漏报② 全部通过 ✓");
 }

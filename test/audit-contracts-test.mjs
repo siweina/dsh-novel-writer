@@ -490,3 +490,48 @@ test("buildAuditBrief：contracts=null → 8 条契约全部允许，空正文�
   assert.equal(protocol.lineCount, 0);
   assert.equal(protocol.contracts.length, 8);
 });
+
+// ===========================================================================
+// ⑨ v7.3.3 回归：#13（块行号容忍排版空白） / #12（slop 契约放行 AbortError）
+// ===========================================================================
+
+/** 7 段连续裸台词；第一段是**两行块**，两行之间的排版空白由参数控制。 */
+function bareDialogueFixture(firstLine, secondLineIndent) {
+  const lines = [firstLine, secondLineIndent + "她道。"];
+  for (let i = 0; i < 6; i += 1) lines.push("", "“嗯。”", "她道。");
+  return lines.join("\n") + "\n";
+}
+
+test("#13 bare_dialogue 行号：块内行首缩进 / 首行行尾空格不得退化成 line 0", async () => {
+  const root = await freshRoot("bare-line-indent");
+  const cases = [
+    { tag: "无排版空白（基准）", text: bareDialogueFixture("“你回来了。”", "") },
+    { tag: "块内第二行行首缩进", text: bareDialogueFixture("“你回来了。”", "  ") },
+    { tag: "首行行尾多一个空格", text: bareDialogueFixture("“你回来了。” ", "") }
+  ];
+  for (const item of cases) {
+    const res = await audit(root, item.text);
+    const v = res.violations.find((x) => x.contract === "bare_dialogue");
+    assert.ok(v, item.tag + "：应检出 bare_dialogue：" + JSON.stringify(res.violations.map((x) => x.contract)));
+    // 旧行为（红）：块文本是逐行 trim 后拼的，整块 indexOf 落空 → line=0（编造不出证据行）。
+    assert.equal(v.line, 1, item.tag + "：行号必须是首段真实起始行：" + v.line);
+    assert.equal(v.text, "“你回来了。”", item.tag + "：证据片段必须取自真实行：" + v.text);
+  }
+  // 章首加一行标题 + 空行：真实起始行变成 3，行号必须跟着正文走（而不是恒 1 或 0）
+  const shifted = await audit(root, "# 第二章\n\n" + bareDialogueFixture("“你回来了。” ", ""));
+  const shiftedHit = shifted.violations.find((x) => x.contract === "bare_dialogue");
+  assert.ok(shiftedHit, "有标题行时也应检出 bare_dialogue");
+  assert.equal(shiftedHit.line, 3, "行号要跟着正文走：" + shiftedHit.line);
+});
+
+test("#12 slop 契约内出现 AbortError：必须上抛，不得吞成「读设定失败，不豁免」", async () => {
+  const root = await freshRoot("slop-abort");
+  const abort = Object.assign(new Error("取消"), { name: "AbortError" });
+  // 只让 slop 契约的豁免构建抛取消：其它契约不调用 buildSlopExemptions，
+  // 因此这条断言确实钉住 runSlopContract 内部的 catch（旧版会吞掉它并返回一份正常对账结果）。
+  await assert.rejects(
+    () => audit(root, "他眼中闪过一丝慌乱。\n", { options: { deps: { buildSlopExemptions: () => { throw abort; } } } }),
+    (e) => Boolean(e) && e.name === "AbortError",
+    "取消被吞掉了：旧版 catch 会把 AbortError 讲成「读设定失败，不豁免」继续跑完"
+  );
+});

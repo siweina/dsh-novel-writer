@@ -1176,6 +1176,188 @@ console.log("v7-A：工具默认值/三组全开全关混合态/单工具 patch/
   console.log("v7.3.2 N24⑥：六行显示名全部来自 base.metric.* 词条（NW_METRICS 只存内部键）✓");
 }
 
+// ---------------------------------------------------------------------------
+// v7.3.3 修（#5/M4）：基线页「先定书、再请求」+「当前书本地持久化」
+// 旧实现：openView("baseline") 直接 loadBaseline()，而 baselineBook 初值恒空 → 请求 `?book=`（空）
+// → 宿主 400 → 必进 catch 置 baselineErr，于是写在成功分支里的「自动选第一本书」永远不可达；
+// 且 baselineBook 既不进本地持久化也不进宿主状态，每次刷新都重演。
+// 三个场景双向验证：① 有书 → 自动选第一本并成功（不发空 book）；② 刷新后仍记得上次选的书；
+//                   ③ 真的没书 → 空态且一个请求都不发（不能把「没书」伪装成「加载失败」）。
+// ---------------------------------------------------------------------------
+{
+  const savedFetch5 = globalThis.fetch;
+  const savedLS5 = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  const ls5 = new Map();
+  globalThis.localStorage = {
+    getItem: (k) => (ls5.has(k) ? ls5.get(k) : null),
+    setItem: (k, v) => { ls5.set(k, String(v)); },
+    removeItem: (k) => { ls5.delete(k); }
+  };
+  const req5 = [];
+  const installFetch5 = (serve) => {
+    globalThis.fetch = (url, init) => { req5.push({ url: String(url), init: init || {} }); return serve(String(url), init || {}); };
+  };
+  const json5 = (body) => Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(body) });
+  const settle5 = async () => { for (let i = 0; i < 5; i += 1) await new Promise((resolve) => setImmediate(resolve)); };
+  const baseOk5 = (book) => json5({ ok: true, book, mode: "all", chapters: [], available: [], missing: [] });
+  // 直接渲染当前控制器（不依赖 renderLog 的末条来自哪个实例——本段会建多个实例）
+  const baseText5 = () => runRender(reactStub.createElement(panelRender.element.type, { controller, toggle: () => {} })).text;
+  try {
+    // ① 有书：进入基线页 → 自动选中第一本、请求带非空书名、成功态（旧实现的 400 不再出现）
+    req5.length = 0;
+    ls5.clear();
+    controller.set({ view: "baseline", loading: false, books: ["第一本", "第二本"], baselineBook: "", baseline: null, baselineBusy: false, baselineErr: false, baselineMode: "all", baselineSel: [], baselineMissing: [], revealMsg: "", revealErr: false }, { silent: true });
+    installFetch5(() => baseOk5("第一本"));
+    controller.openView("baseline"); // 用户真实路径：点进基线页
+    await settle5();
+    if (req5.length !== 1) fail("#5 有书时进入基线页应只发一次请求，实际 " + req5.length + " 次：" + JSON.stringify(req5.map((r) => r.url)));
+    if (req5[0].url !== "/api/dsh-novel-writer/baseline?book=" + encodeURIComponent("第一本")) fail("#5 应自动选第一本书再请求，实际 URL：" + req5[0].url);
+    const auto5 = controller.getSnapshot();
+    if (auto5.baselineBook !== "第一本") fail("#5 自动选书后 baselineBook 应为「第一本」，实际 " + JSON.stringify(auto5.baselineBook));
+    if (auto5.baselineErr !== false || auto5.revealErr !== false) fail("#5 自动选书路径不应报错（旧实现空 book 必然 400：baselineErr=" + String(auto5.baselineErr) + " / msg=" + String(auto5.revealMsg) + "）");
+    if (ls5.get("dsh.novelWriter.baselineBook.v1") !== "第一本") fail("#5 自动选中的书应写进本地持久化，实际 " + JSON.stringify([...ls5]));
+    if (!baseText5().includes("第一本")) fail("#5 自动选书后基线页应显示当前书「第一本」");
+    // 上次选的书已不在书库（改名/删除）：退回第一本，而不是对着不存在的书名继续要数据
+    req5.length = 0;
+    controller.set({ baselineBook: "旧书", baseline: null, baselineErr: false }, { silent: true });
+    controller.loadBaseline();
+    await settle5();
+    if (req5.length !== 1 || req5[0].url !== "/api/dsh-novel-writer/baseline?book=" + encodeURIComponent("第一本")) fail("#5 已失效的书名应退回第一本，实际 " + JSON.stringify(req5.map((r) => r.url)));
+    console.log("v7.3.3 #5①：有书 → 自动选第一本（书名非空、单次请求、成功态）| 失效书名退回第一本 ✓");
+
+    // ② 刷新保留：用户改选第二本 → 立刻落本地；新模块实例（=刷新）启动时恢复第二本，请求也用它
+    req5.length = 0;
+    installFetch5((url) => baseOk5(String(url).includes(encodeURIComponent("第二本")) ? "第二本" : "第一本"));
+    controller.setBaselineBook("第二本");
+    await settle5();
+    if (ls5.get("dsh.novelWriter.baselineBook.v1") !== "第二本") fail("#5 用户改选的书应立刻写进本地持久化，实际 " + JSON.stringify(ls5.get("dsh.novelWriter.baselineBook.v1")));
+    if (req5.length !== 1 || req5[0].url !== "/api/dsh-novel-writer/baseline?book=" + encodeURIComponent("第二本")) fail("#5 改选后应按新书请求，实际 " + JSON.stringify(req5.map((r) => r.url)));
+
+    const reloadSeats5 = [];
+    const reloadCtx5 = {
+      effect: () => () => {},
+      slots: {
+        inject: (name, fn) => { fn(); return () => {}; },
+        register: (opts, component) => { reloadSeats5.push({ opts, component }); return () => {}; },
+        specDynamic: () => ({}),
+        subscribe: () => () => {}
+      }
+    };
+    req5.length = 0;
+    installFetch5((url) => {
+      if (url.includes("/state")) return json5({ ok: true, books: ["第一本", "第二本"] });
+      return baseOk5("第二本");
+    });
+    loaded.factory(fakeRequire).apply(reloadCtx5);
+    const reloadMain5 = reloadSeats5.find((s) => s.opts.name === "main");
+    if (!reloadMain5) fail("#5 重开实例未注册主栏页面，无法验证 baselineBook 回读");
+    const reloadController5 = reloadMain5.opts.inject().controller;
+    for (let i = 0; i < 50 && reloadController5.getSnapshot().loading !== false; i += 1) await new Promise((r) => setImmediate(r));
+    const afterReload5 = reloadController5.getSnapshot();
+    if (afterReload5.baselineBook !== "第二本") fail("#5 刷新后应记得上次选的书「第二本」，实际 " + JSON.stringify(afterReload5.baselineBook));
+    req5.length = 0;
+    reloadController5.loadBaseline();
+    await settle5();
+    if (req5.length !== 1 || req5[0].url !== "/api/dsh-novel-writer/baseline?book=" + encodeURIComponent("第二本")) fail("#5 刷新后进入基线页应按记住的书请求，实际 " + JSON.stringify(req5.map((r) => r.url)));
+    console.log("v7.3.3 #5②：改选即落本地 | 刷新（新实例）后仍记得上次选的书、请求书名正确 ✓");
+
+    // ③ 真的没有书：一个请求都不发、不报错，页面显示「先选择一本书」空态
+    req5.length = 0;
+    ls5.clear();
+    controller.set({ view: "baseline", loading: false, books: [], baselineBook: "", baseline: null, baselineBusy: false, baselineErr: false, baselineMode: "all", baselineSel: [], baselineMissing: [], revealMsg: "", revealErr: false }, { silent: true });
+    installFetch5(() => baseOk5("不该被请求"));
+    controller.openView("baseline"); // 用户真实路径：点进基线页
+    await settle5();
+    if (req5.length !== 0) fail("#5 没有书时不得发任何基线请求（更不能发空 book），实际 " + JSON.stringify(req5.map((r) => r.url)));
+    const none5 = controller.getSnapshot();
+    if (none5.baselineErr !== false || none5.revealErr !== false) fail("#5 没有书不是错误：baselineErr/revealErr 必须为 false，实际 " + String(none5.baselineErr) + "/" + String(none5.revealErr));
+    const noneText5 = baseText5();
+    if (!noneText5.includes("先选择一本书")) fail("#5 确实没有书时应显示「先选择一本书」空态，实际：" + noneText5.slice(0, 160));
+    console.log("v7.3.3 #5③：确实没书 → 零请求、无错误、显示「先选择一本书」空态 ✓");
+
+    // ③-b 残留书名 + 书库确实为空（上次选的书后来被删了）：同样不发请求，并清掉本地记住的失效书名
+    req5.length = 0;
+    ls5.set("dsh.novelWriter.baselineBook.v1", "旧书");
+    controller.set({ view: "baseline", loading: false, books: [], baselineBook: "旧书", baseline: null, baselineBusy: false, baselineErr: false, baselineMode: "all", baselineSel: [], baselineMissing: [], revealMsg: "", revealErr: false }, { silent: true });
+    installFetch5(() => baseOk5("不该被请求"));
+    controller.openView("baseline");
+    await settle5();
+    if (req5.length !== 0) fail("#5 书库确实为空时不得拿残留书名发请求，实际 " + JSON.stringify(req5.map((r) => r.url)));
+    if (ls5.has("dsh.novelWriter.baselineBook.v1")) fail("#5 书库确实为空时应清掉本地记住的失效书名，实际 " + JSON.stringify(ls5.get("dsh.novelWriter.baselineBook.v1")));
+    const staleText5 = baseText5();
+    if (!staleText5.includes("先选择一本书")) fail("#5 残留书名 + 空书库应回到「先选择一本书」空态，实际：" + staleText5.slice(0, 160));
+    console.log("v7.3.3 #5③-b：残留书名 + 空书库 → 零请求、清掉无效偏好、回到空态 ✓");
+
+    // ④ 冷启动竞态：/state（书列表）还没回来就点进基线页 → 先不发请求（不把"还在路上"误判成"没有书"）；
+    //    落定且确实有书后自动补一次，且只补一次、书名非空。
+    const raceSeats5 = [];
+    const raceCtx5 = {
+      effect: () => () => {},
+      slots: {
+        inject: (name, fn) => { fn(); return () => {}; },
+        register: (opts, component) => { raceSeats5.push({ opts, component }); return () => {}; },
+        specDynamic: () => ({}),
+        subscribe: () => () => {}
+      }
+    };
+    let resolveState5 = null;
+    req5.length = 0;
+    globalThis.fetch = (url) => {
+      req5.push({ url: String(url) });
+      if (String(url).includes("/state")) {
+        return new Promise((resolve) => {
+          resolveState5 = () => resolve({ ok: true, status: 200, json: () => Promise.resolve({ ok: true, books: ["第一本"] }) });
+        });
+      }
+      if (String(url).includes("/update-check")) return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) });
+      return baseOk5("第一本");
+    };
+    loaded.factory(fakeRequire).apply(raceCtx5);
+    const raceMain5 = raceSeats5.find((s) => s.opts.name === "main");
+    if (!raceMain5) fail("#5 冷启动实例未注册主栏页面，无法验证书列表未落定时的行为");
+    const raceController5 = raceMain5.opts.inject().controller;
+    raceController5.openView("baseline");
+    await settle5();
+    if (req5.filter((r) => r.url.includes("/baseline")).length !== 0) fail("#5 书列表还没回来时不得先发基线请求（更不能发空 book）");
+    if (typeof resolveState5 !== "function") fail("#5 冷启动实例没有发出 /state 请求（前置条件不成立）");
+    resolveState5();
+    await settle5();
+    const raceBase5 = req5.filter((r) => r.url.includes("/baseline"));
+    if (raceBase5.length !== 1) fail("#5 书列表落定且有书后应自动补一次基线请求，实际 " + raceBase5.length + " 次：" + JSON.stringify(raceBase5.map((r) => r.url)));
+    if (raceBase5[0].url !== "/api/dsh-novel-writer/baseline?book=" + encodeURIComponent("第一本")) fail("#5 冷启动补发请求的书名应是非空第一本，实际：" + raceBase5[0].url);
+    console.log("v7.3.3 #5④：书列表未落定时不发请求 | 落定后自动补一次、书名非空 ✓");
+  } finally {
+    globalThis.fetch = savedFetch5;
+    if (savedLS5) Object.defineProperty(globalThis, "localStorage", savedLS5);
+    else { try { delete globalThis.localStorage; } catch { /* ignore */ } }
+    controller.set({ view: "main", books: [], baseline: null, baselineBook: "", baselineMode: "all", baselineSel: [], baselineMissing: [], baselineBusy: false, baselineErr: false, revealMsg: "", revealErr: false }, { silent: true });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// v7.3.3 修（#23）：死 CSS 类清理的回归钉子。
+// 断言的是「CSS 规则块」而不是裸字符串——清理说明注释里还留着类名做溯源，不能让它假红。
+// 同时钉住「删 .nwNoteDanger 时不得连带删掉在用的 .nwPlotErr」这条最容易踩的坑。
+// ---------------------------------------------------------------------------
+{
+  const { readFileSync } = await import("node:fs");
+  const cssOf = readFileSync(new URL("../lib/client.js", import.meta.url), "utf8");
+  const v6Of = readFileSync(new URL("../tools/client-src/V6-components.css", import.meta.url), "utf8");
+  const rulesIn = (text, name) => new RegExp("\\." + name + "\\s*[{,]").test(text);
+  for (const dead of ["nwHeroDesc", "nwDiagIssues", "nwDiagIssueList", "nwDiagIssue", "nwNoteDanger"]) {
+    if (rulesIn(cssOf, dead) || rulesIn(v6Of, dead)) fail("#23 零引用的死类 ." + dead + " 仍留在 CSS 里（源码与测试均零引用）");
+  }
+  for (const alive of ["nwPlotErr", "nwDiagAttentionList", "nwDiagAttentionItem", "nwNoteWarn", "nwNote"]) {
+    if (!rulesIn(cssOf, alive)) fail("#23 清理死类时误删了在用的 ." + alive + "（双向验证：只删死类）");
+  }
+  // .nwNoteDanger 原本与在用的 .nwPlotErr 共用一条规则块（V6 源）：删前者时绝不能连带删掉后者
+  if (!rulesIn(v6Of, "nwPlotErr")) fail("#23 V6 源里的 .nwPlotErr 被连带删掉了（它与 .nwNoteDanger 共用规则块）");
+  // 两处删除位置各留一行溯源说明（本仓库的改稿纪律：能查到为什么删）
+  if (!cssOf.includes("v7.3.3 修（#23）")) fail("#23 手写 CSS 段的删除处缺少 v7.3.3 修（#23）溯源说明");
+  if (!v6Of.includes("v7.3.3 修（#23）")) fail("#23 V6-components.css 的删除处缺少 v7.3.3 修（#23）溯源说明");
+  console.log("v7.3.3 #23：5 个死类已从 CSS 清除（含 V6 源）| .nwPlotErr / nwDiagAttention* / nwNote* 仍在 ✓");
+}
+
 // v7-C：只友好化展示，文件读取名不变；基线空态与唯一主按钮。
 const cViewSnapshot = Object.assign({}, controller.getSnapshot(), {
   view: "baseline", loading: false, baselineBook: "", baselineErr: true,

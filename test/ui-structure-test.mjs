@@ -62,14 +62,26 @@ const HOOK_BASELINE = 12;                       // 见头注释：实测命令�
 const EXPECTED_ALL_TOOLS = 22;                  // v6.2.0 起 18→19（novel_lexicon）；v6.6.0 起 19→20（novel_diagnose）；v6.8.0 起 20→21（novel_delete_book）；v7.3.0 起 21→22（novel_draft）
 const PRIMITIVES_REQ = 'require("@deepseek-ai/dsh-client-ui-primitives")';
 
-// 契约 §4.2：5.5.0 新增类必须全部保留定义（逐字来自契约第 58 行冻结清单，共 34 个）
+// 契约 §4.2：5.5.0 新增类必须全部保留定义（源自契约第 58 行冻结清单，原 34 个）。
+//
+// v7.3.3 契约变更（有据）：**14 个类**已从冻结清单移除（34 → 20）——它们是「方案 B」官网式重构后遗留的死样式，
+// 证据三条，缺一不可：
+//   ① JS 侧零 emit：剥掉注释与 CSS 段后，client.js（含生成区）里不再出现这些 className 字面量，
+//      也没有 "nw" + … 形式的动态拼接；
+//   ② 宿主侧零渲染：在 profile 的 node_modules/**（含 @linxin666/* 全家）与 DSH 应用包
+//      resources/app.asar 里搜索，一个都搜不到——原注释「A 已提供 …，这里不重复定义」是错的；
+//   ③ 只有被 .gitignore 排除的历史视觉快照（tools/visual/snapshot/*）还提到它们，那是版本记录不是消费者。
+// 所以这 13 条 CSS 规则永远不会命中任何元素。**冻结清单的意义是「防止活着的东西被误删」，
+// 不是「给死代码发免死牌」**；继续冻结只会让新加的 ui-audit R9（CSS→JS 方向）永远红着。
+// 移除的 14 个：nwSubCard、nwSignOk、nwSignBad、nwGutter、nwDashedNote、nwDividerRow、
+//              nwGroupName、nwFileRow、nwFileLabel、nwStatRow、nwStatName、nwChevron、nwNoteDim、nwWarnBanner
+// （另有 nwHero **本不在**清单里，但也同样被删：它连同 .nwBanner 派生规则整体无消费者。
+//   而 nwWarnBanner 只出现在两条复合选择器的附加位置，活类 nwNote/nwPlotMsg/nwNoteWarn 已保留。）
 const NEW_550_CLASSES = [
-  "nwBoxed", "nwSubCard", "nwChip", "nwTextInput", "nwTextArea", "nwSelect", "nwNote", "nwMuted",
-  "nwSignOk", "nwSignBad", "nwGutter", "nwDashedNote", "nwDividerRow", "nwSettingsCard",
-  "nwSettingsCardTitle", "nwReportPre", "nwGroupName", "nwFileRow", "nwFileLabel", "nwStatRow",
-  "nwStatName", "nwChevron", "nwFieldLabel", "nwWarnBanner", "nwNoteAccent", "nwNoteWarn",
-  "nwNoteOk", "nwNoteDim", "nwAccentStrong", "nwTolSign", "nwInputErr", "nwCreationInput",
-  "nwPlotBoxEmpty", "nwToolGroupHeadOpen"
+  "nwBoxed", "nwChip", "nwTextInput", "nwTextArea", "nwSelect", "nwNote", "nwMuted",
+  "nwSettingsCard", "nwSettingsCardTitle", "nwReportPre", "nwFieldLabel",
+  "nwNoteAccent", "nwNoteWarn", "nwNoteOk", "nwAccentStrong", "nwTolSign",
+  "nwInputErr", "nwCreationInput", "nwPlotBoxEmpty", "nwToolGroupHeadOpen"
 ];
 
 // 契约 §4.2 末条「测试命脉类」（client-test.mjs 断言直接依赖，E/F 双重保证存活）
@@ -353,7 +365,7 @@ head("【B】断言 2~6 · 不变量与守卫（预期：现在就全绿）");
   const defined = new Set();
   for (const m of css.matchAll(/\.([A-Za-z_][A-Za-z0-9_]*)/g)) defined.add(m[1]);
   const missing = NEW_550_CLASSES.filter((c) => !defined.has(c));
-  report("B", 3, "B3.1", "5.5.0 新增类在 css 模板段全部有定义（契约 §4.2 冻结清单 34 个）",
+  report("B", 3, "B3.1", "5.5.0 新增类在 css 模板段全部有定义（契约 §4.2 冻结清单，v7.3.3 起 20 个）",
     missing.length === 0,
     `${NEW_550_CLASSES.length - missing.length}/${NEW_550_CLASSES.length} 有定义` +
     (missing.length ? `，缺：${missing.join(", ")}` : ""));

@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_sentence_analysis — 句式模式分析｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_sentence_analysis 的实现细节：九类句式的分类优先级与切句规则、句式转移与模板统计、句长分布、情感词扫描与净化、情感曲线与 Valence 量化、风格指纹、节奏建议，以及缓存键、上限与降级路径。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_sentence_analysis","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-analysis.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_sentence_analysis — 句式模式分析｜dsh-novel-writer 技术文档","description":"novel_sentence_analysis 的实现细节：九类句式的分类优先级与切句规则、句式转移与模板统计、句长分布、情感词扫描与净化、情感曲线与 Valence 量化、风格指纹、节奏建议，以及缓存键、上限与降级路径。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-analysis.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.2","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_sentence_analysis, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_sentence_analysis — 句式模式分析｜dsh-novel-writer 技术文档","description":"novel_sentence_analysis 的实现细节：九类句式的分类优先级与切句规则、句式转移与模板统计、句长分布、情感词扫描与净化、情感曲线与 Valence 量化、风格指纹、节奏建议，以及缓存键、上限与降级路径。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-analysis.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.3","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_sentence_analysis, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -77,7 +77,7 @@
           <tr><th><code>brief</code></th><td>string</td><td><code>brief:true</code> 时的单句摘要</td></tr>
         </tbody>
       </table>
-      <p>渲染层按 <code>【句式分布】→【句式排列】→【句长与风格】→【主观情感】→【情感净化预警】→【情感量化】→【语义隐性情感】→【细节密度】→【节奏建议】→【风格指纹】→【AI 解读提示】</code> 分段输出纯文本；情感净化预警段仅在 <code>cleanDominant !== dominant</code> 时出现，语义隐性情感段仅在 <code>quantification.semanticImplicit.hits</code> 非空时出现。【情感量化】段的复杂度行为可读行，且 <code>complexity.reliable === false</code> 时会单独起一行写出 <code>reliabilityNote</code>（v6.6.5）。【细节密度】段首另有一行口径说明，标明当前口径（<code>v7.0.0</code>）与前后版本数值不可直接比较。</p>
+      <p>渲染层按 <code>【句式分布】→【句式排列】→【句长与风格】→【主观情感】→【情感净化预警】→【情感量化】→【语义隐性情感】→【细节密度】→【节奏建议】→【风格指纹】→【AI 解读提示】</code> 分段输出纯文本；情感净化预警段仅在 <code>cleanDominant !== dominant</code> 时出现，语义隐性情感段仅在 <code>quantification.semanticImplicit.hits</code> 非空时出现。【情感量化】段的复杂度行为可读行，且 <code>complexity.reliable === false</code> 时会单独起一行写出 <code>reliabilityNote</code>（v6.6.5）。【细节密度】段首另有一行口径说明，标明当前口径（<code>v7.1.0</code>）与前后版本数值不可直接比较。</p>
 
       <h2>计算原理</h2>
 
@@ -95,25 +95,30 @@ splitSentences(block)：
   遇 TERMINATORS = "。！？…!?" 切句；连续句末符并入同一句
   句末符后最多吞掉 2 个闭合引号（”」』’" '）</div>
       <p>九类句式的判定是<strong>固定优先级瀑布</strong>，先命中先归类，不做打分：</p>
-      <div class="formula">1. 引号内片段含心理标记           → psychology（内心独白，quoted 标记）
-2. 对话引号内片段（无心理标记）    → dialogue；书写/标牌/命名语境的引用文字不走此分支
-3. 全文命中心理标记                → psychology
-4. 命中反问强标记                  → rhetoric-question
-5. 以问号结尾                      → question
-6. 命中祈使硬词 / 祈使动词 + 吧    → imperative
-7. 命中感叹标记                    → exclamation
-8. 命中环境标记词表                → environment
-9. 以「…」结尾                     → ellipsis（省略留白）
-   否则                            → statement</div>
+      <div class="formula">1. 引号前的<strong>外部引导语</strong>优先（v6.3.0）：
+   心理引导语（心想/暗想/琢磨/回忆…） → psychology（内心独白）
+   说话引导语（说/问/答/喊/道…）   → dialogue（台词）
+   —— 引导语命中时，引号内的心理词不得翻案
+2. 本句没有新开引语、但上一句仍在引号内 → 沿用引语开头的判定（未闭合跨句）
+3. 无外部引导语时，引号内片段含心理标记 → psychology，否则 → dialogue
+   （书写/标牌/命名语境的引用文字不走引号分支）
+4. 全文命中心理标记                → psychology
+5. 命中反问强标记                  → rhetoric-question
+6. 以问号结尾                      → question
+7. 命中祈使硬词 / 祈使动词 + 吧    → imperative
+8. 命中感叹标记                    → exclamation
+9. 命中环境标记词表                → environment
+10. 以「…」结尾                     → ellipsis（省略留白）
+    否则                            → statement</div>
       <p>v6.1.0 支持“小心前面的陷阱！”等长宾语提醒，并排除“注意到”等同形普通用法。祈使排在感叹之前，是为了让「闭嘴！」这类句归祈使，感叹只留给不含祈使词的叹句。反问分支已剔除「哪里」这一最常见的真疑问词，并把「谁 + 情态」收紧为固定格式（谁知道 / 谁说的 / 谁能想到…），避免把「谁会来参加明天的会议？」判成反问。</p>
 
       <h3>2 · 采样上限与密度分母</h3>
       <div class="formula">逐段逐句累计；一旦 sentences.length ≥ maxSentences 即停止（前缀采样），truncated = true
-sampleText  = sentences.map(s =&gt; s.text).join("")     ← 全部密度类指标的样本
+sampleText  = sentences.map(s =&gt; s.text).join("\n")   ← 全部密度类指标的样本（v7.3.1 起以换行连接）
 sampleChars = sampleText.length
 totalChars  = 原文长度（顶层字段语义不变）
 guidance   += "\n⚠️ 文本超过采样上限(N 句),以上统计基于前缀采样(X/Y 字);建议分章分析。"  （仅 truncated 时）</div>
-      <p>情感密度、主观性指数、细节密度、Valence 量化全部以 <code>sampleText</code> 为样本，与句式计数同源。此前存在的两套口径（截断时用句子拼接、未截断时用含空行与标题行的原文）会让密度类指标仅因是否触顶而不可比，现已统一：代价是未截断路径下空行与段落分隔符不再进分母，密度读数略高于旧版本。</p>
+      <p>情感密度、主观性指数、细节密度、Valence 量化全部以 <code>sampleText</code> 为样本，与句式计数同源。此前存在的两套口径（截断时用句子拼接、未截断时用含空行与标题行的原文）会让密度类指标仅因是否触顶而不可比，现已统一：<code>sampleText</code> 由句子以 <code>\n</code> 连接（v7.3.1），原稿里的多空行、标题行与段落间多余分隔不再进分母，因此未截断路径的密度读数会略高于旧版本。</p>
 
       <h3>3 · 排列规律：转移、模板、段落结构</h3>
       <div class="formula">transitions：对 i ≥ 1 统计 (type[i-1] → type[i])；按 count 降序、from/to 字典序，取前 12
@@ -123,7 +128,7 @@ paragraphs ：段首 / 段尾句式各按次数降序
              psychologyOnly= 全段均为 psychology
              mixed         = 段落内句式种类 &gt; 1
              narrationOnly = 其余单一句式段（含全陈述段）
-             exchanges     = 段内相邻两句均为 dialogue 的次数
+             exchanges     = 段内相邻两句均为 dialogue 的次数 + 相邻非空段之间的 dialogue→dialogue 回合数
 chapterPatterns：按章识别句式码后做游程压缩（S×8 ENV×2 …），最多 48 段，超出追加「…(共N段)」</div>
       <p>四类段落计数互斥且穷尽，<code>dialogueOnly + psychologyOnly + mixed + narrationOnly === paragraphs.total</code> 恒成立——早先缺少 <code>narrationOnly</code> 桶时，全环境句段与全疑问句段会静默漏计。</p>
 
@@ -155,8 +160,10 @@ distribution 桶 = 1-10 / 11-24 / 25-40 / 41+</div>
   ② 副词加权 adverbWeight(text, idx)
      窗口 = 当前小句（遇标点截断），再往前最多 6 字
      命中强副词 13 项 → ×1.5；命中弱副词 8 项 → ×0.6；其余 ×1
-     单字副词（太 / 略 / 挺）必须紧邻情感词，且左邻 2 字不在 19 项同形非副词搭配内（太阳/策略/省略/挺拔…）</div>
-      <p>「最长匹配 + 区间消费」消除了嵌套双计：「悲痛欲绝」不再被拆成「悲痛」＋「悲痛欲绝」两分。DUTIR 兜底同样按最长优先扫描，但将上限由 4 字提到 8 字（词表最长条目 7 字），使 853 条 ≥5 字的成语级情感词恢复可命中；v6.1.0 起兜底词与主词表共享已消费区间，避免“无比幸福”中的“幸福”再次计分。兜底词不做强弱分级，只进 <code>scores</code> 不进 <code>cleanScores</code>。</p>
+     单字副词（太 / 略 / 挺）必须紧邻情感词，且同时检查副词<strong>前、后</strong>两个 2 字窗口：
+        [X][副词]（老太/太太/坚挺）与 [副词][X]（太阳/太子/挺拔）都命中即不算副词；
+        窗口落在 19 项同形非副词搭配内（太阳/策略/省略/挺拔…）</div>
+      <p>「最长匹配 + 区间消费」消除了嵌套双计：「悲痛欲绝」不再被拆成「悲痛」＋「悲痛欲绝」两分。DUTIR 兜底同样按最长优先扫描，但将上限由 4 字提到 8 字（词表最长条目 7 字）：词表里 ≥5 字的条目共 853 条，上限 4→8 真正<strong>新可命中 417 条</strong>（另 3 条因上限 8 仍不可命中）；v6.1.0 起兜底词与主词表共享已消费区间，避免“无比幸福”中的“幸福”再次计分。兜底词不做强弱分级，只进 <code>scores</code> 不进 <code>cleanScores</code>。</p>
       <p><strong>v6.9.5：DUTIR 的「恶」类不再计入五类主情绪。</strong>大连理工词典的「恶」大类有 <strong>10,262 个词</strong>（占全表 37%，含憎恶 / 烦闷 / 羞愧 / 嫉妒 / 贬义评价如无聊 / 尴尬 / 愚蠢 / 虚伪 / 啰嗦），旧映射是 <code>恶: "anger"</code>，于是「他很无聊，场面尴尬」会被算成 4 分愤怒、「表面主导情绪」直接变成 anger，并连带推高氛围轴的暗黑 / 热血评分。现在「恶」<strong>不映射</strong>到 joy/anger/sorrow/fear/surprise，只由 <code>VALENCE_WORDS</code> 承担负向效价；同时强情绪词表补入狂喜 / 欢天喜地 / 怒发冲冠 / 心灰意冷 / 恐慌，「脸色铁青」「怒气」补进效价表。</p>
 
       <h3>6 · 情绪污染源与置信度</h3>
@@ -165,6 +172,7 @@ density = 命中次数 / max(sampleChars, 1) × 1000
 polluted = r18Density ≥ 1.5 ‖ battleDensity ≥ 3 ‖ horrorDensity ≥ 3
 
 confidence = polluted ? "low"
+           : totalEmotion === 0 ? "low"          ← v4.3.0：零命中 = 无数据，不是「中等置信度的中性」
            : cleanDominant === "neutral" ? "medium"
            : cleanDominant !== dominant ? "medium"
            : "high"</div>

@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_summary — 章节摘要｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_summary 的实现细节：章号键归一 normalizeChapterKey 的规则与 v4.3.0 修正、摘要条目的白名单清洗、add 与 update 的覆盖语义、落盘结构与排序口径。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_summary","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-summary.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_summary — 章节摘要｜dsh-novel-writer 技术文档","description":"novel_summary 的实现细节：章号键归一 normalizeChapterKey 的规则与 v4.3.0 修正、摘要条目的白名单清洗、add 与 update 的覆盖语义、落盘结构与排序口径。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-summary.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.2","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_summary, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_summary — 章节摘要｜dsh-novel-writer 技术文档","description":"novel_summary 的实现细节：章号键归一 normalizeChapterKey 的规则与 v4.3.0 修正、摘要条目的白名单清洗、add 与 update 的覆盖语义、落盘结构与排序口径。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-summary.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.3","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_summary, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -134,7 +134,7 @@
         <li>全部动作先经 <code>withFileTx(summariesFile(root, book), …)</code> 串行化同一文件的读改写，不同书互不阻塞。</li>
         <li>读盘后<strong>立即</strong>套用 <code>cleanSummaryEntry</code> 白名单并过滤空值，后续的 <code>findIndex</code> 与排序只面对结构完整的条目。</li>
         <li><code>list</code> / <code>get</code> 不写盘。<code>add</code> / <code>update</code> / <code>delete</code> 在变更后 <code>mkdir</code> 目标目录、<code>atomicWriteJson</code> 整文件覆盖，并把书库根记入全局状态。</li>
-        <li>收尾块（<code>list</code> 与 <code>delete</code> 走此路径）在返回前按章号数值排序：<code>parseChapterNumber(chapter) ?? 999</code> 升序，同号再按字符串字典序。因此「第02章」排在「第10章」之前，无法解析章号的条目（含标题式键）统一沉到末尾。<code>get</code> / <code>add</code> / <code>update</code> 在排序之前就已返回（结果至多一条），不受该排序影响。</li>
+        <li>收尾块（<code>list</code> 与 <code>delete</code> 走此路径）在返回前按章号数值排序：<code>parseChapterNumber(chapter) ?? Number.MAX_SAFE_INTEGER</code> 升序，同号再按字符串字典序。因此「第02章」排在「第10章」之前，无法解析章号的条目（含标题式键）统一沉到末尾。<code>get</code> / <code>add</code> / <code>update</code> 在排序之前就已返回（结果至多一条），不受该排序影响。<strong>v7.0.1 起兜底值由 <code>999</code> 改为 <code>Number.MAX_SAFE_INTEGER</code></strong>——旧值会把「番外 / 序章」这类无章号摘要夹在第 999 章与第 1000 章之间（千章以上长篇排序错乱）。</li>
       </ul>
 
       <h3>add 与 update 是同一分支</h3>

@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="技术文档总览｜dsh-novel-writer">
 <meta name="twitter:description" content="dsh-novel-writer 的 22 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","name":"技术文档总览｜dsh-novel-writer","description":"dsh-novel-writer 的 22 个工具实现细节：参数契约、计算原理、约束边界与源码位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/index.html","inLanguage":"zh-CN","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.2","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer","url":"https://siweina.github.io/dsh-novel-writer/"}}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","name":"技术文档总览｜dsh-novel-writer","description":"dsh-novel-writer 的 22 个工具实现细节：参数契约、计算原理、约束边界与源码位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/index.html","inLanguage":"zh-CN","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.3","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer","url":"https://siweina.github.io/dsh-novel-writer/"}}</script>
 </head>
 <body class="docs">
 
@@ -33,7 +33,7 @@
   <main class="docs__main">
     <article class="doc">
       <h1>技术文档</h1>
-      <p class="doc__version">当前版本 <code>7.3.2</code> · 更新记录见 <a href="https://github.com/siweina/dsh-novel-writer/blob/main/CHANGELOG.md">CHANGELOG</a>（下方「版本说明」）</p>
+      <p class="doc__version">当前版本 <code>7.3.3</code> · 更新记录见 <a href="https://github.com/siweina/dsh-novel-writer/blob/main/CHANGELOG.md">CHANGELOG</a>（下方「版本说明」）</p>
       <p class="doc__lead">
         <code>dsh-novel-writer</code> 的 22 个工具全部在本地运行，<strong>不使用在线大模型</strong>：所有指标由规则统计与本地 ONNX 推理得出。本组页面面向二次开发与集成方，逐工具说明参数契约、计算原理、约束边界与源码位置。
       </p>
@@ -55,6 +55,20 @@
       <ul class="doc__releases">
         <li>
           <details open>
+            <summary><code>7.3.3</code> · 2026-11-13 <span class="doc__rel-sum">按外部源码审计报告修完 34 条 + 它漏掉的 16 条：GET 请求能删书、删书路由跟随局域网开关、POST /state 写错书库根、设定表读失败仍拿默认词表出待办、取消被记成数据故障、裸台词行号退化成 0、scanSlop 不归一换行（工具数仍 22）</span></summary>
+            <p>这一版来自一份外部<b>源码审计报告</b>（36 条）。它的准确度比上一份高：<b>34 条有真问题</b>，
+            只有 2 条我判「影响不成立」。最该先看的是三条数据安全：<b><code>GET</code> 请求真的会删书</b>
+            （<code>?action=apply</code> 移进回收站、<code>?action=purge</code> 不可恢复，而文档写着「破坏性动作一律走 POST」）；
+            <b>删书路由跟随 <code>allowLanState</code></b>（文档说「仅支持回环」，实际一开局域网访问，
+            不带 <code>Origin</code> 头的脚本就能删）；<b><code>POST /state</code> 用了过期的书库根</b>
+            （另两处都走 <code>resolveUiRootInfo</code>，唯独它自己直取 <code>lastRoot</code>，实测把创作资料写进了过期路径）。
+            另有一批「静默失效」：设定表读失败后仍用默认词表产出禁用词待办、最小宿主下插件加载中断（22 个工具已注册、
+            提示词分区一条没注册）、三处把「用户取消」当成读取失败并写进事件日志、词表改名报假成功还暗地停用条目。
+            语义写反的典型是开写包对「后文才埋的伏笔」一处说「本章尚未埋下、不要透露」、另一处渲染成「本章将首次埋下」。
+            <b>数量口径有两处变化，跨版本不可直接比较</b>：<code>scanSlop</code> 现在归一换行（纯 CR 不再让整章变 1 行），
+            句末 ASCII <code>...</code> 从此计入未完句（<code>gapIndex</code> 会上升）。
+            同时把新加的门禁补齐——<code>ui-audit</code> 的 R9 此前自称「双向」其实缺了 <code>CSS→JS</code> 方向，
+            补上后立刻又抓出 15 个死 CSS 类。</p>
             <summary><code>7.3.2</code> · 2026-11-12 <span class="doc__rel-sum">修 7.3.1 自己引入的 4 个回归（开写包假降级 / 重试流泄漏 / 纯本地阈值存不进 / 回收站加载态），清 22 条残留，并更正上版日志里 3 处不实说法（工具数仍 22）</span></summary>
             <p>只修 bug。上一版修完 79 条之后，独立复审发现<b>修复本身基本属实</b>（75/83 真修好、7 条刻意保留且依据充分），
             但<b>我在修的过程中新引入了 4 个问题</b>，最重的一条是：修「读失败被谎报成未初始化」时把披露条件写反了

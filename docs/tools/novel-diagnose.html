@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_diagnose — 诊断报告｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_diagnose 的实现细节：本地事件日志的字段白名单与两级隐私设计、错误文本一律归类成固定 code、五处体检（书库根 / 书库内容 / 数据目录损坏 / 语义引擎惰性探测 / 开关快照）、「工具 × 书名」反复失败聚合、512 KB 轮转与落点、调用审计的注册层包装、诊断路由与面板入口，以及读取预算与「不减少 bug、只加快定位」的边界。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_diagnose","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-diagnose.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_diagnose — 诊断报告｜dsh-novel-writer 技术文档","description":"novel_diagnose 的实现细节：本地事件日志的字段白名单与两级隐私设计、错误文本一律归类成固定 code、五处体检（书库根 / 书库内容 / 数据目录损坏 / 语义引擎惰性探测 / 开关快照）、「工具 × 书名」反复失败聚合、512 KB 轮转与落点、调用审计的注册层包装、诊断路由与面板入口，以及读取预算与「不减少 bug、只加快定位」的边界。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-diagnose.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.2","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_diagnose, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_diagnose — 诊断报告｜dsh-novel-writer 技术文档","description":"novel_diagnose 的实现细节：本地事件日志的字段白名单与两级隐私设计、错误文本一律归类成固定 code、五处体检（书库根 / 书库内容 / 数据目录损坏 / 语义引擎惰性探测 / 开关快照）、「工具 × 书名」反复失败聚合、512 KB 轮转与落点、调用审计的注册层包装、诊断路由与面板入口，以及读取预算与「不减少 bug、只加快定位」的边界。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-diagnose.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.3","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_diagnose, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -49,7 +49,7 @@
           <tr><th><code>book</code></th><td>string</td><td>否</td><td>只看这本书相关的事件。取值先 <code>trim</code>，空串即「不过滤」；过滤是<strong>严格相等</strong>（事件里的 <code>book</code> 必须与它逐字符相同），所以末尾多一个空格就什么都匹配不到。</td></tr>
           <tr><th><code>days</code></th><td>integer</td><td>否</td><td>统计窗口（天）。<strong>默认 7、上限 90</strong>；非数字 / <code>0</code> / 负数一律回退 7，小数被 <code>Math.trunc</code> 截断（<code>days: 7.9</code> ＝ 7 天）。</td></tr>
           <tr><th><code>action</code></th><td>string</td><td>否</td><td><code>report</code>（默认）= 生成报告；<code>events</code> = 额外附带事件明细（≤ 200 条）；<code>clear</code> = 清空本地事件日志。<strong>插件内部只区分 <code>clear</code> 与 <code>events</code>，其余取值一律按 <code>report</code> 行为处理</strong>（<code>action</code> 字段仍原样回传）；三个合法取值由参数 schema 的 <code>enum</code> 在宿主侧约束。</td></tr>
-          <tr><th><code>root</code></th><td>string</td><td>否</td><td>章节库根目录（含 <code>novels</code> 子目录）。省略时按 <code>config.root</code> → 会话工作目录回退（见「根解析与来源披露」）。</td></tr>
+          <tr><th><code>root</code></th><td>string</td><td>否</td><td>章节库根目录（含 <code>novels</code> 子目录）。省略时按 <code>config.root</code> → <code>lastRoot</code>（宿主记住的书库根）→ 会话工作目录回退（见「根解析与来源披露」）。</td></tr>
         </tbody>
       </table>
       <p>参数 schema 声明 <code>additionalProperties: false</code>，即只接受以上四项。本工具的 <code>execute</code> <strong>不调用</strong> <code>assertToolEnabled</code>——诊断必须在「把一堆工具都关掉了」的时候仍然能用（否则最先需要它的人恰好是被自己关掉的人）。</p>
@@ -66,31 +66,34 @@
           <tr><th><code>root.books[]</code></th><td>array</td><td>每部作品一行 <code>{ name, chapters, chars, badNames, shortChapters, unreadable }</code>；按字数降序、<strong>最多 40 部</strong>（<code>booksListed</code> 为实际列出数）</td></tr>
           <tr><th><code>dataDir</code></th><td>object</td><td>数据目录体检：<code>path</code> / <code>exists</code> / <code>bytes</code> / <code>files</code> / <code>subdirs[]</code>（≤12）/ <code>expectedSubdirs</code> / <code>presentSubdirs</code> / <code>missingSubdirs[]</code> / <code>checkedJson</code> / <code>nonJsonFiles</code> / <code>compressedJson</code> / <code>compressedSkipped</code> / <code>corruptTotal</code> + <code>corruptFiles[]</code> / <code>emptyTotal</code> + <code>emptyFiles[]</code> / <code>oversizedTotal</code> + <code>oversizedFiles[]</code> / <code>unreadableTotal</code> + <code>unreadableFiles[]</code></td></tr>
           <tr><th><code>dataDir.corruptFiles[]</code></th><td>array</td><td><code>{ file, rel, subdir, bytes, error }</code>；<code>error</code> 是<strong>固定文案</strong>（「无法解析为合法 JSON」/「zstd 缓存解压失败（写入被打断或文件被改坏）」/「zstd 解压后不是合法 JSON」），<strong>绝不含原始异常文本</strong>；每类清单最多 12 条，只给计数之外的明细</td></tr>
-          <tr><th><code>log</code></th><td>object</td><td><code>{ dir, bytes, files, kinds, exists, selfCallExcluded }</code>：日志目录、现有 <code>events*.jsonl</code> 合计字节数、文件份数、已定义的事件类型数（当前 9）、是否已有日志，以及下面那条契约声明</td></tr>
+          <tr><th><code>log</code></th><td>object</td><td><code>{ dir, bytes, files, kinds, exists, selfCallExcluded }</code>：日志目录、现有 <code>events*.jsonl</code> 合计字节数、文件份数、已定义的事件类型数（当前 10，含 v6.9.0 新增的 <code>raw</code>）、是否已有日志，以及下面那条契约声明</td></tr>
           <tr><th><code>log.selfCallExcluded</code></th><td>boolean</td><td>恒为 <code>true</code>：<strong>合约声明</strong>——本报告的读数取自<strong>本次诊断自身那条审计记录落盘之前</strong>（审计包装要等 <code>execute</code> 返回后才写），因此比事后调 <code>logStats()</code> 少恰好一条事件。想「与磁盘现算比对」的一方必须同样在调用<strong>之前</strong>读盘、或把 <code>novel_diagnose</code> 那条减掉，否则会差出恰好一条事件的计数与字节数——看起来像 bug，其实是口径</td></tr>
           <tr><th><code>calls</code></th><td>object</td><td><code>{ total, ok, degraded, failed }</code>，只统计 <code>kind: "tool_call"</code> 的事件</td></tr>
           <tr><th><code>byTool</code></th><td>array</td><td><code>{ tool, total, ok, degraded, failed, msTotal, msAvg }</code>；按 <code>total</code> 降序、<strong>前 12 个</strong></td></tr>
           <tr><th><code>byKind</code></th><td>array</td><td><code>{ kind, count, codes[] }</code>，按计数降序；<code>codes</code> 是该类型下的 code 分布（≤4 项）——<strong>「12 次 cache 事件」不可行动，「12 次都是同一个 code」才能定位到具体文件</strong></td></tr>
           <tr><th><code>topCodes</code></th><td>array</td><td>高频失败类型 <code>{ code, count }</code>，按计数降序、<strong>前 8 个</strong>；无 code 的失败会聚到空串上</td></tr>
-          <tr><th><code>problems</code></th><td>array</td><td><strong>「工具 × 书名」反复出问题的组合</strong>：<code>{ tool, book, failed, degraded, codes, chapters }</code>（<code>codes</code> / <code>chapters</code> 各截前 4 项）；按「失败 + 降级」次数降序、<strong>前 10 组</strong></td></tr>
+          <tr><th><code>problems</code></th><td>array</td><td><strong>「工具 × 书名」反复出问题的组合</strong>：<code>{ tool, book, system, failed, degraded, codes, chapters }</code>（<code>system</code> 表示不带书名的系统级调用；<code>codes</code> / <code>chapters</code> 各截前 4 项）；按「失败 + 降级」次数降序、<strong>前 10 组</strong></td></tr>
           <tr><th><code>issues</code></th><td>array</td><td>问题与建议，元素 <code>{ level, title, detail, suggestion }</code>；<code>level</code> ∈ <code>error</code> / <code>warn</code> / <code>info</code>（报告里渲染为「⚠ 阻断 / △ 注意 / · 提示」），<strong>已按级别排序</strong>（error → warn → info，同级保持发现顺序）。元素 schema 是 <code>additionalProperties:false</code>，只允许这四个键</td></tr>
           <tr><th><code>checklist</code></th><td>array</td><td>本次覆盖与未覆盖（<strong>9 项</strong>），元素 <code>{ item, state, note }</code>；<code>state</code> ∈ <code>checked</code> / <code>warn</code> / <code>skipped</code> / <code>off</code></td></tr>
-          <tr><th><code>tools</code></th><td>object</td><td><strong>能力 + 开关快照</strong>：<code>registered</code> / <code>enabled</code> / <code>disabled[]</code> / <code>disabledCount</code> / <code>features</code>（功能开关生效值）/ <code>disabledFeatures[]</code> / <code>master{enabled,autoAnalyze,source}</code> / <code>prompt{systemPromptMode,promptScene,leanWorkflow}</code> / <code>styleTolerance</code> / <code>stateFile{path,exists}</code> / <code>engine{…}</code></td></tr>
-          <tr><th><code>tools.engine</code></th><td>object</td><td><code>{ modelDir, model, modelPresent, loaded, errorCode, errorLabel, lastCacheErrorCode, lastCacheErrorLabel, events{count,codes[]} }</code></td></tr>
+          <tr><th><code>tools</code></th><td>object</td><td><strong>能力 + 开关快照</strong>：<code>registered</code> / <code>enabled</code> / <code>disabled[]</code> / <code>disabledCount</code> / <code>features</code>（功能开关生效值）/ <code>disabledFeatures[]</code> / <code>optionalOffFeatures[]</code>（按设计默认关闭、当前也确实没开的功能，如 <code>rawWriting</code>，不进 issues）/ <code>master{enabled,autoAnalyze,source}</code> / <code>prompt{systemPromptMode,promptScene,leanWorkflow}</code> / <code>styleTolerance</code> / <code>stateFile{path,exists,readable}</code> / <code>engine{…}</code></td></tr>
+          <tr><th><code>tools.engine</code></th><td>object</td><td><code>{ modelDir, model, modelPresent, loaded, errorCode, errorLabel, lastCacheErrorCode, lastCacheErrorLabel, events{count,system,codes[]} }</code>；<code>events.system</code> 是不带书名的系统级 <code>engine</code> 事件条数（按书诊断时也保留）</td></tr>
           <tr><th><code>events</code></th><td>array</td><td>仅 <code>action=events</code> 时出现：事件明细（≤ 200 条，<strong>仍为分享层</strong>，自由文本已剔除）</td></tr>
           <tr><th><code>book</code></th><td>string</td><td>仅在传了非空 <code>book</code> 时出现</td></tr>
         </tbody>
       </table>
-      <p>渲染层（<code>output.render</code>）返回 <code>[{ type: "text", text: value.report }]</code>：报告是一条纯文本，首行固定为 <code>【诊断报告】生成于 &lt;ISO 时间&gt;</code>，之后的小节号由渲染器<strong>动态分配</strong>，顺序固定为：一、书库根 / 二、书库内容体检（只统计，不读正文）/ 三、插件数据目录 / 四、语义引擎（本地 embedding，惰性加载）/ 五、开关与状态 / 六、近 N 天调用 / 七、问题与建议 / 八、<strong>事件明细</strong>（<strong>仅 <code>action=events</code> 且有明细时才有这一节</strong>，只渲染前 40 行）/ 九、本次覆盖与未覆盖。因此「本次覆盖与未覆盖」在<strong>没有事件明细时是第八节、有明细时是第九节</strong>——按节号解析的读取方请注意这一点（按标题解析则不受影响）。末尾固定附一句「本报告只含<strong>元数据</strong>……日志从设计上就不记录正文」——<strong>该句的后半截属旧口径残留</strong>：报告本身确实不含正文（分享层已剔除自由文本），但「日志从设计上就不记录正文」对<strong>本地层</strong>不成立（本地层至多保留一句 ≤160 字，见「约束与边界」一节的实测复现）。这句固定文案在 <code>lib/diagnose.js</code> 的 <code>formatDiagnosis</code> 里，属本轮<strong>未改动</strong>的实现文件，留待下版与代码一起改；此处文档口径已改准。</p>
+      <p>渲染层（<code>output.render</code>）返回 <code>[{ type: "text", text: value.report }]</code>：报告是一条纯文本，首行固定为 <code>【诊断报告】生成于 &lt;ISO 时间&gt;</code>，之后的小节号由渲染器<strong>动态分配</strong>，顺序固定为：一、书库根 / 二、书库内容体检（只统计，不读正文）/ 三、插件数据目录 / 四、语义引擎（本地 embedding，惰性加载）/ 五、开关与状态 / 六、近 N 天调用 / 七、问题与建议 / 八、<strong>事件明细</strong>（<strong>仅 <code>action=events</code> 且有明细时才有这一节</strong>，只渲染前 40 行）/ 九、本次覆盖与未覆盖。因此「本次覆盖与未覆盖」在<strong>没有事件明细时是第八节、有明细时是第九节</strong>——按节号解析的读取方请注意这一点（按标题解析则不受影响）。末尾固定附<strong>两段</strong>定稿表述：第一段说明「本报告只含<strong>元数据</strong>（工具名/书名/章号/状态/耗时/计数），不含任何正文——报告走分享层，自由文本已整体剔除，可安全贴出」；第二段单独交代<strong>本地层口径</strong>——「本机日志文件（<code>logs/events.jsonl</code>）是另一层：它的自由文本字段（错误消息等）经收敛后<strong>至多保留一句（≤160 字）</strong>，因此本机日志里可能出现被错误消息回显的输入片段；该文件<strong>不出本机</strong>。报 bug 请用本报告或面板的「复制诊断包」，<strong>不要</strong>直接附上它」。旧稿那句「日志从设计上就不记录正文」已随实现一起替换，此处与 <code>lib/diagnose.js</code> 的 <code>formatDiagnosis</code> 末尾文案一致。</p>
 
       <h2>行为与实现</h2>
 
       <h3>1 · 根解析与来源披露</h3>
-      <div class="formula">root = resolveRoot(config, args, exec)          // 与其他工具同一实现
-root.source（三选一）：
+      <div class="formula">root = 显式 root → config.root → lastRoot → cwd（与面板共用 resolveUiRootInfo）
+root.source：
   调用参数 root 非空          → "调用参数 root"
   否则 config.root 非空        → "插件配置 config.root"
-  否则                        → "cwd（当前工作目录兜底）"
+  否则 UI 裁决给出 lastRoot    → "lastRoot（宿主记住的书库根）"
+  否则 UI 裁决给出 cwd         → "cwd（会话工作目录兜底）"
+  UI 裁决的 root 非空但来源不明 → String(source || "未知")
+  UI 裁决也取不到 root         → 退回 resolveRoot，source = "cwd（当前工作目录兜底）"
 
 root.looksLikeLibraryRoot = 根下存在 novels/ 或 .novel-writer/
 root.lastRoot                 = state.json 里记住的上一次写操作根（"" = 无）
@@ -126,7 +129,8 @@ noteRoot（写操作之后记 lastRoot）另有三类留痕：
 
       <h3>3 · 插件数据目录体检（含损坏检测）</h3>
       <div class="formula">dir = novelDataDir(root) = &lt;root&gt;/.novel-writer
-应有子目录（9 个）：analysis audits baseline embedding lexicon plots settings style-reports summaries
+应有子目录（10 个）：analysis audits baseline drafts embedding lexicon plots settings style-reports summaries
+  （v7.3.0 起把 drafts 也纳入统计：实时聊天写作的草稿镜像）
   → presentSubdirs / missingSubdirs（用到时才建，缺失属正常，报告会说明这一点）
 目录根下的散落文件也扫一眼（正常应为空）
 
@@ -180,6 +184,7 @@ noteRoot（写操作之后记 lastRoot）另有三类留痕：
   note detail suggestion source phase version plugin
   contentChars textChars srcChars filesCount chaptersCount termsCount   ← 参数摘要的长度/计数派生键
   truncated                                                            ← 超长事件被裁过的显式标记
+  failures trashId                                                      ← 按书删除的失败计数与回收站条目 id
 显式黑名单（纵深防御，即使在白名单里也丢）：
   text content body excerpt raw paragraph paragraphs anchor anchors
   skeleton skeletons summary brief report prompt term terms entries
@@ -207,9 +212,9 @@ noteRoot（写操作之后记 lastRoot）另有三类留痕：
       </div>
 
       <h3>7 · 事件类型与轮转</h3>
-      <div class="formula">kinds（9 类，诊断按 kind 聚合；其中 degraded 目前由 tool_call 的 status 表达，独立事件暂未使用）：
+      <div class="formula">kinds（10 类，诊断按 kind 聚合；其中 degraded 目前由 tool_call 的 status 表达，独立事件暂未使用）：
   tool_call  root_resolve  silent_skip  degraded  cache
-  engine     config        panel        internal
+  engine     config        panel        raw       internal
 轮转：单文件 512 KB（LOG_MAX_BYTES）→ events.jsonl → events.1.jsonl → … → events.3.jsonl（删除最旧）；<b>合计上限 = 单文件 × (1 + 保留份数) ≈ 2 MB</b><br>
         <b>「接近轮转上限」的触发线（v7.3.1 修正）</b>：改为<b>合计上限的 75%</b>（≈1.5 MB）。旧版写死 300 KB 触发、且报告里把上限算成「2 KB」（<code>Math.round((512*3)/1024)</code>——512 本已是 KB，再除 1024 差了三个数量级），两个数字互相矛盾；现在文案直接给出「单文件 512 KB × 最多 4 个文件 ≈ 2048 KB」，不用读者自己换算
   保留最近 3 份历史（LOG_KEEP_FILES），加当前文件共 4 份，总量有界
@@ -267,7 +272,7 @@ problems（工具 × 书名）：仅 failed / degraded 的事件参与；
           <tr><td>窗口内有失败调用</td><td><code>warn</code></td></tr>
           <tr><td>窗口内有降级调用</td><td><code>info</code></td></tr>
           <tr><td>数据目录不存在</td><td><code>info</code></td></tr>
-          <tr><td>日志合计 &gt; 300 KB（接近轮转上限）</td><td><code>info</code></td></tr>
+          <tr><td>日志合计 &gt; 轮转合计上限的 75%（≈1536 KB / 1.5 MB；上限 = 512 KB × 4 ≈ 2048 KB）</td><td><code>info</code></td></tr>
           <tr><td>传了 <code>book</code> 但窗口内没有该书事件</td><td><code>info</code></td></tr>
           <tr><th rowspan="5">语义引擎</th><td>功能总门控 <code>features.semanticEmbedding=false</code></td><td><code>info</code></td></tr>
           <tr><td><code>modelPresent === false</code>（模型文件不在位）</td><td><code>warn</code></td></tr>
@@ -297,10 +302,10 @@ problems（工具 × 书名）：仅 failed / degraded 的事件参与；
         <thead><tr><th>清单项</th><th>state 取值</th><th>说明</th></tr></thead>
         <tbody>
           <tr><th>书库根与目录结构</th><td><code>checked</code> / <code>warn</code></td><td>根下存在 <code>novels/</code> 或 <code>.novel-writer/</code> 即 checked，否则 warn 并注明「既无 novels/ 也无 .novel-writer/」</td></tr>
-          <tr><th>书库内容体检（书数/章数/字数/命名）</th><td>恒 <code>checked</code></td><td>只统计书数、章数、字数、命名异常与过短章（含本次章数）；<strong>不读正文内容</strong>，读文件只取 <code>length</code>；读取预算用尽时在 note 里说明</td></tr>
-          <tr><th>插件数据目录体检</th><td><code>checked</code> / <code>skipped</code></td><td>存在则 checked：体积 / 文件数 + JSON 可解析性（含 zstd 压缩缓存解压校验）+ 0 字节 / 超大文件；不存在则 skipped</td></tr>
-          <tr><th>语义引擎（本地 embedding）</th><td>恒 <code>checked</code></td><td>只做状态探测（模型文件是否在位、进程内是否已加载、上次错误归类）——<strong>不触发模型加载</strong>，所以「未加载」不等于坏</td></tr>
-          <tr><th>开关与状态快照</th><td>恒 <code>checked</code></td><td>有 <code>state.json</code> 则读出被关的工具 / 功能、总开关、风格容差；没有则说明全部走默认值（首次使用属正常，不是异常）</td></tr>
+          <tr><th>书库内容体检（书数/章数/字数/命名）</th><td><code>checked</code> / <code>warn</code></td><td>只统计书数、章数、字数、命名异常与过短章（含本次章数）；<strong>不读正文内容</strong>，读文件只取 <code>length</code>；读取预算用尽时在 note 里说明。作品清单读取失败、书目录或章节读不出时转 <code>warn</code> 并写明数量</td></tr>
+          <tr><th>插件数据目录体检</th><td><code>checked</code> / <code>warn</code> / <code>skipped</code></td><td>存在则 checked：体积 / 文件数 + JSON 可解析性（含 zstd 压缩缓存解压校验）+ 0 字节 / 超大文件；有损坏 / 读不出 / 0 字节文件时转 <code>warn</code> 并写明数量；目录不存在则 skipped</td></tr>
+          <tr><th>语义引擎（本地 embedding）</th><td><code>checked</code> / <code>warn</code></td><td>只做状态探测（模型文件是否在位、进程内是否已加载、上次错误归类）——<strong>不触发模型加载</strong>，所以「未加载」不等于坏；模型文件不在位或初始化失败时转 <code>warn</code></td></tr>
+          <tr><th>开关与状态快照</th><td><code>checked</code> / <code>warn</code></td><td>有 <code>state.json</code> 则读出被关的工具 / 功能、总开关、风格容差；没有则说明全部走默认值（首次使用属正常，不是异常）；<code>state.json</code> 存在却读不动（<code>stateFile.readable === false</code>）时转 <code>warn</code></td></tr>
           <tr><th>近 N 天事件聚合</th><td>恒 <code>checked</code></td><td>按工具 / 类型 / code 聚合，注明「自由文本已在分享层剔除」；<strong>读数上限：本工具传 2000 条</strong>（事件更多时计数只覆盖最近 2000 条；<code>readLogEvents</code> 自身的默认值是 1000、钳制上限 5000）</td></tr>
           <tr><th>事件原文</th><td><code>checked</code> / <code>off</code></td><td>只有 <code>action=events</code> 才 checked（明细仍为分享层，无自由文本）</td></tr>
           <tr><th>章节内容 / 正文</th><td>恒 <code>off</code></td><td><strong>本工具不读正文，也不把正文写进任何离开本机的内容</strong>——本模块读章节只为取字数（<code>length</code>），正文不出那个函数。但别把它读成「本机日志里绝不含正文」：日志的自由文本字段（错误消息等）至多保留一句（≤160 字）</td></tr>

@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_import — 批量导入｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_import 的实现细节：文件收集与扩展名白名单、章号与书名的双通道识别、分组优先级、异名同书提示、apply 落盘的同号改名规则、move 模式的源文件删除语义，以及 MCP 下的 src 根目录限制。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_import","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-import.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_import — 批量导入｜dsh-novel-writer 技术文档","description":"novel_import 的实现细节：文件收集与扩展名白名单、章号与书名的双通道识别、分组优先级、异名同书提示、apply 落盘的同号改名规则、move 模式的源文件删除语义，以及 MCP 下的 src 根目录限制。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-import.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.2","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_import, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_import — 批量导入｜dsh-novel-writer 技术文档","description":"novel_import 的实现细节：文件收集与扩展名白名单、章号与书名的双通道识别、分组优先级、异名同书提示、apply 落盘的同号改名规则、move 模式的源文件删除语义，以及 MCP 下的 src 根目录限制。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-import.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.3","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_import, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -66,8 +66,8 @@
           <tr><th><code>groups[].book</code></th><td>string</td><td>组名（未分类组的组名固定为 <code>"未分类"</code>）；<code>apply</code> 落盘时另经 <code>sanitizeSegment</code> 清洗</td></tr>
           <tr><th><code>groups[].from</code></th><td>string</td><td>枚举 <code>file</code> / <code>content</code> / <code>forced</code> / <code>unclassified</code>，标明该组名的来源通道</td></tr>
           <tr><th><code>groups[].maybe</code></th><td>array</td><td>可选。可能同书的其他组名（供调用方判断是否用 <code>book</code> 合并），见「异名同书提示」</td></tr>
-          <tr><th><code>groups[].files</code></th><td>array</td><td><strong>必返</strong>（每组必有）。元素为 <code>{ file }</code>，可选带 <code>chapter</code>（解析出的章号）与 <code>title</code>（从正文头部《》解析出的书名候选）</td></tr>
-          <tr><th><code>skipped</code></th><td>array&lt;string&gt;</td><td><strong>必返</strong>。被跳过的文件；元素是相对路径，<code>apply</code> 下未分类项还带原因文案。读取失败、内容为空白、未分类三种情形共用此字段</td></tr>
+          <tr><th><code>groups[].files</code></th><td>array</td><td><strong>必返</strong>（每组必有）。元素为 <code>{ file }</code>，可选带 <code>chapter</code>（解析出的章号）与 <code>bookNameCandidate</code>（从正文头部《》解析出的<strong>书名候选</strong>；v6.2.0 起由旧键名 <code>title</code> 改名，避免被误读成「本章标题」）</td></tr>
+          <tr><th><code>skipped</code></th><td>array&lt;string&gt;</td><td><strong>必返</strong>。被跳过的文件；元素是相对路径，<code>apply</code> 下未分类项与 <code>stat</code> 失败项还带原因文案。读取失败、<code>stat</code> 失败 / 非文件、内容为空白、未分类四种情形共用此字段</td></tr>
           <tr><th><code>imported</code></th><td>array</td><td><strong>必返</strong>。元素为 <code>{ book, file, path }</code>：清洗后的书名、<strong>最终落盘文件名</strong>（可能与源文件名不同）、绝对路径；<code>scan</code> 下为空数组</td></tr>
         </tbody>
       </table>
@@ -75,15 +75,17 @@
       <h2>行为与实现</h2>
 
       <h3>1 · 文件收集</h3>
-      <div class="formula">collectTextFiles( src, recursive, out = [], prefix = "" ):
+      <div class="formula">execute 先 stat(src)：不存在 / 不可读 → <b>直接抛错</b>（不再返回「0 个文件 → 0 组」）
+  不是目录 → 抛错「导入源必须是文件夹，不是文件」
+collectTextFiles( src, recursive, out = [], prefix = "" ):
   entries = readdir( dir, { withFileTypes: true } )
-  readdir 失败（路径不存在 / 无权限）→ 直接返回已收集结果，不抛错
+  readdir 失败（子目录在递归中被删 / 无权限）→ 该层返回已收集结果，不抛错
   entries 按 name.localeCompare 升序
   对每个条目：
     目录 且 recursive 为真 → 递归进入，相对前缀 + "/"
     文件 且 extname(小写) ∈ { .md, .markdown, .txt } → 收集
 返回相对 src 的路径数组（分隔符统一为 "/"）</div>
-      <p>扩展名白名单是硬边界：<code>.docx</code> / <code>.json</code> / 无扩展名文件不进入扫描结果，因此也不会出现在 <code>skipped</code> 中。目录不可读时返回空数组而不报错，调用方会看到「0 个文件 → 0 组」的正常返回体。</p>
+      <p>扩展名白名单是硬边界：<code>.docx</code> / <code>.json</code> / 无扩展名文件不进入扫描结果，因此也不会出现在 <code>skipped</code> 中。<code>src</code> 本身不存在或不是目录时<strong>直接抛错</strong>（v6.2.0 起），不会再伪装成「成功但 0 本书」；只有递归过程中某个子目录读不了时才静默返回已收集部分。</p>
 
       <h3>2 · 章号与书名的双通道识别</h3>
       <div class="formula">chapter         = parseChapterNumber( basename(rel) )
@@ -140,7 +142,7 @@ if ( mode === "apply" 且 imported 非空 ) → noteRoot( root )   ← 记录书
       <p><code>nextFreeChapterFile</code> 生成空闲章号时会<strong>沿用原文件名的章号格式</strong>：阿拉伯数字保持原有补零宽度（<code>第007章</code> 递增为 <code>第008章</code>）；中文数字用中文数字生成（<code>第十章</code> → <code>第十一章</code>，支持到 9999）；<code>书名-01-标题</code> 与 <code>01-标题</code> 保持分隔符位置；格式无法识别时退化为 <code>第NN章 原名</code>。占用判定按 <code>parseChapterNumber</code> 的<strong>数值</strong>比较，因此 <code>第一章.md</code> 与 <code>第01章.md</code> 被视为同一章号。</p>
 
       <h3>6 · 渲染文本</h3>
-      <div class="formula">&lt;path&gt;{src}&lt;/path&gt;
+      <div class="formula">&lt;path&gt;{displayPath(src, root)}&lt;/path&gt;   ← 相对书库根或 basename，绝对路径不进模型上下文
 &lt;type&gt;novel-import-{mode}&lt;/type&gt;
 &lt;content&gt;
 
@@ -159,9 +161,9 @@ if ( mode === "apply" 且 imported 非空 ) → noteRoot( root )   ← 记录书
         <li><strong>MCP 下的 src 路径边界。</strong><code>src</code> 默认必须位于启动参数 <code>--root</code> 书库根之内（含根本身）；越界时服务器<strong>不执行工具</strong>，直接返回 <code>isError</code> 文本并提示用 <code>--allow-external-src</code> 重启。该限制用于阻断「文档注入 → 复制任意目录的 .md/.txt 进书库再读出」的路径。参数中的 <code>root</code> 同样必须先落在书库根内，越界时被静默回退到书库根而非报错。</li>
         <li><strong>被静默跳过的情形</strong>（不报错、也不一定出现在 <code>skipped</code> 中）：
           <ul>
-            <li><code>src</code> 不存在或不可读 → <code>collectTextFiles</code> 吞掉 <code>readdir</code> 错误并返回空列表，返回体为「0 个文件 → 0 组」，<code>skipped</code> 为空。</li>
+            <li><code>src</code> 不存在 / 不可读 / 不是目录 → <strong>直接抛错</strong>（v6.2.0 起），不再返回「0 个文件 → 0 组」。</li>
             <li><code>files</code> 白名单里列举了不存在的相对路径 → 该条目被无声忽略。</li>
-            <li>条目不是普通文件（<code>stat</code> 失败或 <code>isFile()</code> 为假）→ <code>continue</code>，<strong>不计入 <code>skipped</code></strong>。</li>
+            <li>条目不是普通文件（<code>stat</code> 失败或 <code>isFile()</code> 为假）→ 计入 <code>skipped</code>，并附「（无法读取文件信息）」/「（不是文件）」原因文案。</li>
             <li>扩展名不在白名单 → 从未进入扫描结果，也不计入 <code>skipped</code>。</li>
             <li>读取或编码解码失败（<code>readTextFile</code> 抛错）→ 计入 <code>skipped</code>（原始相对路径，无原因文案）。</li>
             <li>内容为纯空白（<code>text.trim() === ""</code>）→ 计入 <code>skipped</code>。</li>

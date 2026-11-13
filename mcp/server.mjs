@@ -2,7 +2,7 @@
 /**
  * dsh-novel-writer — stdio MCP 服务器
  *
- * 让 Claude Desktop / Cursor / 任何 MCP 客户端直接使用插件的 novel_* 工具（当前 18 个）。
+ * 让 Claude Desktop / Cursor / 任何 MCP 客户端直接使用插件的 novel_* 工具（当前 22 个）。
  * 实现方式：不复制任何业务逻辑——用 stub ctx 启动插件（lib/index.js 的 apply()），
  * 捕获它注册的 { name, description, parameters, execute, output } 工具定义，
  * 再把 MCP 的 tools/list / tools/call 映射到这些定义上。

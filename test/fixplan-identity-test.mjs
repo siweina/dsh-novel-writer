@@ -284,3 +284,56 @@ test("#17 伏笔三态话术：first>target 不许催提前埋；first===target 
     lib.cleanup();
   }
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 缺陷 #2：设定表读取失败时，禁用词/语用必须**整类跳过**
+//   —— 旧版仍把 settings=null 交给 resolveStyleRule，回落到默认文化基准（非空词表），
+//      于是照样产出「禁用词」待办，markScope 又把 skipScope 登记的 banned 从 skippedScopes 移除：
+//      notes 说「已跳过」，checkedScopes 却含 banned。设定表正常时行为必须完全不变。
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("#2 设定表损坏：banned/pragmatic 保持「未执行」，不产出默认词表的禁用词待办（设定正常时照常检出）", async () => {
+  const lib = makeLibrary();
+  const BOOK = "设定表损坏样本";
+  const priorState = process.env.DSH_NOVEL_WRITER_STATE;
+  try {
+    const BASE = "雨停之后，她沿着河堤慢慢往回走。岸边的芦苇被风吹得伏下去，又立起来。她把伞收好，抖了抖水，抬头看了看天色。";
+    // 目标章含「掌柜」「客栈」（欧式默认表 69 词里），另有 骑士/城堡 让基准判定落到非 modern 分支
+    // ——这正是旧版会拿默认词表误报的那一本。
+    const TARGET = BASE + "城里的骑士在城堡前下马，客栈的掌柜迎出来，把缰绳接了过去，说了几句路上的见闻，又转身回了柜台。";
+    lib.write(join("novels", BOOK, "第01章.md"), BASE + "\n");
+    lib.write(join("novels", BOOK, "第02章.md"), BASE + "回到院子里，她先把湿鞋放在台阶上，再进屋点了灯。\n");
+    lib.write(join("novels", BOOK, "第03章.md"), TARGET + "\n");
+    // 关掉语义嵌入：让「跳过域数量」可预期，不依赖本机是否装了 embedding 模型
+    lib.write("state.json", JSON.stringify({ features: { semanticEmbedding: false }, tools: {} }));
+    process.env.DSH_NOVEL_WRITER_STATE = join(lib.root, "state.json");
+
+    // ① 设定表损坏：整类跳过（旧版此处会出 2 条「禁用词」，summary 却同时说「已跳过」）
+    lib.write(join(".novel-writer", "settings", BOOK + ".json"), "{ 这不是合法 JSON");
+    const broken = await buildFixPlan(lib.root, BOOK, "第03章", {}, undefined);
+    const bannedItems = broken.items.filter((it) => it.type === "禁用词");
+    assert.equal(bannedItems.length, 0, "设定表读不到时必须整类跳过，不得用默认词表产出待办：" + JSON.stringify(bannedItems.map((i) => i.current)));
+    assert.equal(broken.items.filter((it) => it.type === "语用不符").length, 0, "语用类同样不得产出：" + JSON.stringify(broken.items.map((i) => i.type)));
+    assert.ok(broken.summary.includes("设定表读取失败，禁用词与语用检查已跳过"), "summary 要如实披露跳过：" + broken.summary);
+
+    // ② 换成「过短章」让清单为空：summary 会披露「本次有 N 类检查未执行」，直接检验 skippedScopes。
+    //    跳过的应是 metrics + banned + pragmatic + vector_loop + vector_outline = 5 类；
+    //    旧版 banned 被 markScope 移出 skippedScopes → 只剩 4 类（与 notes 的「已跳过」自相矛盾）。
+    lib.write(join("novels", BOOK, "第04章.md"), "她回来了。\n");
+    const shortPlan = await buildFixPlan(lib.root, BOOK, "第04章", {}, undefined);
+    assert.equal(shortPlan.items.length, 0, "夹具应无待办（便于读跳过域计数）：" + JSON.stringify(shortPlan.items.map((i) => i.type)));
+    assert.ok(shortPlan.summary.includes("本次有 5 类检查未执行"), "banned/pragmatic 必须仍算「未执行」：" + shortPlan.summary);
+
+    // ③ 设定表正常：行为不变——登记的禁用词照常检出（不能靠「整类关掉」修 bug）
+    lib.write(join(".novel-writer", "settings", BOOK + ".json"), JSON.stringify({
+      worldview: [{ name: "欧式中世纪", basis: "欧式 骑士 城堡", bannedWords: ["掌柜"], recommended: { "掌柜": "店主" } }]
+    }));
+    const valid = await buildFixPlan(lib.root, BOOK, "第03章", {}, undefined);
+    const banned = valid.items.find((it) => it.type === "禁用词" && it.current.includes("掌柜"));
+    assert.ok(banned, "设定表正常时禁用词检查必须照常产出：" + JSON.stringify(valid.items.map((i) => [i.type, i.current])));
+  } finally {
+    if (priorState === undefined) delete process.env.DSH_NOVEL_WRITER_STATE;
+    else process.env.DSH_NOVEL_WRITER_STATE = priorState;
+    lib.cleanup();
+  }
+});

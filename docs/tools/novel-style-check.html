@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_style_check — 风格自检｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_style_check 的实现细节：风格指纹 13 维向量的构造与余弦相似度分级，偏差清单的阈值，六维文笔基线「排除本章后现算」的口径与基线范围（按全书 / 按部分），原著锚段的选取与语义风格相似度的降级文案。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_style_check","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-style-check.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_style_check — 风格自检｜dsh-novel-writer 技术文档","description":"novel_style_check 的实现细节：风格指纹 13 维向量的构造与余弦相似度分级，偏差清单的阈值，六维文笔基线「排除本章后现算」的口径与基线范围（按全书 / 按部分），原著锚段的选取与语义风格相似度的降级文案。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-style-check.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.2","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_style_check, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_style_check — 风格自检｜dsh-novel-writer 技术文档","description":"novel_style_check 的实现细节：风格指纹 13 维向量的构造与余弦相似度分级，偏差清单的阈值，六维文笔基线「排除本章后现算」的口径与基线范围（按全书 / 按部分），原著锚段的选取与语义风格相似度的降级文案。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-style-check.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.3","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_style_check, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -71,7 +71,7 @@
           <tr><th><code>advice</code></th><td>string</td><td>面向生成端的建议文本，已与六维判定统一口径。<strong>v5.1.0 起不再要求「逐句对比修正」</strong>：改为「<strong>先判断这是不是有意为之</strong>（章节类型不同本来就会偏离全书均值）；确实跑偏时才对照 <code>fixAnchors</code> 只调整那几处，<strong>不要整章重写，也不要为对齐数字改文</strong>」</td></tr>
         </tbody>
       </table>
-      <p>渲染层（<code>render</code>）依次输出：检查章节、对比基线、风格相似度百分比与中文分级、偏差清单（无偏差时写「偏差: 无明显偏差」）、语义对比备注、原著锚段（带「逐句对比本章对应写法，只修跑偏部分，不得整章重写」的约束语）、本章指纹与基线指纹、文笔六维逐维「本章 v vs 基线 μ（±%，marks）」、<code>advice</code>。六维行的状态符号为 <code>⚠ 出带</code> / <code>△ 提醒</code> / <code>✓ 在带</code>；<code>metric.enabled === false</code> 时该段只打印 <code>note</code>。</p>
+      <p>渲染层（<code>render</code>）依次输出：检查章节、对比基线、风格相似度百分比与中文分级、偏差清单（无偏差时写「偏差: 无明显偏差」）、语义对比备注、原著锚段（<strong>抬头已改为条件式</strong>：「若确实跑偏（偏离明显或读起来别扭），可对照这几段原著的写法只调整那几处，不要整章重写」）、本章指纹与基线指纹、文笔六维逐维「本章 v vs 基线 μ（±%，marks）」、<code>advice</code>。六维行的状态符号为 <code>⚠ 出带</code> / <code>△ 提醒</code> / <code>✓ 在带</code>；<code>metric.enabled === false</code> 时该段只打印 <code>note</code>。</p>
       <div class="note">
         <b>v7.0.0：<code>slop</code> 与改稿台的「AI套话」同源、不同级。</b>两处用的是同一张表（<span class="src">lib/lexicons/slop.js</span> 的 <code>SLOP_RULES</code> / <code>SLOP_CATEGORIES</code>，8 类结构片段）与同一个豁免入口 <code>buildSlopExemptions</code>，参照集也同为<strong>基线章文本</strong>（按面板「基线范围」筛出、已排除目标章的那些章），故同一章在两处的类别口径一致。级别不同：本工具只在渲染文本里多一行（位置在六维对照 / 直白度对照之后、<code>【建议】</code>之前）「陈词套话扫描：命中 N 处（D 处/千字，主要为：&lt;类别中文名&gt;）——如需逐行定位可运行 novel_fix_plan」，<strong>不改判定、不进 <code>verdict</code>、不产出待办</strong>；要行号区间与改写方向，用 <a href="novel-fix-plan.html">novel_fix_plan</a>。
         <br><b>豁免口径与数字可比性。</b>题材静音取<strong>设定表 <code>worldview</code> 条目的 <code>name</code> / <code>description</code> / <code>basis</code> / <code>notes</code></strong>，命中 <code>SYSTEM_GENRE_RE</code>（<code>系统|无限|网游|数据面板|属性面板|游戏异界|数据流|面板流</code>）时整类静音 <code>stat_numeric</code>；参照集里「≥ 0.5 处/千字且 ≥ 2 次」的 pattern 视为本书习惯写法并逐条豁免（豁免细节与边界修复见<a href="novel-fix-plan.html">改稿台</a>页的对应说明）。<strong>豁免只会让 <code>total</code> 变小</strong>：与豁免前（或旧版本）的数字<strong>不可直接比</strong>，也不要把「数字变小」读成「套话变少了」——要比较就用同一版本重扫两章。
@@ -118,10 +118,10 @@ similarity = dot(va, vb) / (‖va‖ · ‖vb‖)        ← 任一范数为 0 �
           「（自定义选择已失效，已回退全书）」；<b>只选中了本章自身</b> →
           「（选中的章只有本章自身，不能作为自己的基线，已回退全书）」
 
-reported  = resolveBaselineScope(perCh, 目标章)     ← 第二次（v6.5.5，仅 custom 时执行）
+reported  = resolveBaselineScope(perCh, 目标章)     ← 第二次（v6.5.5，<strong>两种档位都执行</strong>）
         只用于<strong>回报口径</strong>：让「自定义基线 N 章」的 N 与<strong>真正进 μ/σ 的章数</strong>一致
         （正文 &lt; 40 字的章已不在 perCh 里，故 N 可能小于第一次的选中数；
-          这样风格自检与改稿台报的是同一个数字）
+          这样风格自检与改稿台报的是同一个数字；perCh 为空时保留第一次的章池口径）
 
 excluding   = scoped.items（已排除目标章）；正文 &lt; 40 字的章不参与测量
 b           = computeBaselineFromPerChapter(excluding)     ← 判定用基线（μ±σ）
@@ -178,10 +178,10 @@ similarity = round(semSim × 1000) / 1000</div>
         <li><strong>基线缓存每书一份、按内容哈希失效</strong>。基线分析写入 <code>&lt;root&gt;/.novel-writer/analysis/&lt;book&gt;__base-full.json</code>，失效键是 <code>sha1(基线全文)</code> 前 16 位加算法版本号。<code>bookAnalysisCached</code> 命中时要求 <code>th</code> 与 <code>ver</code> 同时相等；任一章节改动都会改变基线全文，从而整份重建——<strong>改「基线范围」（v6.5.5）同样会改变基线全文，首次检查会重建一次</strong>，属预期行为。文件不含目标章名，因此检查不同章不会堆积近似全书大小的缓存文件。</li>
         <li><strong>六维逐章测量缓存单独一份</strong>：<code>&lt;root&gt;/.novel-writer/analysis/&lt;book&gt;-chapters-metrics.json</code>，指纹按文件名排序后拼 <code>file + "\0" + text</code> 再哈希，<strong>与传入章序无关</strong>——本工具传「其他章 + 目标章」，<code>novel_style_report</code> 传全书序，两者共用同一缓存不会互相击穿。</li>
         <li><strong>六维对照可能整体不可用</strong>：排除目标章后没有可用基线章时返回 <code>{enabled:false, note:"基线章节不足（至少需要 1 个其他章节）"}</code>；测量过程抛异常时返回 <code>{enabled:false, note:"六维测量失败：…"}</code>（异常文本截断到 80 字）。两种情形下 <code>diffs</code> / <code>similarity</code> 仍是有效结果，调用方不应把 <code>metric.enabled === false</code> 读成「六维合格」。</li>
-        <li><strong>六维可能静默跳过维度</strong>：某维基线 μ=0 且 σ=0 时无法做相对判定，该维登记进 <code>metric.skippedDims</code>，<code>summary</code> 会写明「另有 N 个维度基线均值为 0、未做相对判定（维度名）」。μ=0 但 σ&gt;0 时改用绝对尺度（<code>|v| &gt; 1.5σ</code> 判 out），该项 <code>devPct</code> 为 <code>null</code>、<code>basis</code> 为 <code>"absolute"</code>，渲染层打印「基线为 0，按绝对尺度判定」而不是 <code>null%</code>。</li>
+        <li><strong>六维不会因 μ=0 静默跳过维度</strong>：现行实现里 <code>skippedDims</code> 只登记 <code>no-baseline</code>（该维没有基线）与 <code>no-value</code>（本章没有取值）两种原因；<strong>μ=0 的维度一律产出 verdict，不再进 <code>skippedDims</code></strong>——σ&gt;0 时按绝对尺度 <code>|v| &gt; 1.5σ</code> 判 out，σ=0 时改用 <code>recTol</code> 作绝对门槛（<code>|v| &gt; recTol</code>），该项 <code>devPct</code> 为 <code>null</code>、<code>basis</code> 为 <code>"absolute"</code>，渲染层打印「基线为 0，按绝对尺度判定」而不是 <code>null%</code>。<code>summary</code> 只对前两种 reason 披露「另有 N 个维度未判定」。</li>
         <li><strong>语义增强有三条降级路径，文案各异</strong>：功能未开启时为 <code>{enabled:false, note:"语义增强未启用（纯规则模式）"}</code>；目标侧或基准侧无段落时为 <code>{enabled:false, note:"语义对比样本不足（目标章或基准章为空）"}</code>；计算抛异常时为 <code>{enabled:false, note:"语义对比失败：…"}</code>（异常文本截断到 80 字）。<code>semantic</code> 在 schema 中是必返 object，<code>enabled:false</code> 属正常返回而非错误。</li>
         <li><strong>被静默跳过的情形</strong>：锚包构建抛异常时 <code>fixAnchors</code> 缺省，判定与建议不受影响；语义索引写盘失败只追加一行备注；<code>cleanOutput</code> 会统一把 <code>-0</code> 归一为 <code>0</code>、把 <code>NaN</code> 归一为 <code>null</code>、剔除 <code>undefined</code> 值的键，以满足宿主无损 JSON 校验。</li>
-        <li><strong>跨版本不可横比</strong>：六维口径在 v4.3.0 有多处行为变化（句末符统一为 <code>。！？…!?</code> 且省略号单独成句、动作词表去重清洗到 625 条、抽象度改为最长匹配、修饰密度新增停用词表、留白指数量纲统一为千字密度）。同一本书在旧版本下算出的 <code>similarity</code> / <code>diffs</code> / <code>metric</code> 数值不可与新版本直接比较；缓存另设算法版本键，升级后自动失效重建。</li>
+        <li><strong>跨版本不可横比</strong>：六维口径在 v4.3.0 有多处行为变化（句末符统一为 <code>。！？…!?</code> 且省略号单独成句、动作词表去重清洗到 553 条、抽象度改为最长匹配、修饰密度新增停用词表、留白指数量纲统一为千字密度）。同一本书在旧版本下算出的 <code>similarity</code> / <code>diffs</code> / <code>metric</code> 数值不可与新版本直接比较；缓存另设算法版本键，升级后自动失效重建。</li>
         <li><strong>语义索引指纹算法变更属一次性代价</strong>：v4.3.0 为内容指纹字段加了长度前缀定界（消除字段含分隔符导致的边界歧义），既存索引与风格缓存的指纹一次性失效并重建，之后恢复增量命中。</li>
       </ul>
 

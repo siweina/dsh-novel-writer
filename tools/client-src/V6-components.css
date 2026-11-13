@@ -31,14 +31,9 @@
 .nwBaseCheck{flex:none;margin:0;accent-color:var(--dsw-alias-state-business-primary)}
 /* 存量的显式清空行（已选摘要旁 / 档位=按全书而存量非空时）：说明占满余宽，破坏性按钮靠右。 */
 .nwBaseClear{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-top:10px}
-/* 诊断·「值得注意」区块（v6.6.0）。
-   修复由来（用户反馈）：原先直接用 .nwBoxed，而那个类只有 0.5px 边框、没有阴影，
-   于是"得看老一会才看得出边框"；整块也没有外边距，与上下组件贴在一起。
-   这里改成与 .nwGCard 同一套观感（layer-2 底 + 柔和阴影 + xl 圆角），留白对齐 .nwGCard 的 12px。
-   注意：本文件会被整体内联进模板字符串，注释里不要写反引号、也不要写花括号。 */
-.nwDiagIssues{margin:12px 0}
-.nwDiagIssueList{display:flex;flex-direction:column;gap:8px;margin-top:6px}
-.nwDiagIssue{background:var(--dsw-alias-bg-layer-2);border-radius:var(--dsw-radius-xl);box-shadow:var(--dsw-elevation-soft);padding:9px 12px}
+/* v7.3.3 修（#23）：删掉零引用的 .nwDiagIssues / .nwDiagIssueList / .nwDiagIssue
+   （诊断页「值得注意」区块早已改用 .nwDiagAttentionList / .nwDiagAttentionItem，
+   这三个类名在 lib/ 源码、测试与 tools/classes.txt 中零引用，属于删掉后不会再出现的死样式）。 */
 /* v7 Foundation：安静的默认态，标题栏承担导航。 */
 .nwPanelHeader{gap:12px;align-items:center;margin-bottom:8px}
 .nwHeaderIdentity{display:flex;align-items:center;gap:12px;min-width:0;flex:1;flex-wrap:wrap}
@@ -63,10 +58,12 @@
 .nwPref.nwPrefDanger{background:none}
 .nwRowDiv{margin:0 16px 0 60px}
 .nwCountBadge{color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-layer-3);border:0;white-space:nowrap;font-size:12px;line-height:18px;flex:none}
-.nwNote,.nwPlotMsg,.nwWarnBanner{border:0;border-radius:var(--dsw-radius-md);padding:10px 12px;font-size:12.5px;line-height:18px;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-layer-3)}
+.nwNote,.nwPlotMsg{border:0;border-radius:var(--dsw-radius-md);padding:10px 12px;font-size:12.5px;line-height:18px;color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-layer-3)}
 .nwNoteAccent{color:var(--dsw-alias-state-business-primary);background:var(--dsw-alias-state-business-tertiary)}
-.nwNoteWarn,.nwWarnBanner{color:var(--dsw-alias-state-warn-primary);background:var(--dsw-alias-state-warn-tertiary)}
-.nwNoteDanger,.nwPlotErr{color:var(--dsw-alias-state-error-primary);background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 8%,var(--dsw-alias-bg-layer-2))}
+.nwNoteWarn{color:var(--dsw-alias-state-warn-primary);background:var(--dsw-alias-state-warn-tertiary)}
+/* v7.3.3 修（#23）：.nwNoteDanger 零引用（错误提示统一走在用的 .nwPlotErr），
+   这里只保留 .nwPlotErr 一条，别把后者连带删掉。 */
+.nwPlotErr{color:var(--dsw-alias-state-error-primary);background:color-mix(in srgb,var(--dsw-alias-state-error-primary) 8%,var(--dsw-alias-bg-layer-2))}
 .nwErrorDetails{font-size:12px;line-height:18px;color:var(--dsw-alias-label-tertiary);margin-top:4px;overflow-wrap:anywhere}
 .nwAgeTag{display:inline-block;margin-right:8px;padding:0 4px;border:1px solid var(--dsw-alias-state-error-primary);border-radius:var(--dsw-radius-xs);color:var(--dsw-alias-state-error-primary);font-size:12px;line-height:18px;white-space:nowrap}
 .nwStorage{margin-top:24px}

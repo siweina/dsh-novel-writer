@@ -6,6 +6,7 @@ import test from "node:test";
 import {
   auditLexicon,
   bookNameFromFileName,
+  buildStyleAnchorPackage,
   cjkToNumber,
   createOutlineTool,
   decodeTextBuffer,
@@ -29,6 +30,7 @@ import {
   resolveStyleRule,
   sanitizeSegment,
   parseLexiconLine,
+  readBaselineScope,
   readLexiconFile,
   readSentenceState,
   readSettings,
@@ -38,6 +40,7 @@ import {
   writeLexicon
 } from "../lib/core.js";
 import { measureStyleMetrics } from "../lib/style-metrics.js";
+import { readLogEvents } from "../lib/log.js";
 import * as embedding from "../lib/embedding.js";
 import { apply } from "../lib/index.js";
 import { buildChapterBrief } from "../lib/brief.js";
@@ -781,4 +784,99 @@ test("【#64】bookNameFromFileName 删掉不可达分支后行为不变", () =>
   assert.equal(bookNameFromFileName("斗破苍穹 第1章 陨落.md"), "斗破苍穹");
   assert.equal(bookNameFromFileName("大秦帝国 第1章.md"), "大秦帝国");
   assert.equal(bookNameFromFileName("三 体.md"), "三 体");
+});
+
+// v7.3.3 修（#11/M7）：三处 catch 必须放行 AbortError——取消不是「读取失败」，不得被伪装成成功，
+// 也不得写进本地事件日志（否则 novel_diagnose 的 byKind 会把「用户按了取消」计成「数据故障」）。
+test("【#11/M7】三处取消都抛 AbortError，且取消不写事件日志、真故障仍写", async () => {
+  await withBook(async ({ root, book, chapterDir }) => {
+    const exec = { agent: { session: { header: { cwd: root } } } };
+    // ① readBaselineScope：取消必须抛，不得返回 {mode:"all",chapters:[]}
+    await assert.rejects(readBaselineScope(root, book, { signal: AbortSignal.abort() }), (e) => isAbort(e));
+    // ② novel_outline read：第 1 次读状态卡成功、第 2 次读大纲被取消
+    const outline = createOutlineTool({});
+    await outline.execute({ book, action: "init", root }, exec);
+    let n = 0;
+    const abortOnSecond = { agent: { session: { header: { cwd: root } } }, get signal() { n += 1; return n === 2 ? AbortSignal.abort() : undefined; } };
+    await assert.rejects(outline.execute({ book, action: "read", file: "status", root }, abortOnSecond), (e) => isAbort(e));
+    // ③ detectChapterBridge：前两次读章节成功、第 3 次读钩子记录被取消
+    await writeFile(join(chapterDir, "第01章.md"), "他把杯子放回桌上，转身走进里屋，没有再回头看一眼。", "utf8");
+    await writeFile(join(chapterDir, "第02章.md"), "楼道里的灯坏了三天，他摸黑上楼，钥匙在锁孔里转了两圈才打开。", "utf8");
+    const creation = join(root, "novels", "创作资料", book);
+    await mkdir(creation, { recursive: true });
+    await writeFile(join(creation, "钩子记录.md"), "# 钩子记录\n\n- 1 她站在码头边等他，手里攥着一张被雨打湿的车票\n", "utf8");
+    const normal = await detectChapterBridge(root, book, "第01章.md", "第02章.md", exec);
+    assert.ok(normal.some((x) => x.type === "衔接·钩子未接"), "正常时钩子未接检查要真的跑起来：" + JSON.stringify(normal));
+    let k = 0;
+    const abortOnThird = { agent: { session: { header: { cwd: root } } }, get signal() { k += 1; return k === 3 ? AbortSignal.abort() : undefined; } };
+    await assert.rejects(detectChapterBridge(root, book, "第01章.md", "第02章.md", abortOnThird), (e) => isAbort(e));
+
+    // M7：以上取消不得写事件日志（按书过滤）；真故障仍要写
+    const logBook = "日志取消测试";
+    const eventsFor = async (b) => (await readLogEvents({ limit: 5000, forShare: false })).filter((e) => e.book === b);
+    const beforeCancel = (await eventsFor(book)).length;
+    const beforeLogBook = (await eventsFor(logBook)).length;
+    await assert.rejects(readBaselineScope(root, logBook, { signal: AbortSignal.abort() }), (e) => isAbort(e));
+    let m = 0;
+    await outline.execute({ book: logBook, action: "init", root }, exec);
+    const abortOnSecond2 = { agent: { session: { header: { cwd: root } } }, get signal() { m += 1; return m === 2 ? AbortSignal.abort() : undefined; } };
+    await assert.rejects(outline.execute({ book: logBook, action: "read", file: "status", root }, abortOnSecond2), (e) => isAbort(e));
+    let j = 0;
+    await assert.rejects(detectChapterBridge(root, book, "第01章.md", "第02章.md", { agent: { session: { header: { cwd: root } } }, get signal() { j += 1; return j === 3 ? AbortSignal.abort() : undefined; } }), (e) => isAbort(e));
+    assert.equal((await eventsFor(book)).length, beforeCancel, "取消不得写事件日志（测试书）");
+    assert.equal((await eventsFor(logBook)).length, beforeLogBook, "取消不得写事件日志（日志取消测试）");
+    // 真故障（基线 JSON 损坏）仍必须留痕
+    const baseline = join(root, ".novel-writer", "baseline", logBook + ".json");
+    await mkdir(join(root, ".novel-writer", "baseline"), { recursive: true });
+    await writeFile(baseline, "{ 坏掉的 json", "utf8");
+    await readBaselineScope(root, logBook, exec);
+    assert.ok((await eventsFor(logBook)).length > beforeLogBook, "真故障必须仍写事件日志");
+  });
+});
+
+// v7.3.3 修（M1）：句式骨架不得把 Markdown 标题粘进句子（novel_new_chapter 落盘的章节正是标题开头）。
+test("【M1】句式骨架剥掉 Markdown 标题，正常正文采样不变", async () => {
+  const headed = "# 第02章 雨夜\n他沿着河岸慢慢走，风从背后推着他向前，夜色像水一样漫过脚踝。远处灯塔的光扫过水面，又暗下去。";
+  const fixed = await buildStyleAnchorPackage(".", "测试书", [], {}, headed);
+  assert.ok(fixed.skeletons.length > 0, "标题之外仍有合格句，骨架不得为空");
+  assert.ok(fixed.skeletons.every((s) => !s.text.includes("#")), "骨架不得含 #：" + JSON.stringify(fixed.skeletons));
+  assert.ok(fixed.skeletons.some((s) => s.text.includes("他沿着河岸慢慢走")), "正常正文仍要被采样");
+  // 没有标题的语料行为不变（同一句仍被抽中）
+  const plain = "他沿着河岸慢慢走，风从背后推着他向前，夜色像水一样漫过脚踝。远处灯塔的光扫过水面，又暗下去。";
+  const unchanged = await buildStyleAnchorPackage(".", "测试书", [], {}, plain);
+  assert.deepEqual(unchanged.skeletons, fixed.skeletons, "无标题时骨架应与修复前一致（不误伤正常语料）");
+});
+
+// v7.3.3 修（M5）：文件名被同名目录占位时 init 必须明确报错，不得回「已初始化（6 个文件）」。
+test("【M5】novel_outline init 遇到同名目录占位要明确报错", async () => {
+  await withBook(async ({ root, book }) => {
+    const dir = join(root, "novels", "创作资料", book);
+    await mkdir(join(dir, "钩子记录.md"), { recursive: true });
+    const outline = createOutlineTool({});
+    const exec = { agent: { session: { header: { cwd: root } } } };
+    await assert.rejects(outline.execute({ book, action: "init", root }, exec), /被同名目录占位/);
+    // 「写入前检查」：一个文件都不该被写出来（不是写到一半才报错）
+    await assert.rejects(readFile(join(dir, "创作设定.md"), "utf8"), /ENOENT/);
+    await assert.rejects(outline.execute({ book, action: "read", file: "hooks", root }, exec), /创作资料读取失败/);
+  });
+});
+
+// v7.3.3 修（M6）：钩子行解析统一走 OUTLINE_LINE_RE——`* 1 …` 与 `- 1 …` 两个工具结论必须一致。
+test("【M6】钩子记录 `* 1` 与 `- 1` 在 novel_outline read 与 detectChapterBridge 中结论一致", async () => {
+  await withBook(async ({ root, book, chapterDir }) => {
+    const exec = { agent: { session: { header: { cwd: root } } } };
+    const outline = createOutlineTool({});
+    await outline.execute({ book, action: "init", root }, exec);
+    const creation = join(root, "novels", "创作资料", book);
+    await writeFile(join(chapterDir, "第01章.md"), "他把杯子放回桌上，转身走进里屋，没有再回头看一眼。", "utf8");
+    await writeFile(join(chapterDir, "第02章.md"), "楼道里的灯坏了三天，他摸黑上楼，钥匙在锁孔里转了两圈才打开。", "utf8");
+    for (const prefix of ["-", "*"]) {
+      await writeFile(join(creation, "剧情大纲.md"), "# 剧情大纲\n\n- 1 第一章\n- 2 第二章\n", "utf8");
+      await writeFile(join(creation, "钩子记录.md"), "# 钩子记录\n\n" + prefix + " 1 她站在码头边等他，手里攥着一张被雨打湿的车票\n", "utf8");
+      const read = await outline.execute({ book, action: "read", file: "outline", root }, exec);
+      assert.ok(read.content.includes("未回填钩子章节：2"), prefix + " 写法：outline read 应提示第 2 章未回填，实际：" + read.content);
+      const bridge = await detectChapterBridge(root, book, "第01章.md", "第02章.md", exec);
+      assert.ok(bridge.some((x) => x.type === "衔接·钩子未接"), prefix + " 写法：detectChapterBridge 应报钩子未接，实际：" + JSON.stringify(bridge));
+    }
+  });
 });

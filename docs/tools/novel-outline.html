@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_outline — 创作资料｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_outline 的实现细节：创作资料六个 Markdown 文件的路径与模板、init/read/bible/character/chapter/hook/status 七个动作、段级 upsert 的边界正则、行级去重与未回填钩子判定。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_outline","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-outline.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_outline — 创作资料｜dsh-novel-writer 技术文档","description":"novel_outline 的实现细节：创作资料六个 Markdown 文件的路径与模板、init/read/bible/character/chapter/hook/status 七个动作、段级 upsert 的边界正则、行级去重与未回填钩子判定。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-outline.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.2","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_outline, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_outline — 创作资料｜dsh-novel-writer 技术文档","description":"novel_outline 的实现细节：创作资料六个 Markdown 文件的路径与模板、init/read/bible/character/chapter/hook/status 七个动作、段级 upsert 的边界正则、行级去重与未回填钩子判定。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-outline.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.3","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_outline, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -140,7 +140,7 @@ section === "" 且有该段 → 整段删除后压缩连续空行，并在末尾
         <thead><tr><th>动作</th><th>写入行</th><th>去重判定</th><th>重复时的行为</th></tr></thead>
         <tbody>
           <tr><th><code>character</code></th><td><code>- 名字：简介</code></td><td>行首锚定正则 <code>^[-*] 名字(：|$)</code>（多行模式，名字做正则转义）</td><td>不写盘，返回「人物“X”已存在（未重复登记）」</td></tr>
-          <tr><th><code>chapter</code></th><td><code>- 章号 标题</code></td><td>全文子串 <code>- 章号␠</code></td><td>不写盘，返回「第 N 章已在纲（未重复追加）」</td></tr>
+          <tr><th><code>chapter</code></th><td><code>- 章号 标题</code></td><td>行首锚定正则 <code>^[ \t]*[-*][ \t]+章号(?=[ \t]|$)</code>（多行模式，只认方向行）</td><td>不写盘，返回「第 N 章已在纲（未重复追加）」</td></tr>
           <tr><th><code>hook</code></th><td><code>- 章号 钩子文本</code></td><td>行级正则 <code>^- 章号 [^\n]*(?:\n|$)</code>（多行模式）</td><td>整行替换为新钩子</td></tr>
         </tbody>
       </table>
@@ -158,7 +158,7 @@ section === "" 且有该段 → 整段删除后压缩连续空行，并在末尾
         <li><strong><code>hook</code> 的 <code>body</code> 不能为空</strong>：单行化后为空的 <code>body</code> 抛「hook 需要 body（本章结尾状态/悬念/时间场景）」。<code>chapter</code> 的 <code>title</code> 可以为空，此时写入的是「<code>- N </code>」这样一条只有章号的方向行（行尾保留一个空格）。</li>
         <li><strong><code>role</code> 静默退化</strong>：<code>role:"supporting"</code> 不会报错，会写入次要人物设定。</li>
         <li><strong>人名判重是行首锚定的</strong>：<code>阿</code> 不会因文件里已有 <code>阿澈</code> 而被判重复（旧实现按子串判重，会把「阿」误判为已存在）。反过来，同一人物换个名字登记会产生两条记录，本工具没有别名合并。</li>
-        <li><strong><code>chapter</code> 的判重是全文子串</strong>，粒度比 <code>hook</code> 的行首正则更粗：正文或注释里出现「<code>- N </code>」这样的片段也会让本次追加被跳过。需要精确控制时应改成 <code>hook</code> 式的行首锚定路径或手改文件。</li>
+        <li><strong><code>chapter</code> 的判重也是行首锚定（v7.1.0 修正）</strong>：正则 <code>^[ \t]*[-*][ \t]+N(?=[ \t]|$)</code>（多行模式）只认行首的 <code>- N</code> / <code>* N</code> 方向行。旧版用全文子串 <code>includes("- N ")</code>，正文里「他数了 - 3 秒钟」这样的片段会让真正的方向行永远补不进去（静默漏写）。需要精确控制时仍建议手改文件。</li>
         <li><strong>未回填钩子的判定依赖磁盘章节号</strong>：作品目录下没有任何章节文件时，<code>existing</code> 为空集合，提醒列表随之为空（不会提示「大纲里的章都没回填」）。</li>
         <li><strong>没有事务与原子写</strong>：与其余三个工具不同，本工具的写入是「读全文 → 拼接 / 替换 → <code>writeFile</code> 整文件覆盖」，未使用 <code>withFileTx</code>，也未使用临时文件 + <code>rename</code> 的原子替换。<strong>同一文件的并发写可能互相覆盖</strong>，且进程在写入中途终止会留下半截文件。批量登记时建议串行调用。</li>
         <li><strong>跨版本口径</strong>：v4.3.0 修正段级 upsert 的段尾判定（旧版遇段内空行会截断，导致删除残留、替换双段并存）、修正未回填钩子口径（只报磁盘上存在的章节，旧版把大纲里预排的下一批章节也算成未回填）、<code>read</code> 的 <code>file</code> 改为 <code>hasOwnProperty</code> 判定并删除了从不产出的 <code>files</code> 字段、补上真实返回的 <code>file</code> 字段；v3.1.0 起 <code>description</code> / <code>title</code> / <code>body</code> 做单行化。旧版写下的文件在段结构上可能与新版的 upsert 结果不同，重新 <code>init</code> 会就地重整对应段。</li>

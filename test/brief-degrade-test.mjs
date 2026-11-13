@@ -102,3 +102,41 @@ test("④ 三态并存互不串台：坏的那份报失败、缺的那份不报�
   assert.equal(bad.filter((d) => d.includes("主要人物设定")).length, 0, "可读的文件不得报失败");
   assert.equal(bad.filter((d) => d.includes("剧情大纲")).length, 0, "已还原的文件不得报失败");
 });
+
+// ── v7.3.3 #3②：worldview 恒定返回（schema 描述归 index.js 改，这里只锁实现） ──
+
+test("⑤ #3② 未登记任何设定时 worldview 仍恒定返回（并注入默认禁词与基准）", async () => {
+  // BOOK 从未写过 .novel-writer/settings/：readSettings 走 ENOENT → 空表，worldview 仍须存在
+  const value = await brief(BOOK);
+  assert.ok(value.worldview && typeof value.worldview === "object", "worldview 必须恒定存在（不能省略/置 null）");
+  assert.ok(Array.isArray(value.worldview.bannedWords) && value.worldview.bannedWords.length > 0, "未登记时也必须注入文化基准的默认禁用词表");
+  assert.ok(String(value.worldview.cultureName ?? "") !== "", "默认文化基准不能为空");
+});
+
+// ── v7.3.3 #29④：offstage 词表补「殁」 ──
+
+test("⑥ #29④ 「某某殁了 / 已殁」必须判为已退场，正常角色不得误标", async () => {
+  const B = "殁字书";
+  const dir = join(root, "novels", B);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, "第01章.md"), "沈孤鸿推门进来，顾长风在灯下坐着，陆青崖递过茶。\n", "utf8");
+  const settingsDir = join(root, ".novel-writer", "settings");
+  mkdirSync(settingsDir, { recursive: true });
+  writeFileSync(join(settingsDir, B + ".json"), JSON.stringify({
+    characters: [
+      { name: "沈孤鸿", status: "殁了", description: "终年三十" },
+      { name: "顾长风", notes: "已殁，享年六十" },
+      // 反证：活人，只是描述里顺带提到别人的死——绝不能被连带标成退场
+      { name: "陆青崖", description: "沈孤鸿殁后由他接手门户" }
+    ]
+  }), "utf8");
+  const value = await brief(B);
+  const byName = new Map((value.characters ?? []).map((c) => [c.name, c]));
+  assert.equal(byName.get("沈孤鸿")?.offstage, true, "status=殁了 必须标 offstage");
+  assert.equal(byName.get("顾长风")?.offstage, true, "notes=已殁，… 必须标 offstage");
+  assert.equal(byName.get("陆青崖")?.offstage, undefined, "活人不得因描述里出现「殁」被误标");
+  const offstage = (value.avoid ?? []).filter((a) => a.kind === "已退场角色");
+  const names = offstage.map((a) => a.detail.split("（")[0]);
+  assert.ok(names.includes("沈孤鸿") && names.includes("顾长风"), "退场角色必须进 avoid：" + JSON.stringify(names));
+  assert.ok(!names.includes("陆青崖"), "活人不得进「已退场角色」：" + JSON.stringify(names));
+});

@@ -141,3 +141,22 @@ test("#45 null 入参不抛错，且返回结构与正常路径一致", () => {
   // undefined 同样兜底
   assert.doesNotThrow(() => judgeAgainstBaseline({}, undefined));
 });
+
+test("#19 省略号口径一致：句末 ASCII `...` 与全角 `……` 同时计入「省略号」与「未完句」", () => {
+  // 等长（25 字符）语料：只差句末省略号的写法，per1000 的分母完全相同
+  const full = "她在窗边站了很久，没有开口说话，也没有回头望着……";
+  const ascii = "她在窗边站了很久，没有开口说话，也没有回头望...";
+  assert.equal(Array.from(full).length, 25, "语料 A 必须是 25 字符（否则分母不同，数值不可比）");
+  assert.equal(Array.from(ascii).length, 25, "语料 B 必须与 A 等长：" + Array.from(ascii).length);
+  const mf = measureStyleMetrics(full);
+  const ma = measureStyleMetrics(ascii);
+  assert.equal(mf.detail.ellipsis, 1);
+  assert.equal(ma.detail.ellipsis, 1, "ASCII ... 本来就被算作省略号（这半边口径不变）");
+  // 旧行为（红）：ellipsis 计了 `...`，unfinished 判据却不认 → gapIndex 少算一半（80 vs 120）
+  assert.equal(ma.detail.unfinishedCount, 1, "ASCII ... 结尾必须算未完句：" + ma.detail.unfinishedCount);
+  assert.equal(ma.metrics.gapIndex, mf.metrics.gapIndex, "两种省略号写法必须给出同一个 gapIndex：" + mf.metrics.gapIndex + " vs " + ma.metrics.gapIndex);
+  // 反面：句中有 ... 但句末是句号 → 仍是完整句，不许因为出现 ... 就判「未完」
+  assert.equal(measureStyleMetrics("她说过...后来还是走了。").detail.unfinishedCount, 0, "句末是句号时不得判未完句");
+  // 破折号结尾（原有口径）不受影响
+  assert.equal(measureStyleMetrics("她没有再说下去——").detail.unfinishedCount, 1, "破折号结尾仍算未完句");
+});

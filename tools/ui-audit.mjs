@@ -772,17 +772,27 @@ function analyze(src, opts) {
 
   /* ---------- 类名契约：CSS 侧统计 ---------- */
   const cssClasses = new Set();
+  const cssClassAt = new Map(); // name -> { doc, offset }（首次出现的规则块，供「未使用类」报行号）
   for (const doc of cssDocs) {
     for (const { rule } of allRules.filter((x) => x.doc === doc)) {
       const sel = rule.selector;
       if (!sel) continue;
       const re = /\.(-?[A-Za-z_][A-Za-z0-9_-]*)/g;
       let m;
-      while ((m = re.exec(sel)) !== null) cssClasses.add(m[1]);
+      while ((m = re.exec(sel)) !== null) {
+        cssClasses.add(m[1]);
+        if (!cssClassAt.has(m[1])) cssClassAt.set(m[1], { doc, offset: rule.selectorStart + m.index });
+      }
     }
   }
 
-  /* ---------- R9：类名契约双向 ---------- */
+  /* ---------- R9：类名契约双向 ----------
+     v7.3.3 修（M8）：此前标题自称「双向」，实际只有两个方向——classes.txt→CSS（契约类必须仍有定义）、
+     JS→CSS（JS 用到的类必须在 CSS 里有定义）。**缺了第三个方向 CSS→JS（CSS 定义了但 JS 从不 emit 的死样式）**，
+     于是它对 `nwSubCard` / `nwHero` / `nwNoteDanger` 这类从没被任何代码 emit 的规则一律判 PASS
+     —— 那 5 个真死类就是被这道会漏人的门禁放过去的。已补齐 CSS→JS，判定口径：
+     剥掉注释与 CSS 段之后，源码里是否**字面**出现过该类名；classes.txt 里的契约类豁免
+     （契约类允许只存在于 CSS：它们由宿主或冻结清单要求定义），合成夹具豁免（夹具是给规则喂 bug 的）。 */
   if (enabled(9)) {
     for (const name of opts.classes.list) {
       if (cssClasses.has(name)) continue;
@@ -851,6 +861,35 @@ function analyze(src, opts) {
           : "疑似类名的 nw* 字符串未在 CSS 中定义（非 className 直接赋值，按提示处理）",
         info.severity, name);
     }
+
+    // CSS → JS（v7.3.3 补）：定义在 CSS、却既不在 classes.txt 契约清单、也没被 JS 引用的 nw* 类 = 死样式。
+    // 旧版只查 classes.txt→CSS 与 JS→CSS 两个方向，CSS 里零引用的类（如已删的 .nwHeroDesc）会静默 PASS。
+    // 口径说明：classes.txt 里的类名是**契约清单**（可能供测试 / 视觉快照 / 宿主保留），由 classes.txt→CSS
+    // 那一条负责；这里只追究「清单外、CSS 里定义、JS 一次都没用」的类。JS 侧按「去注释 / 去 CSS 后的源码里
+    // 出现该词」判定（含字符串、模板串与变量名），宁可漏报也不误杀动态拼出来的类名。
+    const outsideCss = new Array(src.length);
+    for (let i = 0; i < src.length; i += 1) {
+      outsideCss[i] = cls[i] === CLS_CSS || cls[i] === CLS_COMMENT ? " " : src[i];
+    }
+    const outsideText = outsideCss.join("");
+    const contractClasses = new Set(opts.classes.list);
+    // 合成夹具（tools/ui-audit-fixture-*.js）的 CSS 是为了覆盖 R1~R8 各种写法而铺的，
+    // 类名并非真实渲染路径；对它们跑「CSS 类必须在 JS 里出现」只会得到成片假阳性。
+    // 生产文件（lib/client.js）不豁免。
+    const isFixture = /(?:^|[\\/])ui-audit-fixture-[^\\/]+\.(?:m?js)$/.test(String(opts.file ?? ""));
+    let unusedCss = 0;
+    for (const name of [...cssClasses].sort()) {
+      if (isFixture) break;
+      if (!/^nw[A-Za-z0-9_-]+$/.test(name)) continue;
+      if (contractClasses.has(name)) continue;
+      if (new RegExp(`(?<![A-Za-z0-9_$])${name}(?![A-Za-z0-9_$])`).test(outsideText)) continue;
+      const at = cssClassAt.get(name);
+      rep.add(9, at ? lineOfCss(at.doc, at.offset) : 0, "class-css-unused", name,
+        "CSS 定义的 nw* 类名在 JS 中零引用（且不在 classes.txt 契约清单内）——死样式", "error", name);
+      unusedCss += 1;
+    }
+    if (isFixture) rep.note("CSS→JS 方向：合成夹具（ui-audit-fixture-*）不参与——其 CSS 为覆盖其它规则而铺设，类名并非真实渲染路径。");
+    else if (unusedCss > 0) rep.note(`CSS→JS 方向：${unusedCss} 个 CSS 类名未被 JS 引用且不在 classes.txt 内。`);
   }
 
   /* ---------- R10：启动安全 ---------- */

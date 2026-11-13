@@ -386,6 +386,88 @@ test("⑦-b 选择性清理：只清报告与缓存，正文/创作资料/设定
 });
 
 // ===========================================================================
+// ⑦-c v7.3.3 #9：空目录也要能删（预览算可清理 + apply 直接移除）
+// ===========================================================================
+
+test("⑦-c #9 纯空作品目录：预览 found=true、可清理，apply 能真的删掉（旧版抛「没找到任何内容」）", async () => {
+  const root = freshLib("emptydir");
+  // novels/<书>/ 存在但一个文件都没有：这正是「0 章书」在盘上的样子
+  mkdirSync(join(root, "novels", "空书"), { recursive: true });
+  seedState({});
+
+  const plan = await bd.planBookDelete({ root, book: "空书" });
+  assert.equal(plan.found, true, "存在但为空的作品目录也必须算可清理：" + JSON.stringify(plan.targets));
+  const chapterTarget = plan.targets.find((t) => t.key === "chapters");
+  assert.equal(chapterTarget.exists, true);
+  assert.equal(chapterTarget.files, 0);
+  assert.ok(plan.keys.includes("chapters"), "可清理 keys 必须含空目录：" + JSON.stringify(plan.keys));
+  // 预览侧：它确实被列为「将清理」的项目（缺陷原状是列了却删不掉）
+  const preview = bd.formatBookDelete({ action: "preview", ...plan });
+  assert.ok(preview.includes("章节正文") && preview.includes("novels/空书"), "预览应列出空正文目录：" + preview);
+
+  const result = await bd.applyBookDelete({ root, book: "空书", plan });
+  assert.deepEqual(result.failed, [], "空目录不该移不动：" + JSON.stringify(result.failed));
+  assert.equal(result.moved, 0, "空目录没有文件，moved 不应虚增");
+  assert.equal(result.trashId, "", "空目录没有内容可恢复，不应生成 0 文件的回收站条目");
+  assert.equal(existsSync(join(root, "novels", "空书")), false, "空目录必须真的从盘上消失");
+  assert.equal(result.remaining.files, 0, "不应有残留：" + JSON.stringify(result.remaining));
+  assert.ok(result.warnings.some((w) => w.includes("空目录")), "必须说明空目录是直接移除、不进回收站：" + JSON.stringify(result.warnings));
+  assert.ok(result.message.includes("空目录"), "结论必须提到空目录：" + result.message);
+
+  // 反证：再预览一次，这本书已经彻底不在了（novel_books 不会再列出 0 章书）
+  const after = await bd.planBookDelete({ root, book: "空书" });
+  assert.equal(after.found, false, "删除后再预览不得仍说找到了这本书");
+});
+
+test("⑦-d #9 空目录 + 其它文件：apply 清掉文件的同时移除空目录，不留空壳", async () => {
+  const root = freshLib("emptymix");
+  mkdirSync(join(root, "novels", "混书"), { recursive: true });
+  touch(root, ".novel-writer/audits/混书-0123456789abcdef.json", "{}");
+  seedState({});
+
+  const plan = await bd.planBookDelete({ root, book: "混书" });
+  assert.equal(plan.found, true);
+  assert.ok(plan.keys.includes("chapters"), "空目录应进入可清理清单：" + JSON.stringify(plan.keys));
+  assert.ok(plan.keys.includes("data:audits"));
+
+  const result = await bd.applyBookDelete({ root, book: "混书", plan });
+  assert.deepEqual(result.failed, [], JSON.stringify(result.failed));
+  assert.equal(result.moved, 1, "只有 audits 那 1 个文件需要移入回收站");
+  assert.equal(existsSync(join(root, "novels", "混书")), false, "清理后不得残留空目录（缺陷原状是空壳留在盘上）");
+  assert.equal(existsSync(join(root, ".novel-writer", "audits", "混书-0123456789abcdef.json")), false);
+  assert.equal(result.remaining.files, 0, "不应有残留：" + JSON.stringify(result.remaining));
+  // 回收站清单只记录真实搬走的文件，条目数与 moved 同口径（空目录不在清单里）
+  const manifest = JSON.parse(readFileSync(join(result.trashDir, "manifest.json"), "utf8"));
+  assert.equal(manifest.items.length, result.moved);
+  assert.ok(manifest.items.every((it) => it.dir !== true), "空目录不应被当成可恢复目录项写进清单");
+});
+
+test("⑦-e #9 反证：未选中的空目录必须保留（选择性清理语义不被空目录改写）", async () => {
+  const root = freshLib("emptykeep");
+  mkdirSync(join(root, "novels", "留书"), { recursive: true });
+  touch(root, ".novel-writer/audits/留书-0123456789abcdef.json", "{}");
+  seedState({});
+
+  const result = await bd.applyBookDelete({ root, book: "留书", keys: ["data:audits"] });
+  assert.equal(result.partial, true);
+  assert.ok(result.skipped.includes("chapters"), "未选中的空目录要出现在 skipped：" + JSON.stringify(result.skipped));
+  assert.equal(existsSync(join(root, "novels", "留书")), true, "没选中的空目录绝不删除");
+  assert.notEqual(result.trashId, "", "仍有文件被搬走，应生成回收站条目");
+});
+
+test("⑦-f #9 反证：目录里还有子目录（无文件）时 rmdir 失败 → 记失败项并原样保留，不得误删", async () => {
+  const root = freshLib("emptynested");
+  mkdirSync(join(root, "novels", "深书", "空子目录"), { recursive: true });
+  seedState({});
+
+  const result = await bd.applyBookDelete({ root, book: "深书" });
+  assert.equal(result.moved, 0);
+  assert.equal(result.failed.length, 1, "非空目录必须报失败而不是静默删掉：" + JSON.stringify(result.failed));
+  assert.equal(existsSync(join(root, "novels", "深书", "空子目录")), true, "非空目录里的内容必须原样保留");
+  assert.equal(result.message.includes("没有移动任何内容"), true, "失败时结论要如实：" + result.message);
+});
+
+// ===========================================================================
 // ⑧ 拒绝：保留名 / 路径穿越 / 不存在的书
 // ===========================================================================
 
