@@ -1326,6 +1326,67 @@ console.log("v7-A：工具默认值/三组全开全关混合态/单工具 patch/
     if (raceBase5.length !== 1) fail("#5 书列表落定且有书后应自动补一次基线请求，实际 " + raceBase5.length + " 次：" + JSON.stringify(raceBase5.map((r) => r.url)));
     if (raceBase5[0].url !== "/api/dsh-novel-writer/baseline?book=" + encodeURIComponent("第一本")) fail("#5 冷启动补发请求的书名应是非空第一本，实际：" + raceBase5[0].url);
     console.log("v7.3.3 #5④：书列表未落定时不发请求 | 落定后自动补一次、书名非空 ✓");
+
+    // ⑤ v7.3.4 ④-③：冷启动 + 本地记住的是**已被删除**的书名
+    //    书列表还没回来时无从上核对 → 必须先不发请求；落定后发现不在书库 → 改选第一本再加载。
+    //    （旧实现会拿这个已删除的书名直接请求，后端只能回一条 warning，并且永远不会被纠正。）
+    req5.length = 0;
+    let resolveState5b = null;
+    const staleSeats5 = [];
+    const staleCtx5 = {
+      effect: () => () => {},
+      slots: {
+        inject: (name, fn) => { fn(); return () => {}; },
+        register: (opts, component) => { staleSeats5.push({ opts, component }); return () => {}; },
+        specDynamic: () => ({}),
+        subscribe: () => () => {}
+      }
+    };
+    ls5.set("dsh.novelWriter.baselineBook.v1", "已被删除的书");
+    globalThis.fetch = (url) => {
+      req5.push({ url: String(url) });
+      if (String(url).includes("/state")) {
+        return new Promise((resolve) => {
+          resolveState5b = () => resolve({ ok: true, status: 200, json: () => Promise.resolve({ ok: true, books: ["第一本", "第二本"] }) });
+        });
+      }
+      if (String(url).includes("/update-check")) return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) });
+      const m = String(url).match(/book=([^&]*)/);
+      const asked = m ? decodeURIComponent(m[1]) : "";
+      if (asked === "已被删除的书") return baseOk5(""); // 后端对不存在的书只回空数据 + warning
+      return baseOk5(asked);
+    };
+    loaded.factory(fakeRequire).apply(staleCtx5);
+    const staleMain5 = staleSeats5.find((x) => x.opts.name === "main");
+    if (!staleMain5) fail("#5 冷启动（记住失效书名）实例未注册主栏页面");
+    const staleController5 = staleMain5.opts.inject().controller;
+    if ((staleController5.getSnapshot().baselineBook || "") !== "已被删除的书") {
+      fail("#5 前置条件不成立：本地记住的书名应被恢复，实际 " + JSON.stringify(staleController5.getSnapshot().baselineBook));
+    }
+    staleController5.openView("baseline");
+    await settle5();
+    const early5 = req5.filter((r) => r.url.includes("/baseline"));
+    if (early5.length !== 0) {
+      fail("#5 ④-③ 书列表未落定、书名无从上核对时不得发请求，实际 " + early5.length + " 次：" + JSON.stringify(early5.map((r) => r.url)));
+    }
+    if (typeof resolveState5b !== "function") fail("#5 冷启动（记住失效书名）未发出 /state 请求（前置条件不成立）");
+    resolveState5b();
+    await settle5();
+    const after5 = req5.filter((r) => r.url.includes("/baseline"));
+    if (after5.length !== 1) {
+      fail("#5 ④-③ 落定后应恰好补发 1 次基线请求，实际 " + after5.length + " 次：" + JSON.stringify(after5.map((r) => r.url)));
+    }
+    const wantBook5 = "/api/dsh-novel-writer/baseline?book=" + encodeURIComponent("第一本");
+    if (after5[0].url !== wantBook5) {
+      fail("#5 ④-③ 记住的书已不在书库时应改选第一本，实际请求：" + after5[0].url);
+    }
+    if (req5.some((r) => r.url.includes(encodeURIComponent("已被删除的书")))) {
+      fail("#5 ④-③ 不得拿一本已删除的书去要数据，实际请求：" + JSON.stringify(req5.map((r) => r.url)));
+    }
+    if (ls5.get("dsh.novelWriter.baselineBook.v1") !== "第一本") {
+      fail("#5 ④-③ 改成第一本后应同步写回本地偏好，实际 " + JSON.stringify(ls5.get("dsh.novelWriter.baselineBook.v1")));
+    }
+    console.log("v7.3.4 ④-③：记住的书已被删除 → 加载期不发请求；落定后改选第一本并写回偏好 ✓");
   } finally {
     globalThis.fetch = savedFetch5;
     if (savedLS5) Object.defineProperty(globalThis, "localStorage", savedLS5);

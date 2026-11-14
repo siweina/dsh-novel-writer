@@ -1351,3 +1351,20 @@ test("⑫ 隔离守卫：用户真实 state.json 与真实 logs/ 全程未被触
   console.log("   [隔离] 真实 state.json：" + (guardBefore.state ? "存在且哈希未变" : "本来不存在、跑完仍不存在") +
     "｜真实 logs/：" + (guardBefore.logs === null ? "本来不存在、跑完仍不存在" : "清单未变"));
 });
+
+// ===========================================================================
+// v7.3.4 修（#15）：诊断 checkList 里的「读数上限」文案必须与 action 一致
+//   旧实现无条件写「上限 2000 条」，而 action=events 时实际只读 200 条 —— 文案与实现相反。
+// ===========================================================================
+test("#15 诊断清单的读数上限随 action 变化（report=2000 / events=200）", async () => {
+  const { buildChecklist } = await import("../lib/diagnose.js");
+  const make = (action) => buildChecklist({ action, days: 7, rootLooksOk: true, dataDir: {}, engine: {}, switches: {}, library: {} })
+    .find((row) => String(row.item).includes("事件聚合"));
+  const reportRow = make("report");
+  const eventsRow = make("events");
+  assert.ok(reportRow && eventsRow, "两种 action 都必须有「事件聚合」这一行");
+  assert.match(String(reportRow.note), /上限 2000 条/, "report 模式的读数上限应为 2000 条");
+  assert.match(String(eventsRow.note), /上限 200 条|上限 200\b/, "events 模式（明细）的读数上限应为 200 条");
+  assert.doesNotMatch(String(eventsRow.note), /上限 2000 条/, "events 模式不得仍写 2000 条（与 readLogEvents 的 limit 相反）");
+  console.log("   [#15] report → 2000 条 / events → 200 条（文案与实现一致）");
+});

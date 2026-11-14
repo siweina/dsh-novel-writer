@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_continuity_check — 连贯性审计｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_continuity_check 的实现细节：四种互斥模式（衔接检查/OOC 哨兵/大纲对照/全书设定表扫描）的参数、输出契约、判定阈值与证据取得方式、同章号多文件检测、章节模式并行的用语/语用扫描（<code>styleCandidates</code>）与「必查项清单」（<code>checklist</code>），以及被静默跳过的路径；v6.5.0 起用语/语用候选分三档（<code>tier</code>）并随附行号区间（<code>locations</code>），2 字词交由模型按行复核，用户登记的仪式正则在登记与执行两处做静态安全校验。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_continuity_check","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-continuity-check.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_continuity_check — 连贯性审计｜dsh-novel-writer 技术文档","description":"novel_continuity_check 的实现细节：四种互斥模式（衔接检查/OOC 哨兵/大纲对照/全书设定表扫描）的参数、输出契约、判定阈值与证据取得方式、同章号多文件检测、章节模式并行的用语/语用扫描（<code>styleCandidates</code>）与「必查项清单」（<code>checklist</code>），以及被静默跳过的路径；v6.5.0 起用语/语用候选分三档（<code>tier</code>）并随附行号区间（<code>locations</code>），2 字词交由模型按行复核，用户登记的仪式正则在登记与执行两处做静态安全校验。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-continuity-check.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.3","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_continuity_check, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_continuity_check — 连贯性审计｜dsh-novel-writer 技术文档","description":"novel_continuity_check 的实现细节：四种互斥模式（衔接检查/OOC 哨兵/大纲对照/全书设定表扫描）的参数、输出契约、判定阈值与证据取得方式、同章号多文件检测、章节模式并行的用语/语用扫描（<code>styleCandidates</code>）与「必查项清单」（<code>checklist</code>），以及被静默跳过的路径；v6.5.0 起用语/语用候选分三档（<code>tier</code>）并随附行号区间（<code>locations</code>），2 字词交由模型按行复核，用户登记的仪式正则在登记与执行两处做静态安全校验。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-continuity-check.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.4","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_continuity_check, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -138,10 +138,13 @@ thr = n ≤ 4 ? 0.30 : 2σ
       <p><code>meanValence</code> 来自 <code>valenceStats</code>：词表按最长优先消费区间，命中位置先过 <code>negatedAt</code> 否定过滤，再以 100 字窗口统计。零命中窗口不进入均值序列（避免 0 稀释），因此<strong>无情感词的章不产生效价值</strong>——该角色在该章不进样本。</p>
 
       <h3>3 · 大纲对照（<code>outline</code>）</h3>
-      <div class="formula">directionLines = 剧情大纲.md 中匹配 /^- \d+ / 的行
+      <div class="formula">directionLines = 剧情大纲.md 中匹配 OUTLINE_LINE_RE 的行
+  （v7.3.4 起与 novel_outline / 钩子承接 / 改稿台**同一个正则**。旧版这里写死 /^- \d+ /，
+    于是用 "12 内容" / "- 12 内容" / "* 12 内容" / "- 第12章 内容" / "## 12 内容" / 行首带缩进
+    写大纲的书会被误报「创作资料大纲没有方向行」。）
 逐行：
-  num       = 行首数字
-  direction = 去掉「- N 」后的方向文本；length &lt; 4 直接跳过
+  num       = 正则第 1 组（章号，可带「第」「章」或 #/*/- 前缀）
+  direction = 正则第 2 组（方向文本）；length &lt; 4 直接跳过
   ch        = chapters 中 number === num 的章（章号口径同 scanChapters）；无则跳过
   text      = 该章正文[:600]（读失败 → skipped+1，跳过该章）
   grams     = { direction[i:i+2] | 0 ≤ i &lt; len−1 }        ← 相邻二字组

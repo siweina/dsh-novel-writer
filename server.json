@@ -3,7 +3,7 @@
     "name": "io.github.siweina/dsh-novel-writer",
     "title": "dsh-novel-writer — 网文写作体检",
     "description": "Offline 22-tool Chinese web-novel audits, live chat writing with draft mirror, per-book cleanup.",
-    "version": "7.3.3",
+    "version": "7.3.4",
     "repository": {
         "url": "https://github.com/siweina/dsh-novel-writer",
         "source": "github"
@@ -13,7 +13,7 @@
         {
             "registryType": "npm",
             "identifier": "dsh-novel-writer",
-            "version": "7.3.3",
+            "version": "7.3.4",
             "runtimeHint": "npx",
             "packageArguments": [
                 {

@@ -4,7 +4,8 @@ import { mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, readdirSync
 import { join, dirname } from "node:path";
 import { homedir, tmpdir } from "node:os";
 import { apply } from "../lib/index.js";
-import { ALL_TOOLS, FEATURE_DEFAULTS, explorerSpawnFailed } from "../lib/core.js"; // v5.0.0：工具清单的单一事实源；v5.2.0：explorer 误报修正的判据；v7.3.3：#16 功能键全量清单
+import { ALL_TOOLS, FEATURE_DEFAULTS, explorerSpawnFailed } from "../lib/core.js";
+import { logFilePath } from "../lib/log.js"; // v7.3.4：审计日志断言用（与实现同一路径解析） // v5.0.0：工具清单的单一事实源；v5.2.0：explorer 误报修正的判据；v7.3.3：#16 功能键全量清单
 
 // v3.9.5 修正（H3）：先隔离 env、再解析 STATE_FILE——旧版在模块加载时先绑定了用户真实 ~/.dsh 路径，
 // 退出处理器可能写回/删除真实用户配置；testRoot 也移出仓库目录（不再在 test/ 下留残渣）
@@ -1478,6 +1479,31 @@ await (async function v500PostAuditFixes() {
   console.log("【#71】index.js 6 个死导入已清 ✓");
 }
 
+// v7.3.4（④-① / #22）：两处"曾经真的在用、后来变成死代码"的收口——都做静态断言，
+// 因为它们的危害恰恰是"没人再引用却还留着"，只有对着源码才能钉住。
+{
+  const idxSrc = readFileSync(new URL("../lib/index.js", import.meta.url), "utf8");
+  const idxImports = idxSrc.split("\n").filter((line) => /^\s*import\b/.test(line)).join("\n");
+  if (/\bBODY_TOO_LARGE\b/.test(idxImports)) {
+    throw new Error("④-① lib/index.js 仍导入 BODY_TOO_LARGE（7.3.3 删掉路由包装后它已无任何引用）");
+  }
+  const coreSrc = readFileSync(new URL("../lib/core.js", import.meta.url), "utf8");
+  if (/export\s+const\s+BODY_TOO_LARGE\b/.test(coreSrc)) {
+    throw new Error("④-① lib/core.js 不应再 export BODY_TOO_LARGE（无外部消费者；文件内部仍可用）");
+  }
+  if (!/\bconst\s+BODY_TOO_LARGE\b/.test(coreSrc)) {
+    throw new Error("④-① BODY_TOO_LARGE 的实现不能被删（readRequestBody 与两条路由内部仍在用）");
+  }
+  const mcpSrc = readFileSync(new URL("../mcp/server.mjs", import.meta.url), "utf8");
+  // 整份文件先剥注释（修复说明里会**引用**那句被删的代码，不剥会被自己的注释判红），
+  // 再精确断言那条语句不存在。不要用「切函数段」的办法——段边界会把 handleMessage 也带进来。
+  const mcpCode = mcpSrc.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+  if (/if\s*\(\s*INIT_FAILED\s*!==\s*null\s*\)\s*return\s+initFailedError\(id\)/.test(mcpCode)) {
+    throw new Error("#22 mcp/server.mjs 的 handleToolCall 内仍留着恒不可达的 INIT_FAILED 分支");
+  }
+  console.log("【④-①/#22】BODY_TOO_LARGE 死导入与死导出已清（实现保留）、MCP 恒不可达分支已删 ✓");
+}
+
 // ---------------------------------------------------------------------------
 // v7.2.0：对抗性审计路由（面板独立入口；方案 A = 不新增工具，只加一条**只读**路由）
 //   GET  /api/dsh-novel-writer/audit                  → 探测：tool/contracts/tokenFree
@@ -1882,6 +1908,116 @@ console.log("\nALL E2E TESTS PASSED");
     if (failed3.length !== 1) throw new Error("#9 ENOTEMPTY 失败项应恰好 1 条（去重），实际 " + failed3.length + "：" + JSON.stringify(failed3));
     if (!/ENOTEMPTY/.test(String(failed3[0].error || "")) || failed3[0].path !== deepDir) throw new Error("#9 ENOTEMPTY 失败项未指向真实原因/路径：" + JSON.stringify(failed3));
     console.log("【#9】纯空目录：预览 found=true/keys 含 chapters → apply 删除；空目录+摘要文件：failed=0 且空正文目录被删；子目录挡路（ENOTEMPTY）：failed 恰好 1 条（不递归删、不重复报）✓");
+  }
+
+  // ---- v7.3.4 修（④-②）：index.js「纯空目录」提前返回分支的两处失真 ----
+  {
+    const readLog = () => {
+      const f = logFilePath();
+      if (!existsSync(f)) return "";
+      return readFileSync(f, "utf8");
+    };
+    const logBefore = readLog();
+
+    // ②a：选中的空目录在 preview 之后、apply 之前已经不存在（ENOENT）
+    //   旧实现 ENOENT 裸 continue → removed/failed 同时为空 → 回「未能移除（见失败项）」而 failed 是 []。
+    const goneBook = "空目录已消失书";
+    mkdirSync(join(FIX_ROOT, "novels", goneBook), { recursive: true });
+    const pvGone = await defs.novel_delete_book.execute({ book: goneBook, action: "preview", root: FIX_ROOT }, exec);
+    if (pvGone.found !== true) throw new Error("④-②a 前置条件：空目录书应算可清理：" + JSON.stringify(pvGone));
+    rmSync(join(FIX_ROOT, "novels", goneBook), { recursive: true, force: true }); // 预览后、apply 前消失
+    // 带 keys 再 apply（模拟"用户点的就是那个已经没了的空目录"）
+    const goneRes = await defs.novel_delete_book.execute({ book: goneBook, action: "apply", root: FIX_ROOT, keys: ["chapters"] }, exec);
+    if (!Array.isArray(goneRes.failed) || goneRes.failed.length !== 0) {
+      throw new Error("④-②a 目录已不存在不该记为失败，实际 failed=" + JSON.stringify(goneRes.failed));
+    }
+    if (/未能移除/.test(String(goneRes.message))) {
+      throw new Error("④-②a 目录已不存在时不得回「未能移除（见失败项）」，实际：" + goneRes.message);
+    }
+    if (!/已不存在|目标已达成/.test(String(goneRes.message))) {
+      throw new Error("④-②a 必须说清「已不存在／目标已达成」，实际：" + goneRes.message);
+    }
+
+    // ②b：只选空目录（书里还有非空内容）→ remaining/skipped/partial 必须如实 + 记 delete_apply 日志
+    const partBook = "空目录加摘要书";
+    mkdirSync(join(FIX_ROOT, "novels", partBook), { recursive: true });
+    const partSummary = join(FIX_ROOT, ".novel-writer", "summaries", partBook + ".json");
+    mkdirSync(dirname(partSummary), { recursive: true });
+    writeFileSync(partSummary, "[]", "utf8");
+    const pvPart = await defs.novel_delete_book.execute({ book: partBook, action: "preview", root: FIX_ROOT }, exec);
+    if (!(pvPart.keys || []).includes("chapters")) {
+      throw new Error("④-②b 前置条件：keys 应含空正文目录，实际 " + JSON.stringify(pvPart.keys));
+    }
+    const partRes = await defs.novel_delete_book.execute({ book: partBook, action: "apply", root: FIX_ROOT, keys: ["chapters"] }, exec);
+    if (existsSync(join(FIX_ROOT, "novels", partBook))) {
+      throw new Error("④-②b 选中的空目录应被移除，实际仍在盘上");
+    }
+    if (!(partRes.remaining && partRes.remaining.files === 1)) {
+      throw new Error("④-②b 只删空目录时 remaining 必须如实（摘要 1 个文件仍在），实际 " + JSON.stringify(partRes.remaining));
+    }
+    if (partRes.partial !== true) {
+      throw new Error("④-②b 按 keys 只处理一部分时必须标 partial=true，实际 " + JSON.stringify(partRes.partial));
+    }
+    if (!Array.isArray(partRes.skipped) || !partRes.skipped.includes("data:summaries")) {
+      throw new Error("④-②b skipped 必须列出按选择保留的位置，实际 " + JSON.stringify(partRes.skipped));
+    }
+    if (!(partRes.warnings || []).some((w) => String(w).includes("按选择保留"))) {
+      throw new Error("④-②b 必须给出「另有内容按选择保留」的警告，实际 " + JSON.stringify(partRes.warnings));
+    }
+    const logAfter = readLog();
+    const countLines = (t) => t.split(/\r?\n/).filter((l) => l.trim() !== "").length;
+    if (!/"delete_apply"/.test(logAfter) || countLines(logAfter) <= countLines(logBefore)) {
+      throw new Error("④-②b 只删空目录也必须新增一条 delete_apply 审计日志（旧实现绕开 applyBookDelete → 一条都没有）");
+    }
+    if (!/只清理空目录/.test(logAfter)) {
+      throw new Error("④-②b 审计日志应写明「只清理空目录」");
+    }
+    console.log("【④-②】空目录已消失 → 不记失败且文案说清「目标已达成」；只删空目录 → remaining/skipped/partial 如实 + 记 delete_apply 日志 ✓");
+  }
+
+  // ---- v7.3.4 修（#18）：novel_continuity_check 的大纲对照必须与 OUTLINE_LINE_RE 同口径 ----
+  {
+    // 旧实现写死 /^- \d+ /：用 `* 12 内容` / `## 12 内容` / 行首缩进写大纲的书，会被误报「没有方向行」。
+    const outlineBook = "方向行口径书";
+    const obDir = join(FIX_ROOT, "novels", outlineBook);
+    const obCreation = join(FIX_ROOT, "novels", "创作资料", outlineBook);
+    mkdirSync(obDir, { recursive: true });
+    mkdirSync(obCreation, { recursive: true });
+    // 三章正文各含大纲方向里的词，保证「有方向行」时能真的产出候选
+    writeFileSync(join(obDir, "第01章.md"), "# 第一章\n\n他推开门，屋里的灯还亮着，桌上摆着一只旧怀表。\n", "utf8");
+    writeFileSync(join(obDir, "第02章.md"), "# 第二章\n\n她把信折好塞进抽屉，转身去关那扇漏风的窗。\n", "utf8");
+
+    const variants = [
+      ["* 1 旧怀表 推开门 灯还亮着\n* 2 信折好 抽屉 漏风的窗", "星号标记"],
+      ["## 1 旧怀表 推开门 灯还亮着\n## 2 信折好 抽屉 漏风的窗", "Markdown 标题"],
+      ["  1 旧怀表 推开门 灯还亮着\n  2 信折好 抽屉 漏风的窗", "行首缩进"],
+      ["- 第1章 旧怀表 推开门 灯还亮着\n- 第2章 信折好 抽屉 漏风的窗", "第N章 写法"]
+    ];
+    for (const [text, label] of variants) {
+      writeFileSync(join(obCreation, "剧情大纲.md"), "# 大纲\n\n" + text + "\n", "utf8");
+      const r = await defs.novel_continuity_check.execute({ book: outlineBook, outline: true, root: FIX_ROOT }, exec);
+      const advice = String(r.advice || r.outline?.advice || "");
+      if (/没有方向行/.test(advice)) {
+        throw new Error("#18 大纲方向行（" + label + "）被误报为「没有方向行」：" + advice);
+      }
+      // 注意：candidates 为 0 是「各章与方向一致」这个**正确**结果，不能当失败；
+      // 这里只验证方向行被真正识别（不再误报「没有方向行」）。
+    }
+    // 正向对照：方向词与正文毫无重合时必须真的产出候选（证明上面的 0 条是"一致"而不是"没解析到"）
+    writeFileSync(join(obCreation, "剧情大纲.md"), "# 大纲\n\n* 1 量子计算机 赛博朋克 义体医生\n* 2 太空电梯 反物质引擎 曲率航行\n", "utf8");
+    const far = await defs.novel_continuity_check.execute({ book: outlineBook, outline: true, root: FIX_ROOT }, exec);
+    const farCands = (far.candidates || far.outline?.candidates || []);
+    if (farCands.length === 0) {
+      throw new Error("#18 方向与正文完全不重合时必须产出对照候选（否则说明方向行根本没被解析），advice=" + String(far.advice || ""));
+    }
+    // 反证：真的没有方向行时仍必须如实说「没有方向行」（别把判据放松成"啥都算"）
+    writeFileSync(join(obCreation, "剧情大纲.md"), "# 大纲\n\n这一章他去了城南，什么也没发生。\n", "utf8");
+    const none = await defs.novel_continuity_check.execute({ book: outlineBook, outline: true, root: FIX_ROOT }, exec);
+    const noneAdvice = String(none.advice || none.outline?.advice || "");
+    if (!/没有方向行/.test(noneAdvice)) {
+      throw new Error("#18 没有方向行时必须如实说明（判据不得放松），实际 advice=" + noneAdvice);
+    }
+    console.log("【#18】大纲方向行统一用 OUTLINE_LINE_RE：星号/标题/缩进/第N章 都能识别，真没方向行时仍如实报 ✓");
   }
 
   // ---- #4：超长 newTerm 整体失败（不谎报、不暗改 enabled）；正常 update 仍生效 ----

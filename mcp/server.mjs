@@ -484,7 +484,10 @@ async function handleToolCall(id, params) {
   }
   const definition = toolMap.get(name);
   if (!definition) {
-    if (INIT_FAILED !== null) return initFailedError(id);
+    // v7.3.4 修（#22）：这里原本还有一句 `if (INIT_FAILED !== null) return initFailedError(id);`，
+    // 但它**恒不可达**：handleMessage 开头的闸门（`INIT_FAILED !== null && method !== "initialize"
+    // && method !== "tools/list"`）已把 tools/call 全部挡在进入 handleToolCall 之前，
+    // 而 handleToolCall 全仓只有那一个调用点。删掉，免得后人以为这里还兜着一条路。
     // v4.3.0：改为**符合规范**的协议错误。MCP《Tools → Error Handling》把 "Unknown tools" 明列为
     // Protocol Error，规范示例即 {"code":-32602,"message":"Unknown tool: invalid_tool_name"}
     // （见 specification/2025-11-25/server/tools#error-handling）。旧版回 isError 内容属于
