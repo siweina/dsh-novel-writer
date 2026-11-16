@@ -1923,6 +1923,10 @@ console.log("\nALL E2E TESTS PASSED");
     //   旧实现 ENOENT 裸 continue → removed/failed 同时为空 → 回「未能移除（见失败项）」而 failed 是 []。
     const goneBook = "空目录已消失书";
     mkdirSync(join(FIX_ROOT, "novels", goneBook), { recursive: true });
+    // v7.3.5：再放一份**未选中**的内容（摘要文件），用来钉住「还有内容却报 remaining 0」这个失真
+    const goneSummary = join(FIX_ROOT, ".novel-writer", "summaries", goneBook + ".json");
+    mkdirSync(dirname(goneSummary), { recursive: true });
+    writeFileSync(goneSummary, "[]", "utf8");
     const pvGone = await defs.novel_delete_book.execute({ book: goneBook, action: "preview", root: FIX_ROOT }, exec);
     if (pvGone.found !== true) throw new Error("④-②a 前置条件：空目录书应算可清理：" + JSON.stringify(pvGone));
     rmSync(join(FIX_ROOT, "novels", goneBook), { recursive: true, force: true }); // 预览后、apply 前消失
@@ -1936,6 +1940,16 @@ console.log("\nALL E2E TESTS PASSED");
     }
     if (!/已不存在|目标已达成/.test(String(goneRes.message))) {
       throw new Error("④-②a 必须说清「已不存在／目标已达成」，实际：" + goneRes.message);
+    }
+    // v7.3.5：盘上还有未选中的摘要文件 → remaining/partial/skipped 必须如实（旧实现回退成 0/false/[]）
+    if (!(goneRes.remaining && goneRes.remaining.files === 1)) {
+      throw new Error("④-②a 还有未选中内容时 remaining 必须如实，实际 " + JSON.stringify(goneRes.remaining));
+    }
+    if (goneRes.partial !== true) {
+      throw new Error("④-②a 有内容按选择保留时必须标 partial=true，实际 " + JSON.stringify(goneRes.partial));
+    }
+    if (!Array.isArray(goneRes.skipped) || !goneRes.skipped.includes("data:summaries")) {
+      throw new Error("④-②a skipped 必须列出按选择保留的位置，实际 " + JSON.stringify(goneRes.skipped));
     }
 
     // ②b：只选空目录（书里还有非空内容）→ remaining/skipped/partial 必须如实 + 记 delete_apply 日志
@@ -1972,7 +1986,7 @@ console.log("\nALL E2E TESTS PASSED");
     if (!/只清理空目录/.test(logAfter)) {
       throw new Error("④-②b 审计日志应写明「只清理空目录」");
     }
-    console.log("【④-②】空目录已消失 → 不记失败且文案说清「目标已达成」；只删空目录 → remaining/skipped/partial 如实 + 记 delete_apply 日志 ✓");
+    console.log("【④-②】空目录已消失 → 不记失败、文案说清「目标已达成」且 remaining/skipped/partial 如实；只删空目录 → 同上 + 记 delete_apply 日志 ✓");
   }
 
   // ---- v7.3.4 修（#18）：novel_continuity_check 的大纲对照必须与 OUTLINE_LINE_RE 同口径 ----

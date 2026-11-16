@@ -78,6 +78,55 @@
 
 ---
 
+## [7.3.5] - 2026-11-14
+
+> 一句话：修 7.3.4 **自己新引入**的一处失真。工具数仍 **22**，无其它改动。
+>
+> 7.3.4 新加了一条「选中的位置在预览后已全部不存在 → 如实回『目标已达成』」的分支，方向是对的，
+> 但那条分支只写了 `keys`/`skipped`/`partial` 的**空值**，忘了书里**其它未选中的内容还在盘上**。
+
+### 修的是什么
+
+- **该分支的 `remaining` / `partial` / `skipped` 不如实（③）**：`deleteResultFor` 的默认值是
+  `remaining: { files: 0, bytes: 0 }`、`partial: false`、`skipped: []`，那条分支没覆盖它们，
+  于是回退成默认值。实测复现（书里只有一个空正文目录 + 一份未选中的摘要文件，预览后空目录被外部删除）：
+
+  ```
+  预览 keys: ["chapters","data:summaries"]
+  message : 《空壳书》选中的位置（chapters）在预览后已不存在——目标已达成，本次没有做任何写盘动作
+  remaining: {"files":0,"bytes":0} | partial: false | skipped: []     ← 摘要文件其实还在盘上
+  ```
+
+  现在与下方「只删空目录」分支对齐，用同一套 `leftContent` 统计：
+
+  ```
+  remaining: {"files":1,"bytes":2} | partial: true | skipped: ["data:summaries"]
+  warnings : 另有 1 处内容按选择保留（1 个文件 / 2 字节）
+  ```
+
+- 测试补强：`e2e` 的 ④-②a 场景改成「**有未选中内容 + 选中的空目录已消失**」，并断言
+  `remaining.files === 1`、`partial === true`、`skipped` 含 `data:summaries`。
+
+### 顺带加的一道硬检查（这次的根因收口）
+
+连续三版都在修「上一版修出来的问题」，且都是同一个模式：**新增一条分支时漏填返回体的某几项，
+靠默认值静默兜底**。所以给破坏性动作的返回体加了 fail-closed 断言：
+
+- `deleteResultFor("apply", …)` 现在要求调用方**显式**给出 10 个键
+  （`targets` / `totals` / `warnings` / `notTouched` / `keys` / `skipped` / `partial` / `failed` / `remaining` / `message`），
+  少一个就当场抛错并点名缺的是哪个，而不是回退成默认值。
+- **为什么只约束 `apply`**：`preview` / `list` / `restore` / `purge` 的默认值语义就是"没有"（它们不产生副作用），
+  而 `apply` 的这几个键是**执行结果的账**，回退默认值等于说谎。
+- 加完立刻见效：它先把新增那条分支漏掉的 `targets` / `totals` 抓了出来（已补）。
+  反向验证：故意删掉某条分支的 `partial` → 测试立刻红并点名 `partial`。
+
+### 升级须知
+
+- 工具数仍 **22**；参数契约、书库格式、状态文件格式均不变。
+- **缓存**：`CACHE_VERSION = PLUGIN_VERSION`，升到 7.3.5 后会重算一次分析缓存。
+
+---
+
 ## [7.3.4] - 2026-11-14
 
 > 一句话：把 7.3.3 之后又核出来的一轮收干净——**3 条上一轮漏修的**（我分工漏了）+ **4 条 7.3.3 自己带出来的**。
