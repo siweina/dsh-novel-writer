@@ -25,9 +25,9 @@ const REPO = join(dirname(fileURLToPath(import.meta.url)), "..");
 const testRoot = join(tmpdir(), "dsh-novel-writer-style-rule-" + process.pid + "-" + Date.now().toString(36));
 process.env.DSH_NOVEL_WRITER_STATE = join(testRoot, "state-test.json");
 process.on("exit", () => {
-  try { rmSync(testRoot, { recursive: true, force: true }); } catch { /* 忽略 */ }
+  try { rmSync(testRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch { /* 忽略 */ }
 });
-rmSync(testRoot, { recursive: true, force: true });
+rmSync(testRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 
 let pass = 0;
 const failures = [];

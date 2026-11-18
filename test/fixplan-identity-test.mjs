@@ -34,7 +34,7 @@ function makeLibrary() {
       return readFileSync(join(root, rel), "utf8");
     },
     cleanup() {
-      rmSync(root, { recursive: true, force: true });
+      rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     }
   };
 }

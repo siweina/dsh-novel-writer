@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_keywords — 关键词统计｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_keywords 的实现细节：中文相邻二字/三字组的滑动窗口与停用字规则、英文词与疑似人名的识别模式、入选阈值与排序截断、报告落盘与保留份数，以及对调用方模型的约束。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_keywords","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-keywords.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_keywords — 关键词统计｜dsh-novel-writer 技术文档","description":"novel_keywords 的实现细节：中文相邻二字/三字组的滑动窗口与停用字规则、英文词与疑似人名的识别模式、入选阈值与排序截断、报告落盘与保留份数，以及对调用方模型的约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-keywords.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.5","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_keywords, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_keywords — 关键词统计｜dsh-novel-writer 技术文档","description":"novel_keywords 的实现细节：中文相邻二字/三字组的滑动窗口与停用字规则、英文词与疑似人名的识别模式、入选阈值与排序截断、报告落盘与保留份数，以及对调用方模型的约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-keywords.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.4.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_keywords, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -99,12 +99,12 @@ CJK_STOP_CHARS 单字停用表 = 68 个字符（去重后 67 字，含重复的�
       <h3>4 · 疑似人名 / 专名</h3>
       <div class="formula">模式 A（2–3 字懒惰匹配 + 动作词）：
   /([一-鿿]{2,3}?)(?:说|道|问|喊|叫|想|笑|叹|答|喝|骂|念|哭|点头|摇头)/g
-模式 B（2–3 字贪婪匹配 + 称谓词）：
-  /([一-鿿]{2,3})(?:小姐|大人|先生|少爷|姑娘|殿下|老师|导师|婆婆|爷爷|奶奶|夫人|老爷|公子|长老|神甫|陛下)/g
+模式 B（2–3 字懒惰匹配 + 称谓词）：
+  /([一-鿿]{2,3}?)(?:小姐|大人|先生|少爷|姑娘|殿下|老师|导师|婆婆|爷爷|奶奶|夫人|老爷|公子|长老|神甫|陛下)/g
 
 过滤：以 他 她 我 你 它 又 再 还 这 那 谁 起头的命中一律丢弃
 整词黑名单：那个 这个 什么 怎么 自己 她们 他们 你们</div>
-      <p>模式 A 的量词取<strong>懒惰</strong>是为修正贪婪误吞：贪婪会把「琉璃说道」匹配成「琉璃说」加剩余部分，使人名候选被动词尾巴污染。代词起头过滤针对「他说」「她又」「我问道」这类伪人名。该通道本质是启发式，故输出的 <code>kind</code> 标为 <code>name-candidate</code>（疑似）而非确定人名。</p>
+      <p>模式 A 与模式 B 的量词均取<strong>懒惰</strong>是为修正贪婪误吞：贪婪会把「琉璃说道」「对琉璃小姐」匹配成「琉璃说」「对琉璃」，使人名候选被前后字污染。代词起头过滤针对「他说」「她又」「我问道」这类伪人名。该通道本质是启发式，故输出的 <code>kind</code> 标为 <code>name-candidate</code>（疑似）而非确定人名。</p>
 
       <h3>5 · 入选阈值、排序与截断</h3>
       <div class="formula">入选阈值：

@@ -48,12 +48,12 @@ const STATE = join(STATE_DIR, "state.json");
 const REAL_STATE = join(homedir(), ".dsh", "dsh-novel-writer", "state.json");
 const REAL_LOG_DIR = join(homedir(), ".dsh", "dsh-novel-writer", "logs");
 
-rmSync(ROOT, { recursive: true, force: true });
+rmSync(ROOT, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 mkdirSync(STATE_DIR, { recursive: true });
 mkdirSync(join(ROOT, "dsh-home"), { recursive: true });
 process.env.DSH_NOVEL_WRITER_STATE = STATE;
 process.env.DSH_HOME = join(ROOT, "dsh-home");
-process.on("exit", () => { try { rmSync(ROOT, { recursive: true, force: true }); } catch { /* 清理失败不影响结论 */ } });
+process.on("exit", () => { try { rmSync(ROOT, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch { /* 清理失败不影响结论 */ } });
 
 function digestFile(file) {
   try { return createHash("sha256").update(readFileSync(file)).digest("hex"); } catch { return "absent"; }

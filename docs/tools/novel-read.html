@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_read — 阅读正文｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_read 的实现细节：章节定位的查找顺序（精确文件名优先于章号、同章号多文件时拒绝执行并列出候选）、offset/limit 分段与 20000 字上限、单行 3000 字裁剪、行号口径与编码探测，以及纯数字参数不下探子串等关键约束。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_read","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-read.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_read — 阅读正文｜dsh-novel-writer 技术文档","description":"novel_read 的实现细节：章节定位的查找顺序（精确文件名优先于章号、同章号多文件时拒绝执行并列出候选）、offset/limit 分段与 20000 字上限、单行 3000 字裁剪、行号口径与编码探测，以及纯数字参数不下探子串等关键约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-read.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.5","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_read, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_read — 阅读正文｜dsh-novel-writer 技术文档","description":"novel_read 的实现细节：章节定位的查找顺序（精确文件名优先于章号、同章号多文件时拒绝执行并列出候选）、offset/limit 分段与 20000 字上限、单行 3000 字裁剪、行号口径与编码探测，以及纯数字参数不下探子串等关键约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-read.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.4.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_read, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -55,7 +55,7 @@
       </table>
 
       <h2>输出结构</h2>
-      <p>契约字段（<code>output.schema</code>）的 <code>required</code> 覆盖全部九个顶层字段，缺一不可；<code>lines</code> 的元素必须同时含 <code>number</code> 与 <code>text</code>。</p>
+      <p>契约字段（<code>output.schema</code>）的 <code>required</code> 覆盖全部十个顶层字段，缺一不可；<code>lines</code> 的元素必须同时含 <code>number</code> 与 <code>text</code>。</p>
       <table>
         <thead><tr><th>字段</th><th>类型</th><th>内容</th></tr></thead>
         <tbody>
@@ -65,11 +65,12 @@
           <tr><th><code>offset</code></th><td>integer</td><td>回显本次生效的起始行号</td></tr>
           <tr><th><code>totalLines</code></th><td>integer</td><td>该章总行数，空文件为 0</td></tr>
           <tr><th><code>chars</code></th><td>integer</td><td><strong>已返回部分</strong>的字数（含行间换行符），不是本章总字数</td></tr>
-          <tr><th><code>truncated</code></th><td>boolean</td><td>是否未读到文件尾或被上限中断</td></tr>
+          <tr><th><code>truncated</code></th><td>boolean</td><td>是否未读到文件尾或被上限（字符预算 / 行数上限 / 单行 3000 字裁剪）中断</td></tr>
+          <tr><th><code>hitLineCap</code></th><td>boolean</td><td>本次返回的行中是否包含超过 3000 字而被裁剪的单行（供区分单行裁剪与 20000 字 / <code>limit</code> 分段截断）</td></tr>
           <tr><th><code>lines</code></th><td>array</td><td><code>&#123; number, text &#125;</code> 数组，<code>number</code> 为 1 起的绝对行号</td></tr>
         </tbody>
       </table>
-      <p>渲染层（<code>formatRead</code>）输出 <code>&lt;path&gt;</code> / <code>&lt;type&gt;</code> / <code>&lt;content&gt;</code> 包裹的文本，正文行格式为 <code>行号: 文本</code>。页脚按 <code>truncated</code> 二选一：截断时为 <code>(输出截断。本章共 N 行，已显示 a-b 行 / M 字。用 offset=b+1 继续阅读。)</code>，否则为 <code>(本章共 N 行 / M 字)</code>。<strong>续读指令由渲染层给出，非截断分支不提供 <code>offset</code> 建议。</strong></p>
+      <p>渲染层（<code>formatRead</code>）输出 <code>&lt;path&gt;</code> / <code>&lt;type&gt;</code> / <code>&lt;content&gt;</code> 包裹的文本，正文行格式为 <code>行号: 文本</code>。页脚按「是否截断 × 是否仍有后续行」三选一：仍有未读行（<code>endLine &lt; totalLines</code>）且截断时为 <code>(输出截断[，且含超 3000 字裁剪行]。本章共 N 行，已显示 a-b 行 / M 字。用 offset=b+1 继续阅读。)</code>；已到末行但因单行超 3000 字裁剪而 <code>truncated=true</code> 时为 <code>(单行超 3000 字已裁剪。本章共 N 行，已显示 a-b 行 / M 字。)</code>；否则为 <code>(本章共 N 行 / M 字)</code>。<strong>只有在仍有未读行时才给出续读 <code>offset</code> 建议。</strong></p>
 
       <h2>行为与实现</h2>
 
@@ -87,7 +88,7 @@ lower  = needle.toLowerCase()
 ③ /^\d+$/.test(normalizeChapterWidth(needle)) → 返回 undefined（纯数字不再下探子串）
 ④ 标题或文件名的子串匹配（忽略大小写，含文件名扩展名）
 ⑤ 全部未命中 → 抛错「在作品 "X" 中找不到章节 "Y"（可用 novel_chapters 查看章节列表）」</div>
-      <p>章号解析复用 <code>parseChapterNumber</code>，与 <a href="novel-chapters.html">novel_chapters</a> 完全同源：入口先做字符宽度归一（全角 <code>０-９</code> / <code>－．／</code> 按 <code>−0xFEE0</code> 映射为半角），再依次尝试阿拉伯数字章号、中段数字、行首数字、末尾数字与中文章号（<code>cjkToNumber</code>，支持十 / 百 / 千，不含「万」）。因此参数写 <code>1</code>、<code>01</code>、<code>０１</code>、<code>第1章</code> 都能解析为同一章号。</p>
+      <p>章号解析复用 <code>parseChapterNumber</code>，与 <a href="novel-chapters.html">novel_chapters</a> 完全同源：入口先做字符宽度归一（全角 <code>０-９</code> / <code>－．／</code> 按 <code>−0xFEE0</code> 映射为半角），再依次尝试阿拉伯数字章号、中文章号（<code>cjkToNumber</code>，已支持十 / 百 / 千 / 万，但受 <code>MAX_CHAPTER_NUMBER = 9999</code> 限制，超过 9999 与 <code>第0章</code> / <code>第零章</code> 均返回 <code>undefined</code>）、中段数字、行首数字与末尾数字（均校验 <code>1..9999</code>）。因此参数写 <code>1</code>、<code>01</code>、<code>０１</code>、<code>第1章</code> 都能解析为同一章号。</p>
       <div class="warn note">
         <b>同章号为什么必须报错而不是"取第一个"。</b><code>scanChapters</code> 不去重，两份同章号文件都会进列表，排序规则是「章号升序，同章号按文件名 <code>localeCompare</code>」。旧版 <code>chapters.find(c =&gt; c.number === asNumber)</code> 取到的就是排序靠前的那一份，另一份没有任何入口可达。v4.3.1 起改为：命中多个即拒绝（<code>chapter</code> 换文件名即可指定），把"静默读错稿"换成"带候选清单的报错"。
       </div>
@@ -97,20 +98,20 @@ lower  = needle.toLowerCase()
 
       <h3>2 · 分段与截断（计算原理）</h3>
       <div class="formula">text       = readTextFile(&lt;book&gt;/&lt;file&gt;)      ← 已做编码探测
-allLines   = text.split(/\r?\n/)
+allLines   = text.replace(/\r\n?/g, "\n").split("\n")
 totalLines = countTextLines(text) = text.length === 0 ? 0 : allLines.length
 
-chars = 0; lines = []; hitCharCap = false
+chars = 0; lines = []; hitCharCap = false; hitLineCap = false
 for (i = offset − 1; i &lt; allLines.length 且 lines.length &lt; limit; i += 1)：
     line = allLines[i]
-    if (line.length &gt; 3000) line = line.slice(0, 3000) + "…（行过长已裁剪）"
+    if (line.length &gt; 3000) { line = line.slice(0, 3000) + "…（行过长已裁剪）"; hitLineCap = true }
     addChars = line.length + (lines.length &gt; 0 ? 1 : 0)      ← 换行符只算行与行之间
     if (chars + addChars &gt; READ_MAX_CHARS 且 lines.length &gt; 0)：
         hitCharCap = true; break
     chars += addChars
     lines.push(&#123; number: i + 1, text: line &#125;)
 
-truncated = hitCharCap ‖ (offset − 1 + lines.length) &lt; totalLines</div>
+truncated = hitCharCap || hitLineCap || (offset − 1 + lines.length) &lt; totalLines</div>
       <p>常量：<code>READ_LIMIT = 400</code> 行、<code>READ_MAX_CHARS = 20000</code> 字符、单行裁剪阈值 3000。三个限制的语义各不相同：<code>limit</code> 是<strong>调用方可控</strong>的行数上限（默认即上限）；20000 字符是<strong>不可调</strong>的输出预算；3000 是<strong>单行</strong>保护，防止首行超长绕过字符预算。截断判定在累加<strong>之前</strong>完成，被中断的行不计入 <code>chars</code>，故 <code>chars</code> 与 <code>lines.join("\n").length</code> 严格一致。</p>
       <div class="note">
         <b>第一行不受 20000 字预算约束。</b>判断式带 <code>lines.length &gt; 0</code> 条件，保证至少返回一行，避免 <code>limit</code> 与预算互相卡死产生空结果；该行的规模由 3000 字单行裁剪兜住。截断时渲染层给出的续读 <code>offset</code> 为「末行号 + 1」，恰好是下一段起点。
@@ -125,7 +126,7 @@ truncated = hitCharCap ‖ (offset − 1 + lines.length) &lt; totalLines</div>
         FF FE → UTF-16LE（剥离 2 字节）；FE FF → UTF-16BE
 ② 无 BOM，NUL 占比 &gt; 5% → 按奇偶下标 NUL 分布判 UTF-16LE / UTF-16BE
 ③ TextDecoder("utf-8", &#123; fatal: true &#125;) 严格解码，成功即返回
-④ 长度 ≥ 8 且为偶数：分别试解 LE/BE，用「高字节结构占比 ≥ 0.9 且可打印率 ≥ 0.9
+④ 长度 ≥ 4 且为偶数：分别试解 LE/BE，用「高字节结构占比 ≥ 0.9 且可打印率 ≥ 0.9
    且另一字节序结构占比 &lt; 0.9」双阈值确认无 BOM UTF-16（中文正文 NUL 占比仅约 1.5%，过不了 ②）
 ⑤ TextDecoder("gbk") 解码，结果不含 U+FFFD → 采用
 ⑥ 全部失败 → 抛错，并区分「疑似缺 BOM UTF-16」与「无法识别」两种文案</div>
@@ -140,7 +141,7 @@ truncated = hitCharCap ‖ (offset − 1 + lines.length) &lt; totalLines</div>
         <li><strong>文件名优先于章号（v4.3.1 起）</strong>：参数能与某个文件名（含省略扩展名）精确对上时直接返回该文件，不再先做章号解析。旧版顺序相反，导致 <code>chapter: "第03章 重逢.md"</code> 这种完整文件名也会被解析出章号并命中同章号的另一份。</li>
         <li><strong>同章号多文件按章号定位会报错（v4.3.1 起）</strong>：错误文案列出全部候选文件名与「把 chapter 写成其中一个文件名」的指引。这是刻意设计——旧版静默返回排序靠前的那一份，另一份永久不可达。</li>
         <li><strong>子串匹配取首个命中</strong>：④ 步用的是 <code>includes</code> 且按章号升序列表 <code>find</code> 第一个，短子串（如「序」）可能命中并非目标的那一章。</li>
-        <li><strong>三类上限各自独立，且会叠加触发</strong>：单行 &gt; 3000 字先被裁剪并追加 <code>…（行过长已裁剪）</code>（<strong>该后缀也算入 <code>chars</code></strong>），再受 20000 字预算与 <code>limit</code> 行数约束；任一触发都使 <code>truncated = true</code>。</li>
+        <li><strong>三类上限各自独立，且会叠加触发</strong>：单行 &gt; 3000 字先被裁剪并追加 <code>…（行过长已裁剪）</code>（<strong>该后缀也算入 <code>chars</code></strong>）同时置输出字段 <code>hitLineCap = true</code>，再受 20000 字预算与 <code>limit</code> 行数约束；任一触发都使 <code>truncated = true</code>。</li>
         <li><strong><code>chars</code> 是「已显示部分」</strong>：v3.7.0 起文案已明确区分，调用方不得把截断响应里的 <code>chars</code> 当作章节总字数；总字数需用 <a href="novel-chapters.html">novel_chapters</a> 的 <code>chars</code>。</li>
         <li><strong>不做 Markdown 清洗、不剥离标题行</strong>：<code>lines[].text</code> 是文件原始行文本（含 <code>#</code> 标题、空行），行号即物理行号。</li>
         <li><strong>无缓存</strong>：每次调用都重新枚举目录、重新读全文；文件被外部修改后立即反映。</li>

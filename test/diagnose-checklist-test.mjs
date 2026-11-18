@@ -24,7 +24,7 @@ import test from "node:test";
 const ROOT = await mkdtemp(join(tmpdir(), "dsh-diag-checklist-"));
 process.env.DSH_NOVEL_WRITER_STATE = join(ROOT, "state-dir", "state.json");
 await mkdir(join(ROOT, "state-dir"), { recursive: true });
-process.on("exit", () => { try { rmSync(ROOT, { recursive: true, force: true }); } catch { /* 清理失败不影响结论 */ } });
+process.on("exit", () => { try { rmSync(ROOT, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch { /* 清理失败不影响结论 */ } });
 
 const { buildDiagnosis, formatDiagnosis, buildChecklist, classifyCacheError } = await import("../lib/diagnose.js");
 const { logEvent } = await import("../lib/log.js");
@@ -227,7 +227,7 @@ test("#26-e2e 插件数据目录有损坏 JSON 时，体检清单的数据目录
     const report = formatDiagnosis(result);
     assert.ok(report.includes("[异常]"), "报告末节应体现异常状态：" + report.slice(-400));
   } finally {
-    await rm(plotDir, { recursive: true, force: true });
+    await rm(plotDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
 

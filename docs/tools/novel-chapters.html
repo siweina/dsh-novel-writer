@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_chapters — 列出章节｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_chapters 的实现细节：章节文件过滤、中文章号与全角数字的解析路径、标题清洗、字数与行数口径、排序规则、同章号多文件的提示规则，以及章号可能缺失等调用约束。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_chapters","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-chapters.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_chapters — 列出章节｜dsh-novel-writer 技术文档","description":"novel_chapters 的实现细节：章节文件过滤、中文章号与全角数字的解析路径、标题清洗、字数与行数口径、排序规则、同章号多文件的提示规则，以及章号可能缺失等调用约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-chapters.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.5","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_chapters, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_chapters — 列出章节｜dsh-novel-writer 技术文档","description":"novel_chapters 的实现细节：章节文件过滤、中文章号与全角数字的解析路径、标题清洗、字数与行数口径、排序规则、同章号多文件的提示规则，以及章号可能缺失等调用约束。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-chapters.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.4.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_chapters, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -77,27 +77,29 @@
       <p>入口先做<strong>字符宽度归一</strong>：<code>normalizeChapterWidth</code> 把全角数字 <code>０-９</code> 与全角 <code>－．／</code> 按 <code>−0xFEE0</code> 逐字符映射为半角，再剥掉扩展名得到 <code>stem</code>。归一化<strong>不使用整串 NFKC</strong>，因为 NFKC 会把标题里的中文句号「。」也归一成「.」，随后被标题清洗的 <code>[_\-.]+</code> 换成空格（「初遇。重逢」被破坏），且长度变化会破坏依赖索引切片的文件名解析。逐字符映射保持 1 字符换 1 字符、索引一一对应。</p>
       <div class="formula">stem = normalizeChapterWidth(fileName).replace(/\.[^.]+$/, "")
 
-① /第?(\d&#123;1,4&#125;)[章回话]/            第01章.md → 1       第3话.md → 3
-② /[-._\s](\d&#123;1,4&#125;)[-._\s]/          斗破苍穹-01-陨落.md → 1
-③ /^第?(\d+)[章回话]?[\s._\-—]*/          01初遇.md → 1      第12345章.md → 12345
-④ /[-._\s](\d&#123;1,4&#125;)$/              书名-01.md → 1
-⑤ /第([零一二三四五六七八九十百千万两]+)[章回话]/ → cjkToNumber(捕获段)
-   cjkToNumber 返回 undefined（含非数字字、或含「万」）时继续下探
+① /第?(?&lt;!\d)(\d+)(?!\d)[章回话节]/            第01章.md → 1       第3话.md → 3
+   校验 1 ≤ n ≤ 9999；超限或 0 直接返回 undefined（第12345章.md / 第0章.md → undefined）
+② /第([零一二三四五六七八九十百千万两]+)[章回话节]/ → cjkToNumber(捕获段)
+   校验 1 ≤ n ≤ 9999；返回 undefined 或 &gt; 9999（如「第一万章」）直接返回 undefined
+③ /(?&lt;!\d)(\d+)(?!\d)[-._\s]/                  斗破苍穹-01-陨落.md → 1（同样校验 1 ≤ n ≤ 9999）
+④ /^第?(\d+)(?:[章回话节])?[\s._\-—]*/           01初遇.md → 1（同样校验 1 ≤ n ≤ 9999）
+⑤ /(?&lt;!\d)(\d+)(?!\d)$/                         书名-01.md → 1（同样校验 1 ≤ n ≤ 9999）
 全部未命中 → undefined</div>
       <p>五条规则<strong>按序短路</strong>，先命中先返回；因此同一文件名可能被前一条规则解释成不同数值。中文章号由 <code>cjkToNumber</code> 累加：</p>
       <div class="formula">total = 0; section = 0; hasUnit = false
-逐字扫描「十 / 百 / 千 / 数字」：
+逐字扫描「十 / 百 / 千 / 万 / 数字」：
   十 → total += (section === 0 ? 1 : section) × 10;    section = 0; hasUnit = true
   百 → total += (section === 0 ? 1 : section) × 100;   section = 0; hasUnit = true
   千 → total += (section === 0 ? 1 : section) × 1000;  section = 0; hasUnit = true
-  数字（零一二三四五六七八九两）→ section = 对应数值
+  万 → upper = total + section; total = (upper === 0 ? 1 : upper) × 10000; section = 0; hasUnit = true
+  数字（零一二三四五六七八九两）→ section = section × 10 + 对应数值
   其它字符 → 立即返回 undefined
 返回 (hasUnit ‖ section !== 0) ? total + section : undefined
 
-第一千零一章 → 1000 + 1 = 1001</div>
+第一千零一章 → 1000 + 1 = 1001；cjkToNumber("一万") → 10000（由 parseChapterNumber 拦截超限 9999）</div>
 
       <h3>3 · 标题清洗 <code>cleanChapterTitle</code></h3>
-      <p>同样先做宽度归一，再依次剥离 <code>第?(\d&#123;1,4&#125;)[章回话]</code>、<code>第[零一二三四五六七八九十百千万两]+[章回话]</code>、行首的 <code>LEADING_NUMBER</code>（<code>/^第?(\d+)[章回话]?[\s._\-—]*/</code>），把 <code>[_\-.]+</code> 换成空格后 <code>trim</code>。无标题章节返回空串，<strong>不回退成文件名</strong>（v3.6.0 行为）。<strong>v5.0.0 修正</strong>：<code>cleanChapterTitle</code> 本身不变，但工具层在「文件名没有标题」时改为回退读正文一级标题（<code>firstHeadingTitle</code>，同样剥掉章号段），因此不再出现「<code>novel_new_chapter</code> 明明写了 title，<code>novel_chapters</code> 却显示空标题」；一级标题只是章号本身（<code># 第07章</code>）时仍返回空串，不把章号当标题重复显示。</p>
+      <p>同样先做宽度归一，再依次剥离 <code>第?\d+(?!\d)[章回话节]</code>、<code>第[零一二三四五六七八九十百千万两]+[章回话节]</code>、行首的 <code>LEADING_NUMBER</code>（<code>/^第?(\d+)(?:[章回话节])?[\s._\-—]*/</code>），把 <code>[_\-.]+</code> 换成空格后 <code>trim</code>。无标题章节返回空串，<strong>不回退成文件名</strong>（v3.6.0 行为）。<strong>v5.0.0 修正</strong>：<code>cleanChapterTitle</code> 本身不变，但工具层在「文件名没有标题」时改为回退读正文一级标题（<code>firstHeadingTitle</code>，同样剥掉章号段），因此不再出现「<code>novel_new_chapter</code> 明明写了 title，<code>novel_chapters</code> 却显示空标题」；一级标题只是章号本身（<code># 第07章</code>）时仍返回空串，不把章号当标题重复显示。</p>
 
       <h3>4 · 排序</h3>
       <div class="formula">chapters.sort((a, b) =&gt;
@@ -107,7 +109,7 @@
 
       <h3>5 · 统计量 <code>chapterStats</code></h3>
       <div class="formula">chars   = text.length                    ← UTF-16 码元，含 BOM 剥离后的全部字符与换行
-lines   = countTextLines(text)           ← text.length === 0 ? 0 : text.split(/\r?\n/).length
+lines   = countTextLines(text)           ← text.length === 0 ? 0 : text.split(/\r\n|\r|\n/).length
 size    = stat(file).size                ← 字节数，不在返回体中
 updated = stat(file).mtime.toISOString() ← UTC ISO 8601</div>
       <p>行数走 <code>countTextLines</code> 这一唯一出口，保证与 <a href="novel-read.html">novel_read</a> 的 <code>totalLines</code> 口径一致（空文件 0 行）。文本读取先经 <code>decodeTextBuffer</code> 做编码探测（BOM → NUL 占比 → 严格 UTF-8 → UTF-16 双阈值 → GBK），探测失败抛错，抛错时本工具<strong>不吞异常</strong>——<code>novel_chapters</code> 未对该调用加 try/catch，单章编码异常会让整次调用失败（MCP 形态下呈现为 <code>isError: true</code> 的文本帧）。</p>
@@ -120,10 +122,10 @@ updated = stat(file).mtime.toISOString() ← UTC ISO 8601</div>
         <li><strong><code>book</code> 必填且被清洗</strong>：<code>sanitizeSegment</code> 剥离 <code>\ / : * ? " &lt; &gt; |</code>、首尾的点与空白；结果为空时报「参数 book 不能为空（清洗后无有效字符）」；与 Windows 保留名（<code>CON</code>/<code>NUL</code>/<code>COM1</code> 等）同名时加前置下划线。因此<strong>书名必须与目录名精确匹配</strong>，清洗后的值还会回填到返回体的 <code>book</code> 字段。</li>
         <li><strong>目录缺失是硬错误</strong>：抛出 <code>书库中未找到作品目录：&lt;路径&gt;…</code>，而非空数组。调用方应把该错误当作「书名或根目录错误」处理。</li>
         <li><strong><code>number</code> 可能不存在</strong>：文件名不含可识别章号时该键被整体省略（实现上用条件展开写入）。调用方必须按可选字段处理，不能假设 <code>chapters[i].number</code> 总有值；排序也会把这类章推到末尾。</li>
-        <li><strong>含「万」的中文章号解析失败</strong>：正则字符类收录了「万」，但 <code>cjkToNumber</code> 未定义「万」的单位累加，逐字扫描遇「万」直接返回 <code>undefined</code>。故 <code>第两万章.md</code> 得不到 <code>number</code>。<code>第零章.md</code> 同理（既无单位、<code>section</code> 又为 0）。</li>
+        <li><strong>章号取值须在 <code>1..9999</code> 之间</strong>：<code>cjkToNumber</code> 已支持「万」进位（如「一万」返回 <code>10000</code>、「两万」返回 <code>20000</code>），但受 <code>MAX_CHAPTER_NUMBER = 9999</code> 约束，超过 9999 的章号（如 <code>第一万章.md</code>、<code>第两万章.md</code>、<code>第12345章.md</code>）由 <code>parseChapterNumber</code> 拦截并返回 <code>undefined</code>。<code>第0章.md</code>（不在 <code>1..9999</code> 内）与 <code>第零章.md</code>（既无单位、<code>section</code> 又为 0）同样不解析，均得不到 <code>number</code>。</li>
         <li><strong>同号重复文件不合并，但会在渲染文本里被点名（v4.3.1 起）</strong>：两个文件解析出同一章号时返回体仍出现两条相同 <code>number</code> 的记录（不去重、不改文件），但渲染层会追加同章号提示分组。<strong>这类书用章号定位的工具（<code>novel_read</code> 等）会直接报错</strong>，必须改用文件名指定，或先把多余文件改名到空闲章号。</li>
         <li><strong>列表无截断，成本为全文读取</strong>：章节数、字段长度都没有上限；每章都要 <code>stat</code> + 读全文，全部章节一次返回。删除或新增章节文件会立即反映，因为结果不做缓存。</li>
-        <li><strong><code>chars</code> 不等于「汉字数」</strong>：它是 <code>text.length</code>，Markdown 标题行、空行、标点、ASCII 一律计入；<code>lines</code> 按 <code>\r?\n</code> 计行，空文件为 0 行。</li>
+        <li><strong><code>chars</code> 不等于「汉字数」</strong>：它是 <code>text.length</code>，Markdown 标题行、空行、标点、ASCII 一律计入；<code>lines</code> 按 <code>\r\n|\r|\n</code> 计行，空文件为 0 行。</li>
         <li><strong><code>updated</code> 是 UTC 时间串</strong>：形如 <code>2024-05-01T09:30:00.000Z</code>，渲染层只截前 10 字符。跨时区展示需自行换算。</li>
         <li><strong>MCP 形态的 <code>root</code> 越界静默回退</strong>：越界值被替换为启动时确定的书库根并只记 stderr 日志，返回体不含任何越界提示。</li>
         <li><strong>可被总开关关闭</strong>：执行前经 <code>assertToolEnabled</code> 校验状态文件（<code>~/.dsh/dsh-novel-writer/state.json</code>），关闭后直接抛错。</li>

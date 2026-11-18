@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_sentence_config — 开关配置｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_sentence_config 的实现细节：get/set 参数白名单、状态文件字段与默认值、生效值优先级、工具开关与功能开关的语义、风格基线容差的钳制规则，以及 rawWriting 的写入位置。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_sentence_config","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-config.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_sentence_config — 开关配置｜dsh-novel-writer 技术文档","description":"novel_sentence_config 的实现细节：get/set 参数白名单、状态文件字段与默认值、生效值优先级、工具开关与功能开关的语义、风格基线容差的钳制规则，以及 rawWriting 的写入位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-config.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.5","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_sentence_config, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_sentence_config — 开关配置｜dsh-novel-writer 技术文档","description":"novel_sentence_config 的实现细节：get/set 参数白名单、状态文件字段与默认值、生效值优先级、工具开关与功能开关的语义、风格基线容差的钳制规则，以及 rawWriting 的写入位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-sentence-config.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.4.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_sentence_config, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -49,8 +49,8 @@
           <tr><th><code>promptScene</code></th><td>string</td><td>否</td><td>系统提示词<strong>场景</strong>：枚举 <code>general</code> / <code>writing</code> / <code>revising</code> / <code>auditing</code> / <code>setup</code>。仅 <code>full</code> 档生效；非枚举值静默忽略。<code>general</code> 是合法取值，用于把场景改回通用档。详见下文「提示词档位与场景」。</td></tr>
           <tr><th><code>leanWorkflow</code></th><td>boolean</td><td>否</td><td>系统提示词<strong>精简工作流</strong>（v5.1.0 新增，英文标签 <code>Lean workflow</code>）：打开后注入 <code>LEAN_TEXT</code>，且<strong>优先于档位与场景</strong>。默认 <code>false</code>。<strong>只有真正的布尔值被采用</strong>，非法值（字符串 <code>"true"</code> / <code>1</code> / <code>null</code> …）静默忽略——与 <code>promptScene</code> 同一套「非法即丢弃、不报错不回显」的口径。详见下文「提示词档位与场景」。</td></tr>
           <tr><th><code>chatThreshold</code></th><td>number</td><td>否</td><td>实时聊天写作的<strong>提问节奏</strong>（v7.3.1 文档补齐）：每写多少字停下来问用户，<strong>100~5000，默认 400</strong>。超界一律夹到区间内并四舍五入；<strong>传 <code>0</code> 表示清回默认 400</strong>；非数字静默忽略。<strong>不支持 <code>null</code></strong>——本宿主的 schema 规则不接受 <code>type: ["number","null"]</code> 这类 union（同 <code>styleTolerance</code> / <code>creationProfile</code> 的口径：清除语义用空值/0/空对象，不用 null）。节奏由<strong>程序</strong>判定，模型只看 <code>novel_draft</code> 返回的 <code>nextAction</code>。</td></tr>
-          <tr><th><code>tools</code></th><td>object</td><td>否</td><td>各工具开关，形如 <code>{ novel_plot: false }</code>。键必须在 <code>ALL_TOOLS</code> 的 22 个名字内，值必须是布尔，其余<strong>静默忽略</strong>；<code>novel_sentence_config</code> 自身的键会被强制剔除。与现有值<strong>浅合并</strong>。</td></tr>
-          <tr><th><code>features</code></th><td>object</td><td>否</td><td>功能开关。合法键仅 11 个（见下表），其余键静默忽略；与现有值浅合并。</td></tr>
+          <tr><th><code>tools</code></th><td>object</td><td>否</td><td>各工具开关，形如 <code>{ novel_plot: false }</code>。<strong>容器必须是键值对象</strong>——传入数组、<code>null</code> 或非对象会在写入侧（<code>writeSentenceState</code> / <code>novel_sentence_config</code> / <code>POST /state</code>）显式报错或返回 <code>400</code>；对象内部则按 <code>ALL_TOOLS</code> 的 22 个名字与严格布尔值过滤，其余键/非布尔值静默忽略，<code>novel_sentence_config</code> 自身的键会被强制剔除。与现有值<strong>浅合并</strong>。</td></tr>
+          <tr><th><code>features</code></th><td>object</td><td>否</td><td>功能开关，形如 <code>{ emotionCaveat: false }</code>。<strong>容器必须是键值对象</strong>——传入数组、<code>null</code> 或非对象显式报错或返回 <code>400</code>；对象内部合法键仅 11 个（见下表）且值必须为布尔，其余键/非布尔值静默忽略；与现有值浅合并。</td></tr>
           <tr><th><code>styleTolerance</code></th><td>object</td><td>否</td><td>风格基线容差，每维 <code>{ low, high }</code>（<code>low</code> 为负、<code>high</code> 为正）。<code>low</code> 钳到 <code>[-99, 0]</code>，<code>high</code> 钳到 <code>[0, 99]</code>，两者须同时为数字且 <code>low ≤ high</code>，否则该维被整体丢弃。传<strong>空对象 <code>{}</code></strong> 表示清除（恢复推荐值）——宿主机不支持 <code>null</code>，清除语义只用 <code>{}</code>。</td></tr>
           <tr><th><code>creationProfile</code></th><td>object</td><td>否</td><td>全局原创模式设定，六个字符串键：<code>worldview</code> / <code>characters</code> / <code>forbidden</code> / <code>mainConflict</code> / <code>genre</code> / <code>extra</code>。留空项省略。传<strong>空对象 <code>{}</code></strong> 表示清除——宿主机不支持 <code>null</code>，清除语义只用 <code>{}</code>。</td></tr>
           <tr><th><code>creationProfiles</code></th><td>object</td><td>否</td><td>按书专属原创设定，键 = 书名，值结构同上。与现有条目<strong>合并</strong>（同键覆盖）；传<strong>空对象 <code>{}</code></strong> 表示清除全部书的设定——宿主机不支持 <code>null</code>，删除单书条目请在非空对象里置该键为 <code>null</code>（对象内部值不受类型限制）。</td></tr>
@@ -216,12 +216,13 @@ source 文案与之一一对应：
 
       <h3>5 · <code>styleTolerance</code> 与六个维度</h3>
       <div class="formula">clampStyleTolerance(tol):
+    非对象或数组 → 返回 {}
     for [key, value] of Object.entries(tol):
-        非对象 → 该键丢弃
-        low  = typeof value.low  === "number" ? clamp(value.low,  -99, 0) : undefined
-        high = typeof value.high === "number" ? clamp(value.high,   0, 99) : undefined
-        low 或 high 缺失，或 low &gt; high → 该键整体丢弃
-        否则收下 { low, high }</div>
+        非普通对象 → 该键丢弃
+        校验 Number.isFinite(value.low) && Number.isFinite(value.high)
+             && value.low &lt;= 0 && value.high &gt;= 0 && value.low &lt;= value.high
+        不满足 → 该键整体丢弃（先校验原始顺序再钳制，避免 low &gt; high 变成 {0, 0}）
+        满足   → low = clamp(value.low, -99, 0), high = clamp(value.high, 0, 99)</div>
       <p>合法维度键为 <code>METRIC_ORDER</code> 六项：<code>complexity</code>（句法复杂度）、<code>modifierDensity</code>（修饰密度）、<code>abstractDensity</code>（抽象度）、<code>actionDensity</code>（动作密度）、<code>hedgeDensity</code>（不确定性）、<code>gapIndex</code>（留白指数）。写侧不校验键名，未知维度会落盘但没有任何消费点；读取侧未设置时返回 <code>{}</code>。</p>
       <div class="formula">// 消费点：novel_style_check
 for (key of METRIC_ORDER):
@@ -239,8 +240,8 @@ judgeAgainstBaseline(本章指标, 排除本章后的基线, tol)</div>
     enabled / autoAnalyze                 : 覆盖
     systemPromptMode                      : 仅当 ∈ ["off","brief","full"] 时覆盖，否则忽略
     promptScene                           : 仅当 ∈ PROMPT_SCENES 时覆盖，否则忽略
-    tools / features   : 浅合并 { ...current, ...patch }
-    styleTolerance     : 非 null 对象 → clampStyleTolerance()；null → 置 null
+    tools / features   : 仅接受非数组对象，按 ALL_TOOLS / FEATURE_DEFAULTS 白名单过滤纯布尔项后浅合并
+    styleTolerance     : null / 显式 {} → 清除；非空对象经 clampStyleTolerance 过滤，有合法维度才覆盖（全非法保留原值）
     creationProfile    : 非 null 对象 → 覆盖；null → 置 null
     creationProfiles   : 空对象或 null → 清除全部；
                          非空对象 → 合并，值为 null/undefined 的键删除
@@ -346,7 +347,7 @@ leanWorkflow  = true | false（默认 false，只有真正的布尔值被采用�
       <h2>约束与边界</h2>
       <ul>
         <li><strong>本工具不能被关闭。</strong>两条写入路径都强制剔除该键：工具侧写入前 <code>delete toolsPatch.novel_sentence_config</code>，GUI 路由侧同样在写入前删除。因此它通常<strong>不出现在 <code>state.json</code> 的 <code>tools</code> 里</strong>，读取时按 <code>!== false</code> 判定为开。这一设计是为避免「关掉开关后连开启的工具都调不到」的死锁。</li>
-        <li><strong>白名单之外的一切静默忽略。</strong><code>tools</code> 只认 22 个工具名，<code>features</code> 只认 11 个键，<code>systemPromptMode</code> / <code>promptScene</code> 只认各自的枚举、<code>leanWorkflow</code> 只认布尔；非布尔值、非对象、拼错的键都不会报错也不会回显。<code>updated</code> 只表示「发生过写入」，不能用来确认某个具体键被接受——要确认请读返回体里对应字段的回读值。</li>
+        <li><strong>键白名单与值类型过滤（容器类型错误显式拒绝）。</strong><code>tools</code> 与 <code>features</code> 传入数组、<code>null</code> 或非对象时会直接报错（<code>POST /state</code> 返回 <code>400</code>）；传入纯键值对象时，<code>tools</code> 只认 22 个工具名、<code>features</code> 只认 11 个键、其余键与非布尔值静默忽略（同 <code>systemPromptMode</code> / <code>promptScene</code> / <code>leanWorkflow</code> 的非法值/非布尔值口径）。<code>updated</code> 只表示「发生过写入」，不能用来确认某个具体键被接受——要确认请读返回体里对应字段的回读值。</li>
         <li><strong>非法容差维度是整体丢弃，不是钳到边界。</strong><code>low &gt; high</code>、只给一侧、非数字都会让该维<strong>不写入</strong>（保持此前磁盘值或推荐值）；<code>low</code> / <code>high</code> 本身的越界值会被钳到 <code>[-99, 0]</code> / <code>[0, 99]</code>。未知维度键会落盘但无消费点。</li>
         <li><strong><code>{}</code> 是「清除」的唯一写法。</strong><code>styleTolerance</code> / <code>creationProfile</code> 传空对象即清空（恢复推荐值）；<code>creationProfiles</code> 传空对象表示清除全部书的设定（并触发创作资料里的用户段移除与空壳目录清理）。<strong>宿主机不支持 <code>null</code></strong>（<code>type:"object"</code> 不接受 null），清除语义一律用 <code>{}</code>。</li>
         <li><strong><code>set</code> 是增量而非整份替换。</strong>未传字段保持原值；<code>tools</code> / <code>features</code> / <code>creationProfiles</code> 为浅合并。<code>creationProfiles</code> 不提供「只删某键但保留该书其余字段」的语义——按书整体替换，值传 <code>null</code> 是删除该书。</li>

@@ -81,7 +81,7 @@ assert.ok(read('CHANGELOG.md').includes(`## [${pkg.version}]`), 'current changel
 let pages = [];
 // 安装用 ZIP 不带站点，仓库和 CI 则必须检查站点版本。
 if (existsSync(new URL('docs/', root))) {
-  pages = ['docs/index.html', ...readdirSync(new URL('docs/tools/', root)).filter(p => p.startsWith('novel-') && p.endsWith('.html')).map(p => 'docs/tools/' + p)];
+  pages = ['docs/index.html', 'docs/tools/index.html', ...readdirSync(new URL('docs/tools/', root)).filter(p => p.startsWith('novel-') && p.endsWith('.html')).map(p => 'docs/tools/' + p)];
   for (const page of pages) {
     const versions = [...read(page).matchAll(/"softwareVersion":"([^"]+)"/g)];
     assert.ok(versions.length, `${page}: missing softwareVersion`);

@@ -97,7 +97,7 @@ async function withBook(run) {
   try {
     await run({ root, book, chapterDir, dataDir: join(root, ".novel-writer") });
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 }
 
@@ -262,7 +262,7 @@ test("nextFreeChapterFile 不返回已被占用的文件名", async () => {
     // 超出章号上界（解析不出章号）不得静默加 "-2" 绕过去：显式报错
     assert.throws(() => nextFreeChapterFile(dir, "第10001章 远.md"), /章号超出支持范围/);
   } finally {
-    await rm(dir, { recursive: true, force: true });
+    await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
 
@@ -311,7 +311,7 @@ test("取消不再被吞成成功结果（enrichSemanticImplicit）", async (t) 
       "取消必须上抛，不得降级成一份看似成功的结果"
     );
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
 
@@ -598,7 +598,7 @@ test("v6.4.0：lastRoot 不记录显式 root 与 cwd 兜底，但配置根正常
   } finally {
     if (prev === undefined) delete process.env.DSH_NOVEL_WRITER_STATE;
     else process.env.DSH_NOVEL_WRITER_STATE = prev;
-    await rm(dir, { recursive: true, force: true });
+    await rm(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
 

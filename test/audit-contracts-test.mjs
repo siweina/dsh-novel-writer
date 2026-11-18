@@ -29,7 +29,7 @@ const ROOT = join(tmpdir(), "dsh-audit-contracts-" + process.pid + "-" + Date.no
 process.env.DSH_NOVEL_WRITER_STATE = join(ROOT, "state-test.json");
 process.env.DSH_HOME = join(ROOT, "dsh-home");
 process.on("exit", () => {
-  try { rmSync(ROOT, { recursive: true, force: true }); } catch { /* 清理失败不影响结论 */ }
+  try { rmSync(ROOT, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch { /* 清理失败不影响结论 */ }
 });
 
 await mkdir(ROOT, { recursive: true });

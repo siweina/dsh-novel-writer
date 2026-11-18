@@ -52,10 +52,10 @@ import { DEFAULT_BANNED_WORDS, SPEECH_STYLE_RULES } from "../lib/lexicons/marker
 
 const ROOT = join(tmpdir(), "dsh-novel-writer-fp-" + process.pid + "-" + Date.now().toString(36));
 process.env.DSH_NOVEL_WRITER_STATE = join(ROOT, "state-test.json");
-rmSync(ROOT, { recursive: true, force: true });
+rmSync(ROOT, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 mkdirSync(join(ROOT, "novels"), { recursive: true });
 process.on("exit", () => {
-  try { rmSync(ROOT, { recursive: true, force: true }); } catch { /* 清理失败不影响结果 */ }
+  try { rmSync(ROOT, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch { /* 清理失败不影响结果 */ }
 });
 
 const registry = [];

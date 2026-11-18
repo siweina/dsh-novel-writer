@@ -119,15 +119,30 @@ function log(message) {
 // v6.3.0（独立校验）：stderr 里不再出现**书库根**的绝对路径。之前只消除了堆栈帧与插件安装路径，
 // 但错误消息本身往往内嵌书库根（如「书库中未找到作品目录：F:\…\novels\某书」），仍会进客户端日志。
 // 现在把已解析的书库根（及其 resolve / 正斜杠变体）替换成占位符 <书库根>，定位信息（书名、子路径）保留。
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+const WIN32 = process.platform === "win32";
 let REDACT_ROOTS = [];
 function redactRoots(text) {
   let out = text;
+  const allForms = new Set();
   for (const root of REDACT_ROOTS) {
     if (typeof root !== "string" || root.length < 3) continue;
-    const forms = new Set([root, resolve(root), root.replace(/\\/g, "/"), resolve(root).replace(/\\/g, "/")]);
-    for (const form of forms) {
-      if (typeof form === "string" && form.length >= 3) out = out.split(form).join("<书库根>");
+    for (const candidate of [root, resolve(root)]) {
+      if (typeof candidate !== "string" || candidate.length < 3) continue;
+      allForms.add(candidate);
+      allForms.add(candidate.replace(/\\/g, "/"));
+      if (WIN32) allForms.add(candidate.replace(/\//g, "\\"));
     }
+  }
+  // 最长路径优先替换，避免短前缀命中后残留后缀片段
+  const forms = [...allForms].sort((a, b) => b.length - a.length);
+  for (const form of forms) {
+    out = WIN32
+      ? out.replace(new RegExp(escapeRegExp(form), "gi"), () => "<书库根>")
+      : out.split(form).join("<书库根>");
   }
   return out;
 }
@@ -199,9 +214,21 @@ function resolveLibraryRoot(argv) {
   return { root: process.cwd(), source: "process.cwd()" };
 }
 
+/** 参数类错误的标记：由 buildArgs 的调用方转成 JSON-RPC -32602（Invalid params）。 */
+const INVALID_PARAMS = "INVALID_PARAMS";
+
 const { root: LIBRARY_ROOT, source: ROOT_SOURCE } = resolveLibraryRoot(process.argv.slice(2));
 // v6.3.0：stderr 摘要里把书库根的绝对路径替换成 <书库根>（见 logError 上方的 redactRoots）
-REDACT_ROOTS = [LIBRARY_ROOT];
+// 同时纳入 canonicalPath(LIBRARY_ROOT)，避免 Windows 下小写盘符或 8.3 短路径启动时工具报错泄漏规范化绝对路径。
+let CANONICAL_LIBRARY_ROOT = LIBRARY_ROOT;
+try {
+  CANONICAL_LIBRARY_ROOT = canonicalPath(LIBRARY_ROOT);
+} catch {
+  /* 驱动器不存在等情况延迟到具体工具调用时按 -32602 报错 */
+}
+REDACT_ROOTS = CANONICAL_LIBRARY_ROOT !== LIBRARY_ROOT
+  ? [LIBRARY_ROOT, CANONICAL_LIBRARY_ROOT]
+  : [LIBRARY_ROOT];
 // v4.3.0：默认禁止 novel_import 读取书库根之外的目录（防"文档注入 → 复制任意 .md/.txt 进书库再读出"）
 const ALLOW_EXTERNAL_SRC = process.argv.slice(2).includes("--allow-external-src");
 
@@ -341,9 +368,6 @@ function initFailedSummary(error) {
 // ---------------------------------------------------------------------------
 /** src 越界时的标记（tools/call 时报错用，不下传给插件）。 */
 const SRC_OUT_OF_ROOT = Symbol("srcOutOfRoot");
-
-/** 参数类错误的标记：由 buildArgs 的调用方转成 JSON-RPC -32602（Invalid params）。 */
-const INVALID_PARAMS = "INVALID_PARAMS";
 
 function invalidParamsError(message) {
   const error = new Error(message);
@@ -598,7 +622,7 @@ async function handleMessage(message) {
   const respond = (payload) => (notification ? null : payload);
 
   if (typeof method !== "string") {
-    return respond(rpcError(id === undefined ? null : id, -32600, "无效请求：缺少 method"));
+    return rpcError(id === undefined ? null : id, -32600, "无效请求：缺少 method");
   }
 
   // 插件没能加载：initialize 照常应答、tools/list 回空清单（让客户端拿到 serverInfo 与合法工具集），
@@ -788,7 +812,6 @@ async function handleLine(line) {
 // stdio 主循环：按原始字节分帧，避免 UTF-8 解码后的字符数误作字节数。
 // ---------------------------------------------------------------------------
 let queue = Promise.resolve();
-let closed = false;
 let bufferParts = [];
 let bufferBytes = 0;
 let dropping = false;
@@ -879,22 +902,22 @@ function onStdinEnd() {
     bufferParts = [];
     bufferBytes = 0;
   }
-  if (closed) return;
-  closed = true;
   const done = () => process.exit(0);
-  // 等队列清空并让 stdout 落盘后再退出，避免最后一条响应被截断
+  // 等队列清空并让 stdout 落盘后再退出，避免最后一条响应被截断；
+  // 绝不在 stdin 关闭瞬间启动强退定时器，以免提前腰斩耗时 >5s 的在途请求。
   queue
     .then(() => {
       log("stdin 已关闭，服务器正常退出");
-      done();
+      // 队列已排空：先允许事件循环自然退出（stdout/stderr 完整刷盘），
+      // 仅设短兜底定时器防范插件残留句柄卡住进程。
+      process.exitCode = 0;
+      const timer = setTimeout(() => {
+        log("退出兜底超时（1s），强制退出");
+        done();
+      }, 1000);
+      timer.unref();
     })
     .catch(() => done());
-  // 兜底：插件若残留句柄导致无法自然退出，5 秒后强制退出
-  const timer = setTimeout(() => {
-    log("退出兜底超时（5s），强制退出");
-    done();
-  }, 5000);
-  timer.unref();
 }
 
 process.stdin.on("data", onStdinData);

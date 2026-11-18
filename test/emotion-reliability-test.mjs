@@ -58,13 +58,13 @@ const STATE = join(STATE_DIR, "state.json");
 const REAL_STATE = join(homedir(), ".dsh", "dsh-novel-writer", "state.json");
 const REAL_LOG_DIR = join(homedir(), ".dsh", "dsh-novel-writer", "logs");
 
-rmSync(ROOT, { recursive: true, force: true });
+rmSync(ROOT, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 mkdirSync(join(LIB, "novels"), { recursive: true });
 mkdirSync(STATE_DIR, { recursive: true });
 mkdirSync(join(ROOT, "dsh-home"), { recursive: true });
 process.env.DSH_NOVEL_WRITER_STATE = STATE;
 process.env.DSH_HOME = join(ROOT, "dsh-home");
-process.on("exit", () => { try { rmSync(ROOT, { recursive: true, force: true }); } catch { /* 清理失败不影响结论 */ } });
+process.on("exit", () => { try { rmSync(ROOT, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch { /* 清理失败不影响结论 */ } });
 
 // 隔离守卫：开跑前的真实用户侧快照
 const guardBefore = { state: fileDigest(REAL_STATE), logs: dirDigest(REAL_LOG_DIR) };

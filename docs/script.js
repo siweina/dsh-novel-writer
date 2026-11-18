@@ -266,10 +266,4 @@
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') closeOthers(null);
   });
-
-  /* ------------------------------- 12 轴：进入视口后再增长（纯装饰） */
-  var axes = document.querySelector('.axes');
-  if (axes && (reduceMotion || !('IntersectionObserver' in window))) {
-    axes.classList.add('is-in');
-  }
 })();

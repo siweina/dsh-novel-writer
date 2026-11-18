@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_summary — 章节摘要｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_summary 的实现细节：章号键归一 normalizeChapterKey 的规则与 v4.3.0 修正、摘要条目的白名单清洗、add 与 update 的覆盖语义、落盘结构与排序口径。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_summary","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-summary.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_summary — 章节摘要｜dsh-novel-writer 技术文档","description":"novel_summary 的实现细节：章号键归一 normalizeChapterKey 的规则与 v4.3.0 修正、摘要条目的白名单清洗、add 与 update 的覆盖语义、落盘结构与排序口径。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-summary.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.5","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_summary, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_summary — 章节摘要｜dsh-novel-writer 技术文档","description":"novel_summary 的实现细节：章号键归一 normalizeChapterKey 的规则与 v4.3.0 修正、摘要条目的白名单清洗、add 与 update 的覆盖语义、落盘结构与排序口径。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-summary.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.4.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_summary, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -104,12 +104,12 @@
       <h3>章号键归一 <code>normalizeChapterKey</code></h3>
       <p>归一是存储键的唯一来源：写入时把 <code>chapter</code> 参数归一后存为 <code>chapter</code> 字段，查询 / 删除时把入参与每条已存键都归一后比较。步骤：</p>
       <div class="formula">① 宽度归一：全角数字与全角连字符类（０-９ － ． ／）映射为半角
-② trim，去掉结尾的 .md / .MD，去掉行首的 # 与空白
-③ 匹配 /第?(\d{1,4}|[零一二三四五六七八九十百千万两]+)[章回话节]/
-   命中且能解析为整数 → "第" + String(n).padStart(2, "0") + "章"
-④ 否则匹配 /^(\d{1,4})[-._\s]/  → 同上格式
-⑤ 否则匹配 /^(\d{1,4})$/        → 同上格式
-⑥ 都不命中 → 返回第 ② 步处理后的原始字符串</div>
+② trim，去掉结尾的 .md / .markdown / .txt（忽略大小写），去掉行首的 # 与空白
+③ 匹配 /第?(?&lt;!\d)(\d+)(?!\d)[章回话节]|第([零一二三四五六七八九十百千万两]+)[章回话节]/
+   命中且解析为 1..9999 整数（≤ MAX_CHAPTER_NUMBER）→ "第" + String(n).padStart(2, "0") + "章"
+④ 否则匹配 /^(\d+)[-._\s]/ 且 1 ≤ n ≤ 9999 → 同上格式
+⑤ 否则匹配 /^(\d+)$/ 且 1 ≤ n ≤ 9999       → 同上格式
+⑥ 都不命中或超出 1..9999 → 返回第 ② 步处理后的原始字符串</div>
       <table>
         <thead><tr><th>输入</th><th>归一键</th></tr></thead>
         <tbody>
@@ -126,7 +126,7 @@
         <b>v4.3.0 修正：中文章号漏「千」导致摘要静默覆盖。</b>旧版 <code>normalizeChapterKey</code> 的字符类缺「千」，正则从「千」之后开始匹配，把「第一千零一章」归一成 <code>第01章</code>，而 <code>parseChapterNumber("第一千零一章.md")</code> 得 1001——同一输入两种口径。由于摘要以该键存取，给第 1001 章写摘要会<strong>覆盖第 1 章的摘要并回复「已保存」</strong>。同版本一并修正：5 处章号正则的字符类统一补「千万」（<code>normalizeChapterKey</code> / <code>cleanChapterTitle</code> / <code>nextFreeChapterFile</code> / <code>bookNameFromFileName</code> / <code>bookNameFromContent</code>），并给 <code>normalizeChapterKey</code> 与 <code>parseChapterNumber</code> 入口都加了宽度归一，避免全角章号绕过重号防护。
       </div>
       <div class="warn">
-        <b>「万」仍是未实现单位。</b>字符类允许「万」，但 <code>cjkToNumber</code> 只实现「十 / 百 / 千」三档与 0–9 数字，遇到「万」返回 <code>undefined</code>，归一步骤 ③ 落空后一路走到 ⑥，最终把原文（如「第一万章」）原样作为键。这类章号不会与数字形式的键合并，也不会报错。
+        <b>「万」与超出 <code>1..9999</code> 的章号不作数字归一。</b><code>cjkToNumber</code> 已实现「万」的进位累加（如「一万」返回 <code>10000</code>），且阿拉伯数字分支也用 <code>\d+</code> 匹配；但 <code>normalizeChapterKey</code> 与 <code>parseChapterNumber</code> 统一受 <code>MAX_CHAPTER_NUMBER = 9999</code> 上界与 <code>1..9999</code> 范围约束——超过 9999（如「第一万章」「第10000章」）及 <code>第0章</code> / <code>第零章</code> 均不归一为补零章键，而是走步骤 ⑥ 保留原文。这类键不会与数字章号合并，也不会报错。
       </div>
 
       <h3>读 - 改 - 写流程</h3>

@@ -50,7 +50,7 @@ async function withLibrary(options, run) {
   try {
     return await run(root);
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 }
 
@@ -226,7 +226,7 @@ test("N16 伏笔表读不动时不得再追加「未登记伏笔（…不存在�
       "同一次装配里「读不动」与「不存在」自相矛盾：" + JSON.stringify(lines)
     );
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
 
@@ -268,7 +268,7 @@ test("#17 大纲路径被目录占位（EISDIR）：必须说「读不出来」�
     assert.ok(!lines[0].includes("novel_outline init"), "读失败不得建议去 init（文件其实在）：" + lines[0]);
     assert.deepEqual(graph.planVsActual, [], "计划对照仍应为空（只是原因不同）");
   } finally {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 });
 

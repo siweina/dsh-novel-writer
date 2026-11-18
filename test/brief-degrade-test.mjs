@@ -25,7 +25,7 @@ const LIB = pathToFileURL(join(import.meta.dirname, "..", "lib")).href;
 const base = join(tmpdir(), "nw-briefdegrade-" + process.pid + "-" + Date.now().toString(36));
 const stateFile = join(base, "state.json");
 process.env.DSH_NOVEL_WRITER_STATE = stateFile;
-process.on("exit", () => { try { rmSync(base, { recursive: true, force: true }); } catch { /* 忽略 */ } });
+process.on("exit", () => { try { rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch { /* 忽略 */ } });
 
 const BOOK = "降级之书";
 const root = join(base, "library");
@@ -84,7 +84,7 @@ test("② 文件读不出来（目录占位 → EISDIR）：必须报「读取�
 
 test("③ 文件不存在（ENOENT）：只说「未初始化/没有」，不许说「读取失败」", async () => {
   // 还原剧情大纲为正常文件，删掉钩子记录（ENOENT 态）
-  rmSync(join(creationDir, "剧情大纲.md"), { recursive: true, force: true });
+  rmSync(join(creationDir, "剧情大纲.md"), { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   writeFileSync(join(creationDir, "剧情大纲.md"), CREATION[0][1], "utf8");
   rmSync(join(creationDir, "钩子记录.md"), { force: true });
   const value = await brief(BOOK);

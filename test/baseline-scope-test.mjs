@@ -55,7 +55,7 @@ import { apply } from "../lib/index.js";
 
 const ROOT = join(tmpdir(), "dsh-novel-writer-baseline-scope-" + process.pid + "-" + Date.now().toString(36));
 process.env.DSH_NOVEL_WRITER_STATE = join(ROOT, "state-test.json");
-rmSync(ROOT, { recursive: true, force: true });
+rmSync(ROOT, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 mkdirSync(join(ROOT, "novels"), { recursive: true });
 // 语义引擎在测试里必须**关掉**：它在不在取决于本机模型文件，会让"同一断言"在不同机器上
 // 走不同分支（还会引入分钟级耗时）。这里用状态文件把四个语义开关显式置 false。
@@ -67,7 +67,7 @@ writeFileSync(process.env.DSH_NOVEL_WRITER_STATE, JSON.stringify({
   features: { semanticStyle: false, semanticImplicit: false, semanticEmbedding: false, semanticSearch: false }
 }), "utf8");
 process.on("exit", () => {
-  try { rmSync(ROOT, { recursive: true, force: true }); } catch { /* 清理失败不影响结果 */ }
+  try { rmSync(ROOT, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch { /* 清理失败不影响结果 */ }
 });
 
 const registry = [];

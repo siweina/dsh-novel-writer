@@ -33,7 +33,7 @@ import { buildChapterBrief } from "../lib/brief.js";
 const testRoot = join(tmpdir(), "dsh-lexicon-test-" + process.pid + "-" + Date.now().toString(36));
 process.env.DSH_NOVEL_WRITER_STATE = join(testRoot, "state-test.json");
 process.on("exit", () => {
-  try { rmSync(testRoot, { recursive: true, force: true }); } catch { /* 忽略 */ }
+  try { rmSync(testRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch { /* 忽略 */ }
 });
 
 const registry = [];

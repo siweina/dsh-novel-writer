@@ -20,7 +20,7 @@ const LIB = pathToFileURL(join(import.meta.dirname, "..", "lib")).href;
 const base = join(tmpdir(), "nw-chat-" + process.pid + "-" + Date.now().toString(36));
 const stateFile = join(base, "state.json");
 process.env.DSH_NOVEL_WRITER_STATE = stateFile;
-process.on("exit", () => { try { rmSync(base, { recursive: true, force: true }); } catch { /* 忽略 */ } });
+process.on("exit", () => { try { rmSync(base, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch { /* 忽略 */ } });
 
 const BOOK = "聊天之书";
 const SUFFIX = "__draft.md";

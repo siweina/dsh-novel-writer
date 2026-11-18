@@ -35,10 +35,10 @@ import test from "node:test";
 
 // 隔离：失败路径的 logEvent("engine", …) 不得写进用户真实日志目录
 const ROOT = join(tmpdir(), "dsh-embedding-chunk-" + process.pid + "-" + Date.now().toString(36));
-rmSync(ROOT, { recursive: true, force: true });
+rmSync(ROOT, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 mkdirSync(ROOT, { recursive: true });
 process.env.DSH_NOVEL_WRITER_STATE = join(ROOT, "state.json");
-process.on("exit", () => { try { rmSync(ROOT, { recursive: true, force: true }); } catch { /* ignore */ } });
+process.on("exit", () => { try { rmSync(ROOT, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch { /* ignore */ } });
 
 const embedding = await import("../lib/embedding.js");
 

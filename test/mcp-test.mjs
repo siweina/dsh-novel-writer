@@ -53,8 +53,8 @@ mkdirSync(emptyRoot, { recursive: true });
 // v4.3.0：书库根之外的目录（用于验证 novel_import src 越界拦截，不需要真的可导入）
 const outsideRoot = makeTempDir("dsh-novel-writer-mcp-outside-" + process.pid + "-" + Date.now().toString(36));
 process.on("exit", () => {
-  try { rmSync(testRoot, { recursive: true, force: true }); } catch { /* 忽略 */ }
-  try { rmSync(outsideRoot, { recursive: true, force: true }); } catch { /* 忽略 */ }
+  try { rmSync(testRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch { /* 忽略 */ }
+  try { rmSync(outsideRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch { /* 忽略 */ }
 });
 
 // ---------------------------------------------------------------------------
@@ -414,11 +414,11 @@ symlinkSync(outsideRoot, linkedBook, process.platform === "win32" ? "junction" :
 const linkedBookRead = await a.request("tools/call", { name: "novel_read", arguments: { book: "外部联接书", chapter: "第01章.md" } });
 ok("novel_read 拒绝 novels 下指向外部的书目录联接", linkedBookRead.result?.isError === true && toolText(linkedBookRead).includes("派生路径"), JSON.stringify(linkedBookRead.result ?? null));
 const dataDir = join(testRoot, ".novel-writer");
-rmSync(dataDir, { recursive: true, force: true });
+rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 symlinkSync(outsideRoot, dataDir, process.platform === "win32" ? "junction" : "dir");
 const linkedDataWrite = await a.request("tools/call", { name: "novel_settings", arguments: { book: BOOK, category: "character", action: "add", name: "不应写入" } });
 ok("写入 .novel-writer 外部联接被拒绝", linkedDataWrite.result?.isError === true && toolText(linkedDataWrite).includes("派生路径"), JSON.stringify(linkedDataWrite.result ?? null));
-rmSync(dataDir, { recursive: true, force: true });
+rmSync(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 mkdirSync(dataDir, { recursive: true });
 
 // ---------------------------------------------------------------------------

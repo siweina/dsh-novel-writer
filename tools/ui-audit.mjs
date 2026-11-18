@@ -155,7 +155,7 @@ function splitTop(value, sepRe) {
       if (c === quote && value[i - 1] !== "\\") quote = null;
       continue;
     }
-    if (c === '"' || c === "'") { quote = c; cur += c; continue; }
+    if (c === '"' || c === "'" || c === "`") { quote = c; cur += c; continue; }
     if (c === "(" || c === "[") { depth += 1; cur += c; continue; }
     if (c === ")" || c === "]") { depth = Math.max(0, depth - 1); cur += c; continue; }
     if (depth === 0 && sepRe.test(c)) { out.push(cur); cur = ""; continue; }
@@ -172,7 +172,7 @@ function bareWords(value) {
 
 function unquote(s) {
   const t = String(s).trim();
-  if (t.length >= 2 && (t[0] === '"' || t[0] === "'") && t[t.length - 1] === t[0]) return t.slice(1, -1);
+  if (t.length >= 2 && (t[0] === '"' || t[0] === "'" || (t[0] === "`" && !t.includes("${"))) && t[t.length - 1] === t[0]) return t.slice(1, -1);
   return t;
 }
 
@@ -236,22 +236,30 @@ function lex(src) {
     let j = i + 1;
     const interpRanges = [];
     let terminated = false;
+    let segStart = i;
     while (j < n) {
       const c = src[j];
       if (c === "\\") { j += 2; continue; }
       if (!isTemplate && c === "\n") break;
       if (c === q) { j += 1; terminated = true; break; }
       if (isTemplate && c === "$" && src[j + 1] === "{") {
+        // 仅把模板静态文本与 `${` / `}` 标为字符串，保留 `${...}` 内部已扫描出的代码/字符串/注释分类
+        mark(segStart, j + 2, CLS_STR);
         const innerStart = j + 2;
+        const prevRegexOK = regexOK;
+        regexOK = true;
         const end = scanCode(innerStart, true);
+        regexOK = prevRegexOK;
+        if (end < n) mark(end, end + 1, CLS_STR);
         interpRanges.push([innerStart, Math.min(end + 1, n)]);
-        j = end + 1;
+        j = Math.min(end + 1, n);
+        segStart = j;
         continue;
       }
       j += 1;
     }
     const contentEnd = terminated ? j - 1 : j;
-    mark(i, j, isTemplate ? CLS_CODE : CLS_STR);
+    mark(segStart, j, CLS_STR);
     const rec = {
       start: i, end: j, contentStart: i + 1, contentEnd, quote: q, interpRanges,
       value: src.slice(i + 1, contentEnd), terminated,
@@ -398,7 +406,10 @@ function hasTopLevelBrace(text, from, to) {
 
 function parseDecls(text, from, to) {
   const decls = [];
+  let pos = from;
   for (const chunk of splitTop(text.slice(from, to), /[;]/)) {
+    const chunkBase = pos;
+    pos += chunk.length + 1;
     const raw = chunk;
     if (!raw.trim()) continue;
     const lead = raw.length - raw.trimStart().length;
@@ -418,7 +429,7 @@ function parseDecls(text, from, to) {
     const prop = body.slice(0, colon).trim();
     const value = body.slice(colon + 1).trim();
     if (!prop || !value) continue;
-    decls.push({ prop, propLower: prop.toLowerCase(), value, offset: from + lead });
+    decls.push({ prop, propLower: prop.toLowerCase(), value, offset: chunkBase + lead });
   }
   return decls;
 }
@@ -809,12 +820,18 @@ function analyze(src, opts) {
       for (; i >= from; i -= 1) {
         if (cls[i] === CLS_COMMENT) continue;
         const c = src[i];
-        if (c === ";" || c === "{" || c === "}") break;
-        seg = c + seg;
+        if (cls[i] === CLS_CODE && (c === ";" || c === "{" || c === "}")) break;
+        const masked = cls[i] !== CLS_CODE && /[,;{}()\[\]"'`]/.test(c) ? " " : c;
+        seg = masked + seg;
       }
       return seg;
     };
-    const lookbackIsClassName = (start) => /className\s*:\s*[^;{}]*$/.test(lookback(start, 220));
+    const lookbackIsClassName = (start) => {
+      const seg = lookback(start, 220);
+      // 仅检查最后一个顶层逗号之后的成员表达式，避免 { className: "plain", title: "nwFakeClass" } 跨属性误报
+      const lastArg = splitTop(seg, /[,]/).pop() || "";
+      return /className\s*:\s*[^;{}]*$/.test(lastArg);
+    };
     /** 元素 id / 选择器，不是类名：getElementById("nwX")、{ id: "nwX" }、setAttribute("id","nwX") */
     const lookbackIsId = (start) => {
       const seg = lookback(start, 60);
@@ -840,17 +857,26 @@ function analyze(src, opts) {
         if (!prev || (prev.severity === "warn" && sev === "error")) jsUsed.set(t, { line, severity: sev, value });
       }
     }
-    // 模板串里的 nw* 类名（className: `nwA ${x}` 形态）——按提示级处理
+    // 模板串静态片段里的 nw* 类名（剥除 ${...} 插值，防止把变量名误当类名；className: `nwA ${x}` 升为 error）
     // 注意：CSS 模板也是模板串，必须排除（否则 @keyframes nwspin 之类动画名会被当类名）
     for (const t of lexed.templates) {
       if (cssSrcStarts.has(t.start)) continue;
-      const v = t.value;
-      if (!/nw[A-Za-z0-9_]/.test(v)) continue;
+      if (lookbackIsId(t.start)) continue;
+      const chars = src.slice(t.contentStart, t.contentEnd).split("");
+      for (const [a, b] of t.interpRanges || []) {
+        const from = Math.max(0, a - 2 - t.contentStart);
+        const to = Math.min(chars.length, b - t.contentStart);
+        for (let k = from; k < to; k += 1) chars[k] = k === from ? "\0" : "";
+      }
+      const staticText = chars.join("");
+      if (!/nw[A-Za-z0-9_]/.test(staticText)) continue;
+      const nearClassName = lookbackIsClassName(t.start);
       const line = lineAt(lineStarts, t.start);
-      for (const tok of v.split(/[\s${}]+/)) {
+      for (const tok of staticText.split(/\s+/)) {
         if (!isNwToken(tok)) continue;
-        if (jsUsed.has(tok)) continue;
-        jsUsed.set(tok, { line, severity: "warn", value: v });
+        const sev = nearClassName ? "error" : "warn";
+        const prev = jsUsed.get(tok);
+        if (!prev || (prev.severity === "warn" && sev === "error")) jsUsed.set(tok, { line, severity: sev, value: staticText });
       }
     }
     for (const [name, info] of jsUsed) {
@@ -954,7 +980,64 @@ function analyze(src, opts) {
       while ((m = GRADIENT_RE.exec(text)) !== null) out.push(m[0].replace(/\($/, ""));
       return out;
     };
-    const offsetOf = (base, sub) => base + sub;
+    const isStrLit = (s) => {
+      const t = String(s || "").trim();
+      if (t.length < 2) return false;
+      if ((t[0] === '"' || t[0] === "'") && t[t.length - 1] === t[0]) return true;
+      return t[0] === "`" && t[t.length - 1] === "`" && !t.includes("${");
+    };
+    const isNumLit = (s) => /^-?\d*\.?\d+$/.test(String(s || "").trim());
+    const hasInvalidRadiusLiteral = (valPlain) => {
+      const parts = String(valPlain).split("/").flatMap((p) => splitTop(p, /[\s]/)).map((s) => s.trim()).filter(Boolean);
+      if (!parts.length) return false;
+      for (const part of parts) {
+        const low = part.toLowerCase();
+        if (/^(0|0px|0%|inherit|initial|unset|revert|revert-layer|none)$/.test(low)) continue;
+        if (/^var\(\s*--dsw-radius-/.test(part)) continue;
+        if (/^(50%|999px|9999px)$/.test(low)) continue;
+        return true;
+      }
+      return false;
+    };
+    const checkJsStyleDecl = (isDom, key, valRaw, line) => {
+      const keyLow = key.toLowerCase();
+      const strLit = isStrLit(valRaw);
+      const numLit = isNumLit(valRaw);
+      const valPlain = unquote(valRaw);
+      const detailText = isDom ? `.style.${key} = ${snippet(valPlain, 40)}` : `${key}:${snippet(valRaw, 46)}`;
+      const shortDetail = isDom ? `.style.${key} = ${snippet(valPlain, 40)}` : `${key}:${snippet(valRaw, 40)}`;
+      const colors = colorInText(valRaw);
+      if (colors.length) {
+        rep.add(2, line, isDom ? "js-dom-style-color" : "js-style-color", detailText,
+          isDom ? `DOM 内联样式赋值含色值（${colors.slice(0, 2).join("、")}）` : `内联 style 不得含色值/渐变（${colors.slice(0, 3).join("、")}）`, "error");
+      } else if (COLOR_KEYS.has(keyLow) && strLit && NAMED_COLORS.has(valPlain.toLowerCase())) {
+        rep.add(2, line, isDom ? "js-dom-style-color" : "js-style-color",
+          isDom ? `.style.${key} = ${snippet(valPlain, 40)}` : `${key}:${valPlain}`,
+          isDom ? "DOM 内联样式赋值含颜色字面量" : "内联 style 不得含颜色字面量", "error");
+      }
+      if (/radius$/i.test(key) && (strLit || numLit) && hasInvalidRadiusLiteral(valPlain)) {
+        rep.add(2, line, "js-radius", shortDetail,
+          isDom ? "DOM 内联样式不得用裸圆角数值" : "内联 style 不得用裸圆角数值（改用 var(--dsw-radius-*)）", "error");
+      }
+      if (keyLow === "fontsize" && (strLit || numLit)) {
+        const okVar = /^var\(\s*--dsw-font/.test(valPlain);
+        const okKeyword = /^(inherit|unset|revert|initial|)$/.test(valPlain);
+        const bare = /^-?\d*\.?\d+(px|rem|em|pt)?$/i.test(valPlain);
+        if (!okVar && !okKeyword && bare) {
+          rep.add(2, line, "js-fontsize", shortDetail,
+            isDom ? "DOM 内联样式不得用裸字号" : "内联 style 不得用裸 fontSize 数值（改用排版 token 或类名）", "error");
+        }
+      }
+      if (keyLow === "font" && strLit && /\d*\.?\d+px/i.test(valPlain)) {
+        rep.add(2, line, "js-fontsize", shortDetail,
+          isDom ? "DOM 内联样式不得用裸字号（font 简写）" : "内联 style 不得用裸字号（font 简写）", "error");
+      }
+      if (/^border/i.test(keyLow) && strLit && /(^|[^\d.])\d*\.?\d+(px|rem|pt)/i.test(valPlain)) {
+        checkBorderDecl(toKebab(key), valPlain, (sev, detail, desc) => {
+          rep.add(3, line, sev === "warn" ? "border-warn" : "border-width", detail, desc, sev);
+        });
+      }
+    };
 
     const styleRe = /(?<![A-Za-z0-9_$.])style\s*:\s*\{/g;
     let m;
@@ -973,11 +1056,19 @@ function analyze(src, opts) {
         i += 1;
       }
       if (end === -1) continue;
-      const objText = src.slice(braceIdx + 1, end);
       const objStart = braceIdx + 1;
+      const objChars = new Array(end - objStart);
+      for (let k = objStart; k < end; k += 1) {
+        objChars[k - objStart] = cls[k] === CLS_COMMENT ? (src[k] === "\n" ? "\n" : " ") : src[k];
+      }
+      const objText = objChars.join("");
       const entries = splitTop(objText, /[,]/);
+      let entryPos = objStart;
       for (const entry of entries) {
+        const entryBase = entryPos;
+        entryPos += entry.length + 1;
         if (!entry.trim()) continue;
+        const lead = entry.length - entry.trimStart().length;
         let d2 = 0;
         let quote = null;
         let colon = -1;
@@ -993,70 +1084,46 @@ function analyze(src, opts) {
         const keyRaw = entry.slice(0, colon).trim();
         const valRaw = entry.slice(colon + 1).trim();
         const key = unquote(keyRaw);
-        const keyLow = key.toLowerCase();
-        const valPlain = unquote(valRaw);
-        const entryLine = lineAt(lineStarts, offsetOf(objStart, objText.indexOf(entry)));
-        const colors = colorInText(valRaw);
-        if (colors.length) {
-          rep.add(2, entryLine, "js-style-color", `${key}:${snippet(valRaw, 46)}`,
-            `内联 style 不得含色值/渐变（${colors.slice(0, 3).join("、")}）`, "error");
-        } else if (COLOR_KEYS.has(keyLow) && NAMED_COLORS.has(valPlain.toLowerCase())) {
-          rep.add(2, entryLine, "js-style-color", `${key}:${valPlain}`, "内联 style 不得含颜色字面量", "error");
-        }
-        if (/radius$/i.test(key)) {
-          const bare = /^-?\d*\.?\d+$/.test(valPlain) || /^-?\d*\.?\d+(px|rem|em|pt|%)$/.test(valPlain);
-          const isZero = /^0(px|%)?$/.test(valPlain) || valPlain === "0";
-          const okVar = /^var\(\s*--dsw-radius-/.test(valPlain);
-          const capsule = /^(50%|999px|9999px)$/.test(valPlain);
-          if (!isZero && !okVar && !capsule && (bare || valPlain)) {
-            rep.add(2, entryLine, "js-radius", `${key}:${snippet(valRaw, 40)}`, "内联 style 不得用裸圆角数值（改用 var(--dsw-radius-*)）", "error");
-          }
-        }
-        if (keyLow === "fontsize") {
-          const okVar = /^var\(\s*--dsw-font/.test(valPlain);
-          const okKeyword = /^(inherit|unset|revert|initial|)$/.test(valPlain);
-          const bare = /^-?\d*\.?\d+(px|rem)?$/.test(valPlain);
-          if (!okVar && !okKeyword && bare) {
-            rep.add(2, entryLine, "js-fontsize", `${key}:${snippet(valRaw, 40)}`, "内联 style 不得用裸 fontSize 数值（改用排版 token 或类名）", "error");
-          }
-        }
-        if (keyLow === "font") {
-          const bare = /\d*\.?\d+px/.test(valPlain);
-          if (bare) rep.add(2, entryLine, "js-fontsize", `${key}:${snippet(valRaw, 40)}`, "内联 style 不得用裸字号（font 简写）", "error");
-        }
-        if (/^border/i.test(keyLow) && /(^|[^\d.])\d*\.?\d+(px|rem|pt)/.test(valPlain)) {
-          checkBorderDecl(toKebab(key), valPlain, (sev, detail, desc) => {
-            rep.add(3, entryLine, sev === "warn" ? "border-warn" : "border-width", detail, desc, sev);
-          });
-        }
-        if (/gradient/i.test(`${keyRaw}${valRaw}`) && !colors.length) {
-          rep.add(2, entryLine, "js-gradient", `${key}:${snippet(valRaw, 40)}`, "内联 style 不得用渐变", "error");
-        }
+        const entryLine = lineAt(lineStarts, entryBase + lead);
+        checkJsStyleDecl(false, key, valRaw, entryLine);
       }
       styleRe.lastIndex = end;
     }
-    // 直接给 DOM style 属性赋值
-    const styleAssignRe = /\.style\s*\.\s*([A-Za-z_$][\w$]*)\s*=\s*("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`)/g;
+    // 直接给 DOM style 属性赋值（仅在 CLS_CODE 上匹配，防字符串内容误触发）
+    const readAssignRhs = (start) => {
+      let i = start;
+      while (i < n && (src[i] === " " || src[i] === "\t")) i += 1;
+      let depth = 0;
+      let out = "";
+      let lastCodeNonWs = "";
+      while (i < n) {
+        if (cls[i] === CLS_COMMENT) { i += 1; continue; }
+        const c = src[i];
+        if (cls[i] === CLS_CODE) {
+          if (c === "(" || c === "[" || c === "{") depth += 1;
+          else if (c === ")" || c === "]" || c === "}") {
+            if (depth === 0) break;
+            depth -= 1;
+          } else if (depth === 0 && (c === ";" || c === ",")) {
+            break;
+          } else if (depth === 0 && c === "\n") {
+            if (out.trim() !== "" && !/[=+\-*/?:&|(,\[]$/.test(lastCodeNonWs)) break;
+          }
+          if (!/\s/.test(c)) lastCodeNonWs = c;
+        }
+        out += c;
+        i += 1;
+      }
+      return out.trim();
+    };
+    const styleAssignRe = /\.style\s*\.\s*([A-Za-z_$][\w$]*)\s*=(?!=)/g;
     while ((m = styleAssignRe.exec(src)) !== null) {
-      if (cls[m.index] === CLS_COMMENT) continue;
+      if (cls[m.index] !== CLS_CODE) continue;
       const prop = m[1];
-      const value = m[2].slice(1, -1);
+      const rhsRaw = readAssignRhs(m.index + m[0].length);
+      if (!rhsRaw) continue;
       const line = lineAt(lineStarts, m.index);
-      const colors = colorInText(value);
-      if (colors.length) {
-        rep.add(2, line, "js-dom-style-color", `.style.${prop} = ${snippet(value, 40)}`, `DOM 内联样式赋值含色值（${colors.slice(0, 2).join("、")}）`, "error");
-      }
-      if (/radius$/i.test(prop) && /\d*\.?\d+(px|rem|em|pt)/.test(value)) {
-        rep.add(2, line, "js-radius", `.style.${prop} = ${snippet(value, 40)}`, "DOM 内联样式不得用裸圆角数值", "error");
-      }
-      if (prop.toLowerCase() === "fontsize" && /^\d*\.?\d+(px|rem)?$/.test(value)) {
-        rep.add(2, line, "js-fontsize", `.style.${prop} = ${snippet(value, 40)}`, "DOM 内联样式不得用裸字号", "error");
-      }
-      if (/^border/i.test(prop)) {
-        checkBorderDecl(toKebab(prop), value, (sev, detail, desc) => {
-          rep.add(3, line, sev === "warn" ? "border-warn" : "border-width", detail, desc, sev);
-        });
-      }
+      checkJsStyleDecl(true, prop, rhsRaw, line);
     }
   }
 

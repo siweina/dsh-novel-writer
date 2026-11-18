@@ -91,7 +91,7 @@ try {
 } finally {
   if (priorState === undefined) delete process.env.DSH_NOVEL_WRITER_STATE;
   else process.env.DSH_NOVEL_WRITER_STATE = priorState;
-  rmSync(testRoot, { recursive: true, force: true });
+  rmSync(testRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }
 
 // ── v6.1.0 缺陷清单回归（第 25/26/27/28/29/32/33/35 条）────────────────────────

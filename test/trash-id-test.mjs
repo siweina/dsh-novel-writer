@@ -37,12 +37,12 @@ const SERVER = join(PLUGIN_DIR, "mcp", "server.mjs");
 const ROOT = join(tmpdir(), "dsh-trash-id-" + process.pid + "-" + Date.now().toString(36));
 const STATE_DIR = join(ROOT, "state-dir");
 const STATE = join(STATE_DIR, "state.json");
-rmSync(ROOT, { recursive: true, force: true });
+rmSync(ROOT, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 mkdirSync(STATE_DIR, { recursive: true });
 mkdirSync(join(ROOT, "dsh-home"), { recursive: true });
 process.env.DSH_NOVEL_WRITER_STATE = STATE;
 process.env.DSH_HOME = join(ROOT, "dsh-home");
-process.on("exit", () => { try { rmSync(ROOT, { recursive: true, force: true }); } catch { /* 清理失败不影响结论 */ } });
+process.on("exit", () => { try { rmSync(ROOT, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch { /* 清理失败不影响结论 */ } });
 
 const bd = await import("../lib/bookdelete.js");
 const trash = await import("../lib/trash.js");

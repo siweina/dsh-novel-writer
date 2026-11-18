@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_delete_book — 按书删除｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_delete_book 的实现细节：一本书的资料散在 13 个主位置与一个旧位置（章节正文、创作资料、数据目录 10 个按书子目录（含 drafts）、设定库条目、旧版平铺伏笔表）、按「前缀 + 分隔符边界」匹配（删《孤舟》不碰《孤舟子》）、默认只预览、apply 移入回收站并写 manifest、restore 逐文件跳过冲突绝不覆盖、purge 才彻底删除，以及拒绝项、面板入口、宿主路由与已知边界。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_delete_book","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-delete-book.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_delete_book — 按书删除｜dsh-novel-writer 技术文档","description":"novel_delete_book 的实现细节：一本书的资料散在 13 个主位置与一个旧位置（章节正文、创作资料、数据目录 10 个按书子目录（含 drafts）、设定库条目、旧版平铺伏笔表）、按「前缀 + 分隔符边界」匹配（删《孤舟》不碰《孤舟子》）、默认只预览、apply 移入回收站并写 manifest、restore 逐文件跳过冲突绝不覆盖、purge 才彻底删除，以及拒绝项、面板入口、宿主路由与已知边界。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-delete-book.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.5","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_delete_book, 按书删除, 回收站, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_delete_book — 按书删除｜dsh-novel-writer 技术文档","description":"novel_delete_book 的实现细节：一本书的资料散在 13 个主位置与一个旧位置（章节正文、创作资料、数据目录 10 个按书子目录（含 drafts）、设定库条目、旧版平铺伏笔表）、按「前缀 + 分隔符边界」匹配（删《孤舟》不碰《孤舟子》）、默认只预览、apply 移入回收站并写 manifest、restore 逐文件跳过冲突绝不覆盖、purge 才彻底删除，以及拒绝项、面板入口、宿主路由与已知边界。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-delete-book.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.4.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_delete_book, 按书删除, 回收站, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -189,7 +189,7 @@ keys = 去重后的 [原始书名, novels/ 下真实目录名, sanitizeSegment �
           <tr><th><code>.</code> / <code>..</code></th><td>在清洗阶段即被拒</td><td>同左</td></tr>
           <tr><th>一处内容都找不到</th><td><code>found:false</code> + 提示先确认书名</td><td>报错「没找到《书》的任何内容」</td></tr>
           <tr><th><code>trashId</code> 非法</th><td>—</td><td>报错：只接受单段名（首尾空格先被 trim 掉，随后才校验）；<code>/</code>、<code>\</code>、<code>..</code>、点号开头、空串一律拒绝</td></tr>
-          <tr><th>回收站条目没有清单</th><td><code>list</code> 标 <code>restorable:false</code></td><td><code>restore</code> 报错并给出可手动移回的目录路径</td></tr>
+          <tr><th>回收站条目没有清单、清单损坏或语义矛盾</th><td><code>list</code> 标 <code>restorable:false</code>，并按目录实际载荷统计 <code>files</code>/<code>bytes</code></td><td><code>restore</code> 拒绝恢复、保留目录与备份文件，并给出可手动取回的目录路径</td></tr>
         </tbody>
       </table>
       <p>注意区分<strong>「拒绝」与「找不到」</strong>：拒绝是书名本身不允许删（可能误伤插件自己的文件），预览阶段就要让人看见原因；找不到是书名写错或这本书已经删过，<code>apply</code> 会拒绝执行，避免造一个空回收站条目。</p>
@@ -217,7 +217,7 @@ GET  /api/dsh-novel-writer/delete-book?action=&amp;book=&amp;trashId=
       <table>
         <thead><tr><th>情形</th><th>状态码</th><th>返回</th></tr></thead>
         <tbody>
-          <tr><th>非回环地址（且未开 <code>allowLanState</code>）</th><td>403</td><td><code>{ error: "forbidden: loopback-only" }</code></td></tr>
+          <tr><th>非回环地址（固定按仅回环判定，不跟随 <code>allowLanState</code>）</th><td>403</td><td><code>{ error: "forbidden: loopback-only" }</code></td></tr>
           <tr><th>方法不是 GET / POST</th><td>405</td><td><code>{ error: "method not allowed: &lt;方法&gt;" }</code></td></tr>
           <tr><th>POST 体不是 JSON 对象（空 / 数组 / 标量）</th><td>400</td><td><code>{ error: "invalid JSON body" }</code></td></tr>
           <tr><th>参数或业务错误（书名被拒、找不到、<code>trashId</code> 非法等）</th><td>400</td><td><code>{ ok: false, error: "&lt;前 240 字&gt;" }</code></td></tr>
@@ -225,14 +225,14 @@ GET  /api/dsh-novel-writer/delete-book?action=&amp;book=&amp;trashId=
           <tr><th>成功</th><td>200</td><td><code>{ ok: true, action, book, … }</code></td></tr>
         </tbody>
       </table>
-      <p>守卫是 <code>isAllowedRequest</code>（与 state / lexicon / baseline 等路由同一条）：要求连接来源是回环地址、Host 头解析出的主机名是 <code>127.0.0.1</code> / <code>localhost</code> / <code>[::1]</code>、且不是跨站请求；否则只有 <code>allowLanState</code> 打开才放行。<strong>仅支持回环</strong>是刻意的：这是删书入口，不该暴露到局域网。GET 的用途是面板读取（<code>list</code> / <code>preview</code>），真正会写盘的 action 走 POST。</p>
+      <p>守卫是 <code>isAllowedRequest(req, false)</code>（第二参固定传 <code>false</code>，<strong>不跟随 <code>allowLanState</code></strong>）：要求连接来源是回环地址、Host 头解析出的主机名是 <code>127.0.0.1</code> / <code>localhost</code> / <code>[::1]</code>、且不是跨站请求；即使面板开启了 <code>allowLanState</code> 也不放行局域网请求。<strong>仅支持回环</strong>是刻意的：这是删书入口，不该暴露到局域网。GET 的用途是面板读取（<code>list</code> / <code>preview</code>），真正会写盘的 action 走 POST。</p>
 
       <h2>已知边界</h2>
       <ul>
         <li><strong>移入回收站不释放磁盘空间</strong>：内容只是被 <code>rename</code> 到 <code>trash/</code> 下，字节仍在盘上；面板「数据目录」的体积统计包含 <code>trash/</code>，所以删书之后体积会<strong>变大</strong>。要真正释放空间，必须对条目执行 <code>purge</code>（不可恢复）。</li>
         <li><strong><code>trash/</code> 不会自动清理</strong>：插件不设回收站过期策略，也不在你删书时顺手清旧条目；长期使用需要自己按 <code>action: "list"</code> 决定何时 <code>purge</code>。</li>
         <li><strong>恢复是文件粒度的「移回」，不是版本合并</strong>：目标已存在就跳过并记入 <code>conflicts</code>，<strong>绝不覆盖</strong>；目录已被重建时逐文件合并恢复，同名文件一律跳过。恢复不会做任何内容合并或改写。</li>
-        <li><strong>没有清单就不能一键恢复</strong>：若 <code>manifest.json</code> 写入失败（或目录是手动放进回收站的），文件确实在回收站里，但 <code>restore</code> 会报错并给出目录路径，只能手动移回。</li>
+        <li><strong>没有清单、畸形清单或半截清单就不能一键恢复，且绝不删目录</strong>：若 <code>manifest.json</code> 写入失败、格式损坏、或语义矛盾（例如 <code>items: []</code> 却没有设定库备份，或目录内仍扫到实际备份文件），<code>list</code> 按盘面真实载荷（不含 <code>manifest.json</code> 本身）计数并标 <code>restorable: false</code>，<code>restore</code> 报错并保留目录；即便 <code>items</code> 全部恢复完，若条目目录内仍有未在清单登记的孤儿备份文件，<code>restore</code> 仍记 <code>EORPHAN</code> 失败并拒删条目目录，防止备份随条目一并丢失。</li>
         <li><strong>书名里的 <code>..</code> 不会把删除带出书库（v7.3.1 修正）</strong>：旧版 <code>resolveBookFolder</code> 在<strong>没匹配到真实目录</strong>时原样返回传入的书名，而 <code>blockReasonFor</code> 只拦「点号开头」——于是 <code>x/../../某目录</code> 这类书名能让删除目标逃出 <code>novels/</code>（实测可把库外目录搬进回收站）。现在未匹配一律按<strong>清洗后的书名</strong>（<code>sanitizeSegment</code>）处理，并在构建目标前断言所有目标都在书库根内，否则整体 <code>blocked</code>。<strong>反向的 <code>restore</code> 同样加了校验</strong>：清单里 <code>items[].from</code> 必须在书库根内、<code>to</code> 必须在本次回收站条目目录内，越界条目不动、进 <code>failed</code> 并留在 <code>stillThere</code>（数据不丢）。<strong>v7.3.2 起边界校验改为解析真实路径</strong>（<code>realPathOf</code>：取「存在的最深祖先」做 <code>realpath</code> 再拼回剩余段）——旧版只做 <code>resolve</code> 词法比较，书库根内若被预置 junction / 符号链接，词法在根内的路径可以经链接写到根外；删除、恢复、以及<strong>恢复时的逐文件落点</strong>现在都过一遍真实路径。词法上的 <code>..</code> 本就无法绕过（<code>resolve</code> 会折叠）。</li>
         <li><strong>逐项失败不中断</strong>：某一项被占用 / 无权限时，其余项照常搬走，失败项进 <code>failed</code>，并用 <code>remaining</code> 报告清理后残留——也就是<strong>可能出现「删了一部分」</strong>。预览清单与执行后的残留要一起看。</li>
         <li><strong>选择性清理后 <code>remaining</code> 不再是「残留」</strong>：传了 <code>keys</code> 时，没选中的位置本来就该留着，所以 <code>remaining.files &gt; 0</code> 属正常——判断"是不是出了意外"要看 <code>partial</code> 与 <code>skipped</code>，不要看到 <code>remaining</code> 非零就以为失败。</li>

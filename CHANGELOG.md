@@ -14,6 +14,10 @@
 
 | 版本 | 日期 | 摘要 |
 | --- | --- | --- |
+| 7.4.0 | 2026-11-18 | 按 78 条独立核验源码审计清单全仓整修：回收站畸形清单保底与删书防越界/Windows 大小写对齐、短章基线回退全书、站桩感知词剥离、单换行向量行号、ReDoS 正则拦截/放行与 MCP/Web 面板竞态清理；工具数仍 22，新增第 38 套回归测试 |
+| 7.3.5 | 2026-11-14 | 修 7.3.4 自己引入的删书「已达成」分支失真：补齐 remaining / partial / skipped 与 fail-closed 断言；工具数仍 22 |
+| 7.3.4 | 2026-11-14 | 收干净 7.3.3 之后核出的 7 条：诊断读数上限文案、连贯性审计 OUTLINE_LINE_RE、MCP 死分支、BODY_TOO_LARGE 死导入导出、只删空目录与面板冷启动问题；工具数仍 22 |
+| 7.3.3 | 2026-11-13 | 按外部源码审计报告修完 34 条 + 漏报 16 条（GET 删书/删书路由/POST /state 书库根/取消误记故障/裸台词行号/换行归一），补全 ui-audit CSS→JS 方向；工具数仍 22 |
 | 7.3.2 | 2026-11-12 | 修 7.3.1 自己引入的 4 个回归（开写包假降级/重试流泄漏/本地阈值存不进/回收站加载态）+ 清 22 条残留，并更正 7.3.1 日志里 3 处不实说法；测试套件 36→37 |
 | 7.3.1 | 2026-11-12 | 修第三方源码审计里 79 条能举证的缺陷：删除/恢复越界（含测试）、审计渲染返回类型、面板阈值显示、草稿镜像防护恒失效、推理型模型兜底失效；工具数仍 22 |
 | 7.3.0 | 2026-11-10 | 实时聊天写作：逐段写进独立目录的草稿镜像（只追加、AI 不读不改），何时停下来问人由程序的字数阈值判定（用户可填），面板可直接翻看镜像；工具数 21→22 |
@@ -75,6 +79,66 @@
 | 0.4.0 | 2026-08-16 | 新增批量导入：整个文件夹的稿件一次扫进来，按书名自动分组 |
 | 0.3.0 | 2026-08-16 | 新增句式模式分析：统计九类句式占比与排列规律，看清一本书的行文节奏 |
 | 0.2.0 | 2026-08-16 | 章节库管理：列出作品、查看章节、按章阅读，全程在对话里完成 |
+
+---
+
+## [7.4.0] - 2026-11-18
+
+> 一句话：按经独立复核确认的 **78 条**源码审计清单（初筛 79 条，经第 7 路独立复核剔除 1 条无外泄风格项，最终确认源码 Bug 40 条、代码与契约/文档错误 25 条、死代码 13 条）分模块多波次全部修完。工具数仍 **22**，测试套件 **37 → 38**；无迁移步骤。
+
+### 数据安全与按书删除 / 回收站
+
+- **畸形、空清单或缺失路径的回收站清单会整目录销毁备份（#19）**：`lib/bookdelete.js` 的 `restoreTrash` 此前对 `{}` / `[]` / `"corrupt"` 等非标准 `manifest.json` 算出 `all = []`，以及对语义矛盾的半截清单（`items: []` 却无设定库条目，或目录内仍实际存在备份文件）判 `stillThere` 为空、`complete = true` 并直接 `rm -rf` 删掉整个回收站条目目录（`null` 则抛未捕获 `TypeError`）；`from === "" || to === ""` 失败分支也漏推 `stillThere`。现在 `isConsistentTrashManifest` 校验结构合法与语义一致（合法仅允许「仅含设定库条目且目录无残留载荷」），`listTrash` 按目录实际载荷文件（不含 `manifest.json` 本身）统计 `files`/`bytes` 并对非法/矛盾条目统一标 `restorable: false`，`restoreTrash` 拒删目录并报错；并在恢复完成后额外检查目录内是否仍残留未在清单登记的孤儿备份文件（记 `EORPHAN` 失败保留目录），`complete` 同时要求 `failed.length === 0`。
+- **`legacy` 路径拼接使用未清洗 `rawBook` 可跨书删文件（#20）**：`planBookDelete` 对 `"fake/../OtherBook"` 拼出 `<dataDir>/OtherBook.json` 仍通过 `isInsideDir`，执行 `apply` 时可跨书移走他书伏笔表，传入 `"fake/../lexicon/_global"` 还会把全局词表列进预览。现在以 `isValidSingleSegment` 过滤路径片段，仅允许合法单段文件命中 `dataDir` 首层，同时在 `applyBookDelete` 校验 `resolve(dirname(p))` 与 `isInsideDir`。
+- **Windows 大小写不敏感删书漏留数据（#21）**：盘内为 `MyBook` 而传 `"mybook"` 时，OS 删掉正文与草稿目录，但 JS 精确比对漏掉 9 类数据子目录文件与 `creationProfiles.MyBook` 且谎报 `remaining: 0`。现在 `win32` 下 `resolveBookFolder`、`isBookScopedName`、`resolveDiskName` 与 `creationProfiles` 查找均做大小写折叠并还原磁盘真实名，删与恢复两路对称对齐。
+- **空草稿目录不可见与 `deleteBookDispatch` 选择性清理失真（#22, #23）**：`data:drafts` 改为 `existsSync(draftsDir)` 判存在（空草稿目录也可发现清理）；`lib/index.js` 对 `keys` 做 `.trim()` 归一化，用 `KNOWN_BOOK_DELETE_KEYS` 静态白名单放行预览后已消失的 `data:*` / `legacy` 进入「目标已达成」分支，并在计算 `leftContentGone` / `leftContent` 时纳入未选中且现存的空目录以如实反映 `skipped` 与 `partial`。
+
+### 静默失效、状态串台与缓存一致性
+
+- **站桩对话感知动词剔除被 `physicalInteractionOf` 抵消（#1）**：`lib/chapter-diagnose.js` 的 `isBareDialogueBlock` 先用 `PERCEPTION_MENTAL_RE`（`看/望/盯/听/想/知`）剔除感知心理词算动作，紧接着却把未剔除原串传给 `physicalInteractionOf`，命中 `DENSITY_ACTION_VERBS` 与 `DENSITY_SENSE`，使「他看着她道。」等连续站桩台词全部逃逸。现在先剥离感知心理动词再传入 `physicalInteractionOf`。
+- **套话题材豁免忽略按书配置 `creationProfiles[book]`（#4）**：`novel_chapter_brief`（`lib/brief.js`）、`novel_style_check`（`lib/index.js`）与 `novel_fix_plan`（`lib/fixplan.js`）传给 `buildSlopExemptions` 的 `genre` 均改为优先取按书配置（兼顾清洗名与原名回退全局 `creationProfile`），按书设置系统流/网游题材时 `stat_numeric` 正确静音。
+- **建章基线计算吞取消且失败后泄漏未选章锚段（#5）**：`novel_new_chapter` 的基线 `catch` 补齐 `if (isAbort(e)) throw e;`；同时先对章节清单调用 `resolveBaselineScope` 确定 `anchorAllowed`，读盘失败时清空 `anchorTexts`，不再把非 `custom` 范围章节泄漏进 `anchors` / `skeletons`。
+- **自定义基线仅选中 `<40` 字短章未回退全书（#6, #10）**：`novel_chapter_brief`、`novel_style_report`、`novel_style_check` 与 `novel_fix_plan` 四处改为先基于 `metricChaptersCached` 得到 `>=40` 字可测池再交由 `resolveBaselineScope` 裁决回退；当自定义勾选均不足 40 字且书内另有长章时统一回退全书并在返回与 `degraded` 中如实披露，不再产出全 0 假基线或误报无基线。
+- **语义分析缓存开关串台与无意义重写（#11, #12）**：`novel_style_report` 对 `semanticNow` / `implicitResolved` 归一化为 `?? null` 后再比对，消除语义关闭时 `undefined !== null` 恒真导致每次命中都重写 `<book>-full.json` 的开销；`novel_sentence_analysis` 将 `semOn` 纳入 `cacheKey` 并在命中路径仅于模型可用且未裁决时补算 `resolveAmbiguousCarriers`，隔离 `semanticImplicit` 开/关状态下的 `implicit` 裁决。
+- **诊断漏扫 `drafts/<book>/`、坏 `state.json` 覆盖配置与按书统计污染（#24, #25, #57）**：`lib/diagnose.js` 的 `inspectDataDir` 扫描 `drafts` 桶时向下递归一级统计 `<book>/` 子目录文件与 JSON 损坏；`state.json` 损坏时 `inspectSwitches` 不再拿回退对象覆盖宿主 `config` 且在 `deriveIssues` 产出自洽的 `warn`；指定 `book` 过滤时 `aggregate` 不再把 `novel_books` 等无书名调用计入 `calls` / `byTool` / `repeated`，使无记录提示正常触发。
+- **词表、伏笔、OOC、设定同步与审计损坏区分（#27, #31, #32, #50, #51, #52, #55, #58）**：`novel_sentence_config` 同步 `creationProfiles` 改走 `resolveUiRootInfo`；面板 `setLexiconBook` / `setLexiconScope` 切书切层先清空旧 `lexicon` 并重置错误态，消除加载失败时界面残留并把旧书词条覆写入新书的隐患；官方席位模式 `ctx.effect` 清理回调补清 `rawTimer`、`baselineFlashTimer` 与 `settings.plugin.item` disposer；`novel_lexicon` 的 `update` / `delete` 在损坏层未传 `force` / `overwrite` 时统一走 `writeLexicon` 抛 `ENOVELWRITEFAIL`，并支持 `delete { all: true, force: true }` 清空重建，`scan` 合并为单次读库且补 `corruptFields`，统一 `scope="global"` 传参；`novel_plot` `scan` 覆盖非 `"done"` 的脏状态条目；OOC 哨兵仅在 `vs.hitWindows > 0` 时纳入样本；`lib/audit.js` 的 `runBannedContract` / `runSlopContract` 传 `{ strict: true }` 调 `readSettings` 区分损坏与未登记。
+
+### 行号定位、解析边界与正则安全
+
+- **单换行分段向量行号塌缩第 1 行（#9）**：`lib/vector-audit.js` 的 `locateBlocks` 改为构造与 `chunkText` 剥离 `#` 标题和合并连续行同构的紧凑字符流与 `origIndices` / `origLines` 映射表，单换行短行与跨行块的 `lineFrom` / `lineTo` 回到真实 1-based 行号。
+- **`validatePattern` ReDoS 检测漏洞与误杀修复（#13, #53）**：`lib/core.js` 的 `hasRepeatedUnboundedAtom` 补入元字符 `.` 与 `{m,}` 无界量词；`hasOverlappingAlternation` 基于首字符谓词集合识别 `\d`/`[0-9]`、`\w`/`a`、`[a-z]`/`a` 等交集重叠并补全 `code: "redos"`；`probeReDoS` 增加尾失配字符（`\u0007`、`\n`）探测捕获尾锚定指数回溯；剥离转义与字符类后再检 `innerHasQuant`，放行 `(a\+b)+`、`([+*])+` 等安全正则。
+- **章节解析、改名与纯 CR 兼容（#2, #3, #7, #8）**：`nextFreeChapterFile` 改为非贪婪 `^(.*?第)` 改写最左侧首个章号；`parseDraftSegments` 以 `## 定稿落盘` 为段边界截断末段并在无前序分段时剥除定稿提示返回正文；`firstHeadingTitle`、`countTextLines`、`buildStyleAnchorPackage` 与 `novel_read` 统一兼容纯 `\r` 换行；`parseChapterNumber` 与 `normalizeChapterKey` 在 `cjkMark` 超出 9999 时直接返回 `undefined` 防落入后缀匹配，并统一要求 `1..9999` 拒绝 `第0章`。
+- **入参校验、容差钳制与 HTTP 路由状态码（#14–#18, #26, #28, #29, #30, #42）**：`novel_settings` `timeline.day` 做 `.trim()` 非空同步 `name`；`normalizeSettingEntry` 对 `honorGood` 补 `!== null && !Array.isArray`；`novel_outline` `init` 清空 `cp.characters` 后同步剥离旧 `【用户角色设定】` 区块、`chapter` 拒绝 `<= 0` 或超上限章号；`novel_plot` `update` 拒绝空白 `content`；`novel_continuity_check` 对纯空白 `chapter` 先 `.trim()` 视作未传；`clampStyleTolerance` 先验证原始有限数值与 `low <= 0 && high >= 0 && low <= high` 再钳制，工具侧与 `writeSentenceState` 对全维非法非空对象保留原盘容差、仅显式 `{}`/`null` 才清除；`writeSentenceState`、`novel_sentence_config` 与 `POST /state` 对传入数组或非对象的 `tools`/`features` 显式抛错/返回 `400`，纯对象内继续按 `ALL_TOOLS` / `FEATURE_DEFAULTS` 白名单过滤纯布尔项；`lib/core.js` 新增导出 `isBodyTooLarge`（保持内部 `BODY_TOO_LARGE` 符号不导出），补齐 `/reveal` / `/reports` / `/delete-book` / `/metric-caliber` / `/audit` 超限返回 `413` 与 `POST /baseline` 写失败返回 `500`；`novel_read` 单行超 3000 字裁剪正式新增输出与 schema 必返字段 `hitLineCap: boolean` 并计入 `truncated`，同步修正 `formatRead` 在已到末行且仅因单行裁剪触发截断时误导给出越界 `offset` 续读建议的缺陷。
+
+### Web 面板、MCP 服务器与发布 / 门禁工具
+
+- **Web 面板交互细节与状态清理（#33–#36, #60）**：草稿切书下拉禁用并发并走 `setDraftBook` 递增 `draftReqId`、复制路径失败补 `draftErr: true`；`nwViewOrder` 补 `trash: 1` 修正返回动画方向；`setRoot` 保存后透传 `preserveRevealMsg: true` 保留 `"书库根已保存"` 提示并按需联动刷新词表；切出/返回/刷新/删除/卸载时作废 `reportReqId`；英文词典补齐 `"audit.howto"` 并对齐 `caliber.hint` 的 `{v}` 占位符。
+- **MCP 服务器安全与协议合规（#38–#40）**：`mcp/server.mjs` 将 `canonicalPath(LIBRARY_ROOT)` 纳入 `REDACT_ROOTS` 并在 Windows 下按长度降序大小写不敏感替换，修复小写盘符或 8.3 短路径启动时 stderr 泄漏绝对路径；无 `id` 且缺/非字符串 `method` 畸形请求绕过 `respond(...)` 抑制直接返回 `-32600`；`onStdinEnd` 延后至 `queue.then` 排空后再挂 1 秒 `unref` 兜底定时器退出，避免管道模式腰斩超过 5 秒的长工具请求（`mcp/README.md` 同步）。
+- **构建链与 UI/变异测试门禁修复（#37, #41, #61–#65）**：`tools/ui-audit.mjs` 累加 `parseDecls` 分号偏移修准行号、修复 `scanString` 模板插值标记、`lookbackIsClassName` 顶层逗号截断防跨属性误报与 `checkJsStyleDecl` 变量/字面量区分；`tools/build-client.mjs` 新增 `stripCommentsAndStrings` 按真实 JS 代码统计 `react.use[A-Z]`（实测仍为 12）；`tools/bump-version.mjs` 改用 `relative(REPO, p)`、`tools/check-release.mjs` 纳入 `docs/tools/index.html`（共 24 页）；`tools/mutation-test.mjs` 对齐 `M-C` 源串并将 `dist/mutbak` 清理放进 `try ... finally`；`lib/index.js` `skillProvider` 与 `skills/novel-writing/SKILL.md` frontmatter 同步；更新 `docs/releasing.md`、`cordis.patch.yml` 与中英文 `README`（12 条路由 / 13 处删书位置）；全仓 `test/*-test.mjs` 的临时目录递归清理（含 `analysis-regression-test.mjs`）统一补齐 `maxRetries: 5, retryDelay: 100` 退避，避免 Windows 文件句柄/杀软占锁引发偶发 `ENOTEMPTY` 抖动。
+
+### 契约对齐、文档同步与死代码清理
+
+- **Schema、文档与文案同步（#43–#49, #54, #56, #59）**：统一 `novel_new_chapter` 骨架渲染提示「只用来校准语感，不要照这个形状造句」并在无法建基线时省略 `baseline` / `baselineScope`；`novel_sentence_analysis` `output.schema` 删孤儿字段 `chapter` 并将 `"narrationOnly"` 加入 `paragraphs.required`；`novel_semantic_search` 空书 0 切块不再误报写缓存失败；`novel_fix_plan` 向量审计项 `anchor` 置 `""` 并移除 `verifyFixPlan` 的 `"提高 maxItems"` 建议，修正 `novel_style_report` schema 注释；`novel_lexicon` 顶层 `avoid`/`aliases` 通过 `oneOf` 兼容数组与分隔字符串；`novel_settings` 的 `detect` 移出 `withFileTx` 写锁；`lib/log.js` `ALLOWED_KEYS` 加入 `"removedEmptyDirs"`；同步更新 `docs/tools/` 下 14 份工具技术文档页面。
+- **死代码、冗余词条与死导出清理（#66–#78）**：删除 `bookNameFromContent` 循环尾空操作与 `bookNameFromFileName` 恒不命中 `.replace`；精简 `buildChapterBrief` `wantNext` 恒真判断；移除 `novel_draft` `targetOf` 无消费者属性 `asked`；移除 `markFixItem`（`opts, exec`）与 `writeBaselineScope`（`exec`）未使用形参；移除 `lib/lexicons/collocation-guards.js` 嗅觉通道功能冗余的 `"意味著"` / `"意味着"`（`193 → 191`）；剥离 `lib/lexicons/markers.js` 无消费静态属性 `groups` / `groupNotes` / `excluded` / `label` / `source` / `note`；清理 `lib/log.js` 死白名单键 `"phase"` / `"trashId"`、`mcp/server.mjs` 无用 `closed` 变量与 `docs/script.js` 重复 `.axes` 代码块；去掉 `TRASH_DIRNAME` / `trashIdPrefixFor` / `resolveBookFolder` 3 处多余 `export`；成对删除面板 9 组死 i18n 键（`zh`/`en` 各 `502` 键完全对称）；移除 `V6-icons-c.js` 4 枚死图标（`analyze` / `settings` / `create` / `toolRow`，总图标 `53 → 49`）；清除 `V6-components.css` 2 处同权自覆盖死 CSS 声明并更正 `DisclosureRow` 注释。
+
+### 口径变化（**跨版本不可直接比较的数值**）
+
+1. **`bare_dialogue` 检出（#1）**：含「看着 / 望着 / 盯着 / 听着 / 想着」等纯感知/心理动词旁白的连续台词不再被 `physicalInteractionOf` 抵消，站桩对话行计数与 `postWriteAudit` / 改稿台待办会按实检出。
+2. **`detectSemanticLoop` 行号（#9）**：单换行折行排版章节的「原地打转」行号不再塌缩至第 1 行附近，回到真实 1-based 行区间。
+3. **`novel_continuity_check` OOC 样本（#55）**：角色出场但整章无情感词的章节（`hitWindows === 0`）不再以 `0` 纳入均值序列与偏差判定。
+4. **纯 CR 换行文本（#7）**：`firstHeadingTitle`、`countTextLines`、`buildStyleAnchorPackage` 与 `novel_read` 统一识别孤立 `\r`，纯 CR 文件的行数与骨架抽取回到正常值。
+5. `METRIC_CALIBER` 与六维基线计算口径**未变**；`collocation-guards.js` 条数 `193 → 191` 系剥离被 `"意味"` 完全覆盖的冗余三字词，在 `density-precision-test.mjs` 固定语料上各通道计数零变化。
+
+### 测试与门禁
+
+- 测试套件 **37 → 38**：更新 `test/e2e-test.mjs` `【#36】`（改用不可解码字节模拟非取消基线读取失败并补全 `AbortError` 上抛断言）、同步 `test/density-precision-test.mjs` 豁免条数断言（`193 → 191`），新增 `test/v740-audit-fixes-test.mjs`（25 个测试用例），全量 `38` 套测试全部通过。
+- 变异测试 `node tools/mutation-test.mjs` 修复 `M-C` 并加 `finally` 清理保护，`5/5` 全部捕获。
+- `node tools/build-client.mjs --check`、`node tools/ui-audit.mjs lib/client.js` 与 `node tools/check-release.mjs`（24 个 HTML 页面、22 个工具、JSON 顶层键与版本号一致性）全部通过。
+
+### 升级须知
+
+- 工具数仍 **22**；书库格式、工具名称与状态文件结构均向后兼容（仅 `novel_lexicon` 的 `avoid`/`aliases` 放宽兼容分隔字符串，`novel_sentence_analysis` schema 移除从未返回的 `chapter` 并补全 `narrationOnly` 为 `required`）。
+- **缓存**：`CACHE_VERSION = PLUGIN_VERSION`，升级到 `7.4.0` 后分析缓存自动重算一次。
 
 ---
 

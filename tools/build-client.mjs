@@ -95,9 +95,114 @@ var NW_ICONS = {};
   return parts;
 }
 
+/** 剥离注释、字符串/模板文本与正则字面量（保留模板 `${...}` 内代码与换行符），供代码级计数使用 */
+function stripCommentsAndStrings(src) {
+  const n = src.length;
+  const out = [];
+  const REGEX_PREV = new Set("(,=:[!&|?{};+-*%~^<>".split(""));
+  const REGEX_KW = new Set(["return", "typeof", "instanceof", "in", "of", "new", "delete", "void", "case", "do", "else", "yield", "await", "throw"]);
+  let regexOK = true;
+
+  function scanString(i, isTemplate) {
+    const q = isTemplate ? "`" : src[i];
+    out.push(" ");
+    let j = i + 1;
+    while (j < n) {
+      const c = src[j];
+      if (c === "\\") {
+        out.push(" ");
+        if (j + 1 < n) out.push(src[j + 1] === "\n" ? "\n" : " ");
+        j += 2;
+        continue;
+      }
+      if (!isTemplate && c === "\n") break;
+      if (c === q) { out.push(" "); j += 1; break; }
+      if (isTemplate && c === "$" && src[j + 1] === "{") {
+        out.push("  ");
+        const prevRegexOK = regexOK;
+        regexOK = true;
+        j = scanCode(j + 2, true);
+        regexOK = prevRegexOK;
+        if (j < n && src[j] === "}") { out.push(" "); j += 1; }
+        continue;
+      }
+      out.push(c === "\n" ? "\n" : " ");
+      j += 1;
+    }
+    return j;
+  }
+
+  function scanRegex(i) {
+    out.push(" ");
+    let j = i + 1;
+    let inClass = false;
+    while (j < n) {
+      const c = src[j];
+      if (c === "\\") { out.push("  "); j += 2; continue; }
+      if (c === "\n") break;
+      out.push(" ");
+      if (inClass) { if (c === "]") inClass = false; j += 1; continue; }
+      if (c === "[") { inClass = true; j += 1; continue; }
+      if (c === "/") { j += 1; break; }
+      j += 1;
+    }
+    while (j < n && /[a-z]/i.test(src[j])) { out.push(" "); j += 1; }
+    return j;
+  }
+
+  function scanCode(start, stopOnBrace) {
+    let i = start;
+    let depth = 0;
+    while (i < n) {
+      const c = src[i];
+      if (c === "/" && src[i + 1] === "/") {
+        const e = src.indexOf("\n", i);
+        const end = e === -1 ? n : e;
+        out.push(" ".repeat(end - i));
+        i = end;
+        continue;
+      }
+      if (c === "/" && src[i + 1] === "*") {
+        const e = src.indexOf("*/", i + 2);
+        const end = e === -1 ? n : e + 2;
+        for (let k = i; k < end; k += 1) out.push(src[k] === "\n" ? "\n" : " ");
+        i = end;
+        continue;
+      }
+      if (c === '"' || c === "'") { i = scanString(i, false); regexOK = false; continue; }
+      if (c === "`") { i = scanString(i, true); regexOK = false; continue; }
+      if (c === "/" && regexOK) { i = scanRegex(i); regexOK = false; continue; }
+      if (stopOnBrace) {
+        if (c === "{") depth += 1;
+        else if (c === "}") { if (depth === 0) return i; depth -= 1; }
+      }
+      if (!/\s/.test(c)) {
+        if (/[A-Za-z_$]/.test(c)) {
+          let w = i;
+          while (w < n && /[A-Za-z0-9_$]/.test(src[w])) w += 1;
+          const word = src.slice(i, w);
+          out.push(word);
+          regexOK = REGEX_KW.has(word);
+          i = w;
+          continue;
+        }
+        if (/[0-9]/.test(c)) { out.push(c); regexOK = false; i += 1; continue; }
+        regexOK = REGEX_PREV.has(c);
+      }
+      out.push(c);
+      i += 1;
+    }
+    return n;
+  }
+
+  scanCode(0, false);
+  return out.join("");
+}
+
 /** 不变量断言（全文件级） */
 function assertInvariants(text) {
-  const use = (text.match(/react\.use[A-Z]/g) || []).length;
+  const codeOnly = stripCommentsAndStrings(text);
+  const use = (codeOnly.match(/react\.use[A-Z]/g) || []).length;
   if (use !== 12) problems.push(`react.use* = ${use}（须 12）`);
   if (text.includes("ctx.inject(")) problems.push("出现 ctx.inject(");
   const direct = (text.match(/NW_UI\.[A-Za-z]+\(/g) || []).length;

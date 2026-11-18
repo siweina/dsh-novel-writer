@@ -16,9 +16,9 @@ const STATE_FILE = process.env.DSH_NOVEL_WRITER_STATE;
 // stateBackup 恒为 null、恢复分支永不执行；真正的隔离靠 stateFilePath() 惰性读 env，
 // 因此改为"写盘后断言状态文件落在 env 指定的 tmpdir（见开关门禁段）"来防回归。
 process.on("exit", () => {
-  try { rmSync(testRoot, { recursive: true, force: true }); } catch { /* 忽略 */ }
+  try { rmSync(testRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch { /* 忽略 */ }
 });
-rmSync(testRoot, { recursive: true, force: true });
+rmSync(testRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 
 // v4.0.0：告警即失败护栏——插件运行期 console.warn（如 vibe.js 语义映射契约失配）此前完全不被测试感知，
 // 全套 e2e 跑绿却在 stderr 持续刷告警；这里捕获后统一在末尾失败。
@@ -455,8 +455,8 @@ if (res.status !== 200) throw new Error("allowLan route broken");
   if (detC.culture !== "eastern" || !(detC.evidence?.eastern ?? []).length) throw new Error("中式 detect 失败: " + detC.culture);
   console.log("detect 中式样本: ✓ " + detC.culture + " 证据 " + (detC.evidence.eastern || []).length + " 条");
   // 清理样本
-  rmSync(join(testRoot, "novels", "西式样本"), { recursive: true, force: true });
-  rmSync(join(testRoot, "novels", "中式样本"), { recursive: true, force: true });
+  rmSync(join(testRoot, "novels", "西式样本"), { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  rmSync(join(testRoot, "novels", "中式样本"), { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }
 
 // v3.1.0: POST 保存设定 → 自动创建创作资料（设定同步）
@@ -605,7 +605,7 @@ if (res.status !== 200) throw new Error("allowLan route broken");
   const cfgClear = await defs.novel_sentence_config.execute({ action: "set", styleTolerance: {}, root: testRoot }, exec);
   if (typeof cfgClear.styleTolerance !== "object" || Object.keys(cfgClear.styleTolerance).length !== 0) throw new Error("config 清除应输出空对象");
   console.log("config set/清除: ✓ 类型断言过");
-  rmSync(join(testRoot, "novels", "导入书"), { recursive: true, force: true });
+  rmSync(join(testRoot, "novels", "导入书"), { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }
 
 // v3.9.0 ⑯：render 层断言——宿主只把 render() 文本给模型看，关键字段必须出现在文本里（防止 value 有、模型看不到的回归）
@@ -661,7 +661,7 @@ if (res.status !== 200) throw new Error("allowLan route broken");
     if (Number(m[1]) > 100) throw new Error("动作链占比仍超 100%: " + m[1]);
   }
   console.log("render sentence_analysis: ✓ (量化可见/占比不放大/文案干净)");
-  rmSync(join(testRoot, "novels", "渲染书"), { recursive: true, force: true });
+  rmSync(join(testRoot, "novels", "渲染书"), { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 }
 
 // v3.9.5 回归：H2/H1/L07/M03/M04/M11 修复验证
@@ -1365,7 +1365,7 @@ await (async function v500PostAuditFixes() {
   // 上限内（9999）仍要放行——不能为了拒绝越界把合法边界也误伤
   const atEdge = await defs.novel_new_chapter.execute({ book: book10000, chapter: 9999, root: testRoot }, exec);
   if (atEdge.number !== 9999) throw new Error("章号 9999 应被接受，实际：" + JSON.stringify(atEdge.number));
-  rmSync(join(testRoot, "novels", book10000), { recursive: true, force: true });
+  rmSync(join(testRoot, "novels", book10000), { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   console.log("【#9】建章章号上限 9999：10000 被拒且报上限 ✓ | 9999 放行 ✓");
 }
 
@@ -1384,7 +1384,7 @@ await (async function v500PostAuditFixes() {
     throw new Error("自动章号越过 9999 时必须报「章号已用尽…9999」，实际：" + (autoRejected || "未拒绝"));
   }
   if (existsSync(join(autoMaxDir, "第10000章.md"))) throw new Error("自动章号越过上界后仍产出了第10000章孤章");
-  rmSync(autoMaxDir, { recursive: true, force: true });
+  rmSync(autoMaxDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   console.log("【N8】自动章号上界：9999 已占满时拒绝且不产出第10000章 ✓");
 }
 
@@ -1407,33 +1407,63 @@ await (async function v500PostAuditFixes() {
   try { await defs.novel_books.execute({ root: testRoot }, aborted); }
   catch (e) { booksAborted = abortIgnore(e); }
   if (!booksAborted) throw new Error("novel_books 把取消吞成了 chars=0 的成功结果");
-  rmSync(abortSrc, { recursive: true, force: true });
-  rmSync(join(testRoot, "novels", "取消书"), { recursive: true, force: true });
+  rmSync(abortSrc, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  rmSync(join(testRoot, "novels", "取消书"), { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   console.log("【#32】AbortError 上抛：novel_import ✓ | novel_books ✓");
 }
 
-// 【#36】baselineMode 违反 schema enum 的路径：基线计算失败时不得返回 ""（省略键或给合法值）
+// 【#36】baselineMode 违反 schema enum 的路径：基线计算失败时不得返回 ""（省略键或给合法值）；
+// v7.4.0（#5）：AbortError 必须上抛，改用无法解码的坏字节稳定模拟"章已写盘、基线读已有章失败"，并补反向 AbortError 上抛断言
 {
   const bbook = "基线失败书";
   mkdirSync(join(testRoot, "novels", bbook), { recursive: true });
-  // 必须先有一章别的章节：基线 try 里的 readTextFile 才会被真正调用（新章自己读的是内存里的 text）。
-  writeFileSync(join(testRoot, "novels", bbook, "第01章.md"), "第一章已有正文。\n", "utf8");
-  // exec.signal 第 1 次访问是建章写盘（必须有效），第 2 次起是基线扫描读已有章节（让它取消 →
-  // 基线 try/catch 兜住 → 旧版 baselineMode 留在 ""，宿主按 enum:["all","custom"] 整条拒收，
-  // 而章其实已经写盘）。这里用计数 getter 稳定复现"章已写、基线失败"的状态。
+  // 写入无法被 UTF-8 / GBK / UTF-16 解码的非法字节（避开 NUL > 5% 启发式），使基线 readTextFile 稳定抛错
+  writeFileSync(join(testRoot, "novels", bbook, "第01章.md"), Buffer.from([0x80, 0x81, 0x82, 0xff, 0x83, 0x84]));
+  const logBeforeLen = existsSync(logFilePath()) ? readFileSync(logFilePath(), "utf8").length : 0;
+  const res = await defs.novel_new_chapter.execute({ book: bbook, chapter: 2, content: "第二章正文。\n", root: testRoot }, exec);
+  if (!existsSync(join(testRoot, "novels", bbook, "第02章.md"))) {
+    throw new Error("【#36】基线失败时新章必须已落盘");
+  }
+  assertOutputContract(defs.novel_new_chapter, res, "novel_new_chapter(baseline-failed)");
+  if ("baseline" in res || "baselineScope" in res || "baselineMode" in res) {
+    throw new Error("【#36】基线计算失败时 baseline/baselineScope/baselineMode 应安全省略：" + JSON.stringify({
+      baseline: res.baseline,
+      baselineScope: res.baselineScope,
+      baselineMode: res.baselineMode
+    }));
+  }
+  const appendedLog = existsSync(logFilePath()) ? readFileSync(logFilePath(), "utf8").slice(logBeforeLen) : "";
+  const baselineLog = appendedLog
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => { try { return JSON.parse(line); } catch { return null; } })
+    .find((ev) => ev && ev.kind === "silent_skip" && ev.book === bbook && /基线/.test(String(ev.detail ?? "")));
+  if (!baselineLog) {
+    throw new Error("【#36】基线计算失败应写入 silent_skip 日志留痕：" + appendedLog);
+  }
+  rmSync(join(testRoot, "novels", bbook), { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+
+  // 反向用例（#5）：真正传入 AbortSignal.abort() 并在读基线章时中止，novel_new_chapter 必须上抛 AbortError
+  const abortBook = "基线中止书";
+  mkdirSync(join(testRoot, "novels", abortBook), { recursive: true });
+  writeFileSync(join(testRoot, "novels", abortBook, "第01章.md"), "第一章已有正文。\n", "utf8");
   const live = new AbortController();
   let signalReads = 0;
-  const trickyExec = { agent: { session: { header: { cwd: testRoot } } } };
-  Object.defineProperty(trickyExec, "signal", {
-    get() { signalReads += 1; return signalReads >= 2 ? AbortSignal.abort() : live.signal; }
+  const abortExec = { agent: { session: { header: { cwd: testRoot } } } };
+  Object.defineProperty(abortExec, "signal", {
+    get() { signalReads += 1; return signalReads >= 3 ? AbortSignal.abort() : live.signal; }
   });
-  const res = await defs.novel_new_chapter.execute({ book: bbook, chapter: 2, content: "第二章正文。\n", root: testRoot }, trickyExec);
-  assertOutputContract(defs.novel_new_chapter, res, "novel_new_chapter(baseline-failed)");
-  if ("baselineMode" in res && res.baselineMode !== "all" && res.baselineMode !== "custom") {
-    throw new Error("baselineMode 违反 schema enum:[" + ["all", "custom"].join(",") + "]：" + JSON.stringify(res.baselineMode));
+  let abortErr = null;
+  try {
+    await defs.novel_new_chapter.execute({ book: abortBook, chapter: 2, content: "第二章正文。\n", root: testRoot }, abortExec);
+  } catch (e) {
+    abortErr = e;
   }
-  rmSync(join(testRoot, "novels", bbook), { recursive: true, force: true });
-  console.log("【#36】基线失败时 baselineMode=" + ("baselineMode" in res ? res.baselineMode : "（省略）") + " ✓（章已写盘且契约不破）");
+  if (!abortErr || (abortErr.name !== "AbortError" && abortErr.code !== "ABORT_ERR")) {
+    throw new Error("【#36/#5】读基线章中止时必须上抛 AbortError，实际：" + String(abortErr));
+  }
+  rmSync(join(testRoot, "novels", abortBook), { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  console.log("【#36】基线失败时 baseline/baselineScope/baselineMode 安全省略+留痕 ✓ | 读基线章 AbortError 上抛 ✓");
 }
 
 // 【#38】导入回执的 <path> 必须是书库根相对路径（render 接线也要把根传下去）
@@ -1445,7 +1475,7 @@ await (async function v500PostAuditFixes() {
   const rendered = defs.novel_import.output.render({ root: testRoot }, scanned).map((c) => c.text).join("\n");
   if (!rendered.includes("<path>render-src</path>")) throw new Error("import 渲染的 <path> 必须是书库根相对路径：" + rendered.split("\n")[0]);
   if (/[A-Za-z]:[\\/]/.test(rendered)) throw new Error("import 渲染泄露了宿主盘符路径：" + rendered.split("\n")[0]);
-  rmSync(renderSrc, { recursive: true, force: true });
+  rmSync(renderSrc, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   console.log("【#38】import 渲染 <path> 相对化 ✓");
 }
 
@@ -1634,7 +1664,7 @@ await (async function v500PostAuditFixes() {
 }
 
 // 清理缓存文件（保留状态文件）
-rmSync(testRoot, { recursive: true, force: true });
+rmSync(testRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 // v4.0.0：告警即失败——插件运行期 console.warn 此前完全不被测试感知（e2e 全绿但 stderr 持续刷契约失配）
 console.warn = originalWarn;
 if (pluginWarnings.length > 0) throw new Error("插件运行期告警 " + pluginWarnings.length + " 条（v4.0.0 起视为失败）: " + pluginWarnings.join(" | "));
@@ -1929,7 +1959,7 @@ console.log("\nALL E2E TESTS PASSED");
     writeFileSync(goneSummary, "[]", "utf8");
     const pvGone = await defs.novel_delete_book.execute({ book: goneBook, action: "preview", root: FIX_ROOT }, exec);
     if (pvGone.found !== true) throw new Error("④-②a 前置条件：空目录书应算可清理：" + JSON.stringify(pvGone));
-    rmSync(join(FIX_ROOT, "novels", goneBook), { recursive: true, force: true }); // 预览后、apply 前消失
+    rmSync(join(FIX_ROOT, "novels", goneBook), { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); // 预览后、apply 前消失
     // 带 keys 再 apply（模拟"用户点的就是那个已经没了的空目录"）
     const goneRes = await defs.novel_delete_book.execute({ book: goneBook, action: "apply", root: FIX_ROOT, keys: ["chapters"] }, exec);
     if (!Array.isArray(goneRes.failed) || goneRes.failed.length !== 0) {
@@ -2112,7 +2142,7 @@ console.log("\nALL E2E TESTS PASSED");
     console.log("【#28】add/update 非法仪式正则当场报错；合法模式登记/更新与扫描均正常 ✓");
   }
 
-  // ---- #26：detect 纳入事务后功能不变（scan 仍只读可用） ----
+  // ---- #26 / v7.4.0 #54：detect 与 scan 均为纯只读（不占 withFileTx 写锁）且功能正常 ----
   {
     const book = "检测事务书";
     mkdirSync(join(FIX_ROOT, "novels", book), { recursive: true });
@@ -2121,7 +2151,7 @@ console.log("\nALL E2E TESTS PASSED");
     if (det.culture !== "eastern") throw new Error("#26 detect 回归：" + det.culture);
     const scan = await defs.novel_settings.execute({ book, category: "character", action: "scan", root: FIX_ROOT }, exec);
     if (!Array.isArray(scan.candidates)) throw new Error("#26 scan 回归");
-    console.log("【#26】detect 仍判东方 / scan 仍返回候选；detect 已走 withFileTx（scan 保持只读不占写锁）✓");
+    console.log("【#26】detect 仍判东方 / scan 仍返回候选（detect 与 scan 均保持纯只读不占写锁）✓");
   }
 
   // ---- #7：POST /state 统一 resolveUiRootInfo（trim + 不信过期 lastRoot） ----

@@ -30,11 +30,11 @@ import test from "node:test";
 // ---- 隔离：状态文件指向临时目录，不碰用户真实开关 ----
 const ROOT = join(tmpdir(), "dsh-raw-mode-" + process.pid + "-" + Date.now().toString(36));
 const STATE = join(ROOT, "state.json");
-rmSync(ROOT, { recursive: true, force: true });
+rmSync(ROOT, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
 mkdirSync(join(ROOT, "lib-root", "novels"), { recursive: true });
 process.env.DSH_NOVEL_WRITER_STATE = STATE;
 process.env.DSH_HOME = join(ROOT, "dsh-home");
-process.on("exit", () => { try { rmSync(ROOT, { recursive: true, force: true }); } catch { /* ignore */ } });
+process.on("exit", () => { try { rmSync(ROOT, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch { /* ignore */ } });
 
 function setRaw(on) {
   writeFileSync(STATE, JSON.stringify({ enabled: true, features: { rawWriting: on === true }, tools: {} }, null, 2), "utf8");

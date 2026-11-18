@@ -10,7 +10,7 @@
  *   node tools/bump-version.mjs 6.5.0 --apply   # 实际写盘
  */
 import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REPO = fileURLToPath(new URL('../', import.meta.url));
@@ -126,7 +126,7 @@ for (const p of pages) {
   const t = readFileSync(p, 'utf8');
   const re = /"softwareVersion"\s*:\s*"([^"]+)"/g;
   const found = [...t.matchAll(re)];
-  if (found.length === 0) { pageNoField.push(p.replace(REPO + '\\', '')); continue; }
+  if (found.length === 0) { pageNoField.push(relative(REPO, p)); continue; }
   if (found.every((m) => m[1] === NEW)) continue;
   const out = t.replace(re, `"softwareVersion":"${NEW}"`);
   w(p, out);

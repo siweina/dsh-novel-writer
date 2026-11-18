@@ -16,7 +16,6 @@ import { fileURLToPath } from 'node:url';
 
 const REPO = fileURLToPath(new URL('../', import.meta.url));
 const BAK = join(REPO, 'dist', 'mutbak');
-mkdirSync(BAK, { recursive: true });
 
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
 
@@ -38,8 +37,8 @@ const MUTATIONS = [
   {
     name: 'M-C 改稿台退回"无默认表兜底"（第三个词源复现）',
     file: 'lib/fixplan.js',
-    from: 'const bannedEntry = styleRule.bannedWords.length > 0',
-    to: 'const bannedEntry = styleRule.userBannedWords.length > 0',
+    from: 'const bannedEntry = styleRule && styleRule.bannedWords.length > 0',
+    to: 'const bannedEntry = styleRule && styleRule.userBannedWords.length > 0',
     expectFail: ['改稿台报出'],
   },
   {
@@ -70,51 +69,64 @@ const runTest = () => {
   }
 };
 
-console.log('=== 基线 ===');
-const baseline = runTest();
-console.log(`  exit=${baseline.code}  ${baseline.out.trim().split('\n').pop()}`);
-if (baseline.code !== 0) { console.error('✗ 基线不是绿的，先修好再变异'); process.exit(1); }
+let exitCode = 0;
+try {
+  mkdirSync(BAK, { recursive: true });
+  console.log('=== 基线 ===');
+  const baseline = runTest();
+  console.log(`  exit=${baseline.code}  ${baseline.out.trim().split('\n').pop()}`);
+  if (baseline.code !== 0) {
+    console.error('✗ 基线不是绿的，先修好再变异');
+    exitCode = 1;
+  } else {
+    let caught = 0, missed = [], unverified = 0;
+    for (const m of MUTATIONS) {
+      const p = join(REPO, m.file);
+      const bak = join(BAK, m.file.replace(/[\\/]/g, '__'));
+      const before = sha(p);
+      copyFileSync(p, bak);
 
-let caught = 0, missed = [], unverified = 0;
-for (const m of MUTATIONS) {
-  const p = join(REPO, m.file);
-  const bak = join(BAK, m.file.replace(/[\\/]/g, '__'));
-  const before = sha(p);
-  copyFileSync(p, bak);
+      let r = null;
+      let hit = false;
+      let restored = false;
+      // v7.3.2 修（N6）：这里是 try/finally，只覆盖「抛错 / 超时 / 正常结束」三种路径。
+      // **硬中断（Ctrl+C 的 SIGINT、SIGKILL）不会执行 finally**——全文件没有信号处理器，所以那种情况下
+      // 改坏的源码会留在工作区（可人工用 :83 的 .bak 还原）。上一版注释写成「中断也先还原」，承诺过强。
+      try {
+        const txt = readFileSync(p, 'utf8');
+        if (!txt.includes(m.from)) {
+          // v7.3.1 修（#69）：未命中不再"跳过"——那会让全部漂移时仍输出"全部抓住"并 exit 0（假绿）。
+          console.log(`  ⚠ ${m.name}\n      替换目标未命中（可能被上游改动），本次未验证`);
+          unverified += 1;
+        } else {
+          hit = true;
+          writeFileSync(p, txt.replace(m.from, m.to), 'utf8');
+          r = runTest();
+        }
+      } finally {
+        copyFileSync(bak, p);            // 立刻还原（无论上面成功、抛错还是超时）
+        restored = before === sha(p);
+      }
 
-  let r = null;
-  let hit = false;
-  let restored = false;
-  // v7.3.2 修（N6）：这里是 try/finally，只覆盖「抛错 / 超时 / 正常结束」三种路径。
-  // **硬中断（Ctrl+C 的 SIGINT、SIGKILL）不会执行 finally**——全文件没有信号处理器，所以那种情况下
-  // 改坏的源码会留在工作区（可人工用 :83 的 .bak 还原）。上一版注释写成「中断也先还原」，承诺过强。
-  try {
-    const txt = readFileSync(p, 'utf8');
-    if (!txt.includes(m.from)) {
-      // v7.3.1 修（#69）：未命中不再"跳过"——那会让全部漂移时仍输出"全部抓住"并 exit 0（假绿）。
-      console.log(`  ⚠ ${m.name}\n      替换目标未命中（可能被上游改动），本次未验证`);
-      unverified += 1;
-    } else {
-      hit = true;
-      writeFileSync(p, txt.replace(m.from, m.to), 'utf8');
-      r = runTest();
+      if (!hit) { missed.push(m.name + '（替换目标未命中，本次未验证）'); continue; }
+
+      const failedNames = m.expectFail.filter((n) => r.out.includes(n));
+      const okCaught = r.code !== 0 && failedNames.length > 0;
+      console.log(`  ${okCaught ? '✓ 抓到' : '✗ 漏过'}  ${m.name}`);
+      console.log(`      exit=${r.code}｜命中预期失败项 ${failedNames.length}/${m.expectFail.length}｜还原${restored ? '✓' : '✗ 哈希不符！'}`);
+      if (okCaught && restored) caught += 1;
+      else missed.push(m.name + (restored ? '' : '（还原失败）'));
     }
-  } finally {
-    copyFileSync(bak, p);            // 立刻还原（无论上面成功、抛错还是超时）
-    restored = before === sha(p);
+
+    console.log(`\n变异测试：${caught}/${MUTATIONS.length} 被抓到${unverified ? `；${unverified} 个目标未命中（本次未验证）` : ''}`);
+    if (missed.length) {
+      console.error('漏过/未验证的变异：\n  - ' + missed.join('\n  - '));
+      exitCode = 1;
+    } else {
+      console.log('全部变异均被断言抓住 → 测试具备鉴别力');
+    }
   }
-
-  if (!hit) { missed.push(m.name + '（替换目标未命中，本次未验证）'); continue; }
-
-  const failedNames = m.expectFail.filter((n) => r.out.includes(n));
-  const okCaught = r.code !== 0 && failedNames.length > 0;
-  console.log(`  ${okCaught ? '✓ 抓到' : '✗ 漏过'}  ${m.name}`);
-  console.log(`      exit=${r.code}｜命中预期失败项 ${failedNames.length}/${m.expectFail.length}｜还原${restored ? '✓' : '✗ 哈希不符！'}`);
-  if (okCaught && restored) caught += 1;
-  else missed.push(m.name + (restored ? '' : '（还原失败）'));
+} finally {
+  rmSync(BAK, { recursive: true, force: true });
 }
-
-console.log(`\n变异测试：${caught}/${MUTATIONS.length} 被抓到${unverified ? `；${unverified} 个目标未命中（本次未验证）` : ''}`);
-if (missed.length) { console.error('漏过/未验证的变异：\n  - ' + missed.join('\n  - ')); process.exit(1); }
-console.log('全部变异均被断言抓住 → 测试具备鉴别力');
-rmSync(BAK, { recursive: true, force: true });
+if (exitCode !== 0) process.exit(exitCode);

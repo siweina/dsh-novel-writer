@@ -281,7 +281,7 @@ npx -y -p dsh-novel-writer dsh-novel-writer-mcp --root /你的小说库路径
   也限制在书库根内（见下方 MCP 一节）。
 - 内置技能：通过 `ctx.skills` 注册自带 `novel-writing` 技能，只读取包内
   `skills/novel-writing/SKILL.md`，**不写入任何技能目录**、不需要改宿主配置；宿主没有 `skills` 服务时静默跳过。
-- 本地 HTTP：在 DSH Web GUI 内注册 8 条路由（state / reveal / reports / demo / update-check / lexicon / baseline / **diagnose**），
+- 本地 HTTP：在 DSH Web GUI 内注册 12 条路由（state / reveal / reports / demo / update-check / lexicon / baseline / diagnose / delete-book / metric-caliber / audit / **draft**），
   仅回环地址可访问；`allowLanState` 默认关闭，局域网访问默认拒绝。日志与诊断都在本机：事件日志写在
   `~/.dsh/dsh-novel-writer/logs/events.jsonl`（512 KB 轮转、留 3 份），**以元数据为主**（时间 / 工具名 / 书名 / 章号 / 状态 / 耗时 / 计数 / 路径 / 错误 code），**但自由文本字段（错误消息等）经收敛后至多保留一句（≤160 字）**——所以**本机**日志里可能出现被错误消息回显的输入片段，**该文件不出本机**；
   `novel_diagnose` 与面板「复制诊断包」走**分享层**，自由文本整体剔除后才输出（**任何离开本机的内容都不含自由文本**）；**分享层是默认行为**

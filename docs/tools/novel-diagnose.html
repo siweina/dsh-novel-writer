@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_diagnose — 诊断报告｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_diagnose 的实现细节：本地事件日志的字段白名单与两级隐私设计、错误文本一律归类成固定 code、五处体检（书库根 / 书库内容 / 数据目录损坏 / 语义引擎惰性探测 / 开关快照）、「工具 × 书名」反复失败聚合、512 KB 轮转与落点、调用审计的注册层包装、诊断路由与面板入口，以及读取预算与「不减少 bug、只加快定位」的边界。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_diagnose","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-diagnose.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_diagnose — 诊断报告｜dsh-novel-writer 技术文档","description":"novel_diagnose 的实现细节：本地事件日志的字段白名单与两级隐私设计、错误文本一律归类成固定 code、五处体检（书库根 / 书库内容 / 数据目录损坏 / 语义引擎惰性探测 / 开关快照）、「工具 × 书名」反复失败聚合、512 KB 轮转与落点、调用审计的注册层包装、诊断路由与面板入口，以及读取预算与「不减少 bug、只加快定位」的边界。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-diagnose.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.3.5","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_diagnose, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_diagnose — 诊断报告｜dsh-novel-writer 技术文档","description":"novel_diagnose 的实现细节：本地事件日志的字段白名单与两级隐私设计、错误文本一律归类成固定 code、五处体检（书库根 / 书库内容 / 数据目录损坏 / 语义引擎惰性探测 / 开关快照）、「工具 × 书名」反复失败聚合、512 KB 轮转与落点、调用审计的注册层包装、诊断路由与面板入口，以及读取预算与「不减少 bug、只加快定位」的边界。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-diagnose.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.4.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_diagnose, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -181,10 +181,10 @@ noteRoot（写操作之后记 lastRoot）另有三类留痕：
       <div class="formula">本地日志（logs/events.jsonl）——只落白名单键，白名单之外一律丢弃：
   ts kind level tool action status code book chapter file path root
   rootSource mode scope name ms count degradedCount bytes files
-  note detail suggestion source phase version plugin
+  note detail suggestion source version plugin
   contentChars textChars srcChars filesCount chaptersCount termsCount   ← 参数摘要的长度/计数派生键
   truncated                                                            ← 超长事件被裁过的显式标记
-  failures trashId                                                      ← 按书删除的失败计数与回收站条目 id
+  failures removedEmptyDirs                                            ← 按书删除的失败计数与空目录清理计数
 显式黑名单（纵深防御，即使在白名单里也丢）：
   text content body excerpt raw paragraph paragraphs anchor anchors
   skeleton skeletons summary brief report prompt term terms entries
@@ -237,7 +237,7 @@ summarizeArgs 取哪些：
   ⚠ 这些派生键必须同时登记在 ALLOWED_KEYS 里才落得下来：本版曾因漏登记被整批丢掉
     （实测 15 个键落盘只剩 8 个，"只记长度"当时并不成立）——现已补齐
 状态判定：
-  返回体 ok === false            → failed，code = error 前 80 字
+  返回体 ok === false            → failed，code = error 前 40 字
   返回体 degraded 数组非空        → degraded（条数 = 数组长度）
   抛异常                        → failed，code = e.code 前 40 字，detail = message（异常原样抛出）
 
