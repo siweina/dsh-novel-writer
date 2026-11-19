@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="技术文档总览｜dsh-novel-writer">
 <meta name="twitter:description" content="dsh-novel-writer 的 22 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","name":"技术文档总览｜dsh-novel-writer","description":"dsh-novel-writer 的 22 个工具实现细节：参数契约、计算原理、约束边界与源码位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/index.html","inLanguage":"zh-CN","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.4.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer","url":"https://siweina.github.io/dsh-novel-writer/"}}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","name":"技术文档总览｜dsh-novel-writer","description":"dsh-novel-writer 的 22 个工具实现细节：参数契约、计算原理、约束边界与源码位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/index.html","inLanguage":"zh-CN","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.4.1","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer","url":"https://siweina.github.io/dsh-novel-writer/"}}</script>
 </head>
 <body class="docs">
 
@@ -33,7 +33,7 @@
   <main class="docs__main">
     <article class="doc">
       <h1>技术文档</h1>
-      <p class="doc__version">当前版本 <code>7.4.0</code> · 更新记录见 <a href="https://github.com/siweina/dsh-novel-writer/blob/main/CHANGELOG.md">CHANGELOG</a>（下方「版本说明」）</p>
+      <p class="doc__version">当前版本 <code>7.4.1</code> · 更新记录见 <a href="https://github.com/siweina/dsh-novel-writer/blob/main/CHANGELOG.md">CHANGELOG</a>（下方「版本说明」）</p>
       <p class="doc__lead">
         <code>dsh-novel-writer</code> 的 22 个工具全部在本地运行，<strong>不使用在线大模型</strong>：所有指标由规则统计与本地 ONNX 推理得出。本组页面面向二次开发与集成方，逐工具说明参数契约、计算原理、约束边界与源码位置。
       </p>
@@ -55,6 +55,12 @@
       <ul class="doc__releases">
         <li>
           <details open>
+            <summary><code>7.4.1</code> · 2026-11-19 <span class="doc__rel-sum">提示词瘦身与冲突清理：系统提示词清除跨题材欧式禁词例句与骨架/量化矛盾规则、`SKILL.md` 与 22 工具 Schema 描述减负 31.9%~75.7%，同步精简重构中英文 README 并新增防回退守卫</span></summary>
+            <p>集中卸载上下文税并清理历史演进留下的矛盾指令：<code>lib/prompts.js</code> 统一 <code>WORKFLOW_TEXT</code>（「anchors 仅校准语感、不照 skeletons 造句、数字不翻译为写作规则」），剥离 <code>SCENE_WRITING</code> / <code>SCENE_REVISING</code> 全局提示中写死的欧式中世纪五路禁词例句（改为按书读取 <code>novel_chapter_brief</code> 的 <code>worldview</code> 与 <code>lexicon</code>），全部 9 档提示词精简去重（<code>general</code> 3470→1216、<code>writing</code> 1445→611、<code>revising</code> 983→365、<code>auditing</code> 543→370、<code>setup</code> 842→406、<code>lean</code> 474→328、<code>brief</code> 253→164、<code>rawWriting</code> 317→198、<code>chatWriting</code> 702→432）；<code>skills/novel-writing/SKILL.md</code> 从 <code>17,977</code> 字压缩至 <code>4,367</code> 字（-75.7%），移除开发者维护备忘与「把数字直接转化为写作指令」冲突语句并同步 <code>lib/index.js</code> <code>skillProvider</code> 元数据；<code>lib/brief.js</code> 收紧 <code>plan.checklist</code> 冗余括号与重复流程催促；<code>lib/index.js</code> 压缩 22 工具契约描述（21,940→14,933 字符，-31.9%），保持全部字段、<code>enum</code> 与输出契约零变更；同步重构中英文 <code>README</code>（157/158 行，英文版全清中文片段）并在 <code>v740-audit-fixes-test.mjs</code> 新增 <code>D4 (v7.4.1)</code> 防回退守卫。</p>
+          </details>
+        </li>
+        <li>
+          <details>
             <summary><code>7.4.0</code> · 2026-11-18 <span class="doc__rel-sum">按独立复核的 78 条源码审计清单分模块整修：回收站保底与删书防越界/Windows 大小写对齐、短章基线回退、站桩感知词剥离、单换行向量行号、ReDoS 安全与 MCP/面板修复；工具数仍 22，套件 37→38</span></summary>
             <p>按第 7 路独立复核确认的 78 条源码审计清单（40 条源码 Bug、25 条代码与契约/文档错误、13 条死代码）完成全仓整修与文档同步。数据安全侧：<code>restoreTrash</code> / <code>listTrash</code> 严格校验 <code>manifest.json</code> 结构与语义一致性（拦截 <code>items: []</code> 但目录仍有文件或无设定库备份的半截清单、按真实载荷计数并在恢复后拦截 <code>EORPHAN</code> 孤儿文件），缺路径项计入 <code>stillThere</code>，不再误删回收站目录；<code>legacy</code> 路径仅接受单段合法名称，阻断跨书删文件；Windows 下大小写不一致删书同步清理 9 类数据目录与 <code>creationProfiles</code>；空草稿目录与选择性空目录统计如实上报。核心测量与逻辑侧：<code>isBareDialogueBlock</code> 传入 <code>physicalInteractionOf</code> 前剥离感知心理动词；按书 <code>creationProfiles[book]</code> 优先注入套话题材豁免；<code>novel_style_report</code> / <code>style_check</code> / <code>fix_plan</code> / <code>chapter_brief</code> 自定义仅选中不足 40 字短章时回退全书可测长章；<code>locateBlocks</code> 建立紧凑字符流映射修准单换行行号；<code>validatePattern</code> 补齐 <code>.</code>、<code>{m,}</code>、字符类交集与尾失配符 ReDoS 拦截并放行转义/字符类安全正则；<code>novel_sentence_analysis</code> 按 <code>semanticImplicit</code> 隔离缓存；<code>novel_read</code> 正式在输出契约与返回体暴露 <code>hitLineCap</code> 布尔字段并修正单行裁剪到达末行时的 <code>formatRead</code> 续读提示；<code>clampStyleTolerance</code> 与 <code>writeSentenceState</code> / <code>POST /state</code> 先校验原始顺序再钳制、显式拒绝数组/非对象 <code>tools</code>/<code>features</code> 并过滤白名单纯布尔项；补齐 5 条 <code>POST</code> 路由 <code>413</code> 与 <code>/baseline</code> 写盘失败 <code>500</code>；MCP 修齐 Windows 根脱敏、无 <code>id</code> 畸形请求 <code>-32600</code> 与管道排空后退出；Web 面板修齐词表切书清空、官方席位定时器卸载、<code>audit.howto</code> 英文键及 9 对死词条/4 枚死图标清理，测试套件统一加固 Windows 临时目录 <code>rmSync</code> 退避重试（<code>collocation-guards.js</code> 冗余词清理后为 <code>191</code> 条，测试套件增至 <code>38</code> 套）。</p>
           </details>

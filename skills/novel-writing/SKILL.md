@@ -1,291 +1,54 @@
 ---
 name: novel-writing
-description: 中文网文写作助手（dsh-novel-writer 插件）：章节库浏览与阅读、句式/情感/风格基线分析、伏笔与设定表管理、必用词表（专有词/惯用词的优先用词与成稿用词审计）、章节摘要、连贯性审计（衔接/OOC/大纲走偏）、本地语义检索、原创模式创作资料。当用户要写/续写/改稿中文小说，或要看文风与情感量化报告、要固定用词或模仿作者用词时使用。
-whenToUse: 用户提到小说、网文、章节、续写、改稿、文风、句式分析、伏笔、设定表、人物卡、大纲、章节摘要、专有名词、必用词、惯用词、用词模仿时
+description: 中文网文写作助手（dsh-novel-writer）：章节读写、开写包取材料、六维风格基线与自检、改稿台、伏笔/设定/必用词表与本地语义检索。用户处理中文小说续写、改稿、文风分析或设定管理时使用。
+whenToUse: 用户提到小说、网文、章节、续写、改稿、文风、句式分析、伏笔、设定表、人物卡、大纲、必用词表或用词审计时
 ---
 
 # 小说写作助手 (novel-writing)
 
-## 章节库约定
-
-- 所有小说章节存放在工作区 `novels/<书名>/` 文件夹下，每章一个 Markdown 文件，命名如 `第01章.md`、`第02章.md`。
-- 优先使用专用工具 `novel_books` / `novel_chapters` / `novel_read` 浏览与阅读；也可用 `glob`/`read` 直接查看。
-
-## 分析工作流
-
-1. `novel_books` 找到用户的作品；
-2. `novel_chapters` 查看章节结构与各章字数；
-3. `novel_read` 逐章通读（长章节用 offset/limit 分段读完）；
-4. `novel_keywords` 提取高频关键词（二字组/三字组/疑似人名/英文词）；
-5. `novel_sentence_analysis` 做句式模式分析（九类分布、排列规律、情感曲线、章节节奏、风格指纹）；
-6. 输出分析，至少覆盖三方面：
-   - **剧情脉络**：冲突、转折、悬念、伏笔、人物关系与目标；
-   - **写作手法**：叙事视角、节奏、对话、环境与细节描写、比喻意象、留白；
-   - **关键词与意象**：结合 novel_keywords 的结果，指出作者反复使用的词汇与意象，并引用具体章节佐证。
-
-## 语义检索（0 token）
-- **novel_semantic_search**：自然语言检索全书语义相关段落（本地 embedding，无需关键词命中）。找"与血统秘密相关的段落""女主压抑克制的时刻"这类模糊描述时优先用它。
-
-## 句式模式分析（v0.5.0 合并 + v0.6.0 增强）
-
-- 九类句式：陈述/环境/心理/对话/疑问/反问/感叹/祈使/省略留白；
-- 情感曲线（喜/怒/哀/惧/惊）、句长节奏、段落结构、风格指纹、节奏建议（guidance）；
-- **密度类指标只做同口径比较**：细节密度按「实词搭配」计——「一点」「根本」「一样」「痛苦」「干净」「温柔」这类虚词搭配不算动作、物件或任何感官通道（同一章数值比旧口径低约 15%~20%）；新旧口径的数值不可直接比大小，跨章 / 跨书只用同一口径的数。文笔六维基线口径未变，照旧对照。动作链例是等距抽样出的完整句，用来判断动作有没有连起来，不要照这些句子造句。
-- **缓存**：结果自动缓存（返回 `reportFile` / `cache`），章节未变重复分析秒回，`fresh=true` 强制重算；
-- **总开关 `enabled=false`**：`novel_sentence_analysis` 返回桩结果（不抛错）、`novel_style_check` 报错拒绝执行——准确语义见「情感可信度与 AI 复核」一节的开关说明；
-- 情感词典已去噪（"叹气"不算"气"、"不害怕"不计）、祈使/环境分类已增强。
-
-## 风格自检（v0.6.0 新增；**v5.1.0 起改为按需，不再是强制步骤**）
-
-- **基线不用专门去取**：`novel_chapter_brief` 与 `novel_new_chapter` 都会直接附上六维基线（μ/σ/容差带）。需要完整报告时才调用 `novel_style_report`（长书建议 `brief=true` 拿 μ 摘要）。
-- **锚段只校准语感（v5.1.0 修正）**：`anchors`（原著代表性段落）读一遍记住味道即可；**不要照 `skeletons`（句式骨架）造句、不要套用它们的句式模板**——骨架只在写不出该类型句子时参考。目标是「像这位作者写的」，不是「像这位作者的句子拼出来的」。
-- **写完建议自检（非强制）**：`novel_style_check` 给出相似度 + 偏差清单 + 六维对照（带内 ✓ / 出带 ⚠）。
-- **修改判据（v5.1.0 修正）**：只有相似度明显偏低、或某一维偏离达到 **2 倍容差**以上、或那一处读起来确实别扭时，才按返回的 `fixAnchors` 原著锚段**只改那几处**（不得整章重写）。**单一维度轻微出带属正常波动**（1.5σ 带宽下六维里至少一维出带是常见现象），**不要为对齐数字改文**；确属情节或文体需要，说明理由即可。
-- 对照结果应体现在续写说明中（偏差维度 + 是否修正）。
-
-## 设定管理（v0.8.0 新增）
-
-- `novel_settings`：五张表（人物卡/地点卡/道具清单/时间线/世界观用语规范），list/add/update/delete/scan/detect；
-- 登记新人物/新地点/道具去向，时间线记录"第几天/倒计时"；
-- `novel_continuity_check`：续写前跑一次，输出设定矛盾候选（数字口径/人物缺场/别名/重复）。
-
-## 章节摘要（v0.8.0 新增）
-
-- 读完每章后调用 `novel_summary` add 保存 200-500 字摘要 + 关键事件 + 关键设定；
-- 续写长书时先 `novel_summary` list 回忆剧情，再按需 `novel_read` 细读。
-
-## 写作哨兵（v3.2.0，novel_continuity_check 扩展）
-- **衔接检查**（chapter 参数）：写完一章跑一次——四路检测（时间硬跳词表 / 上章结尾与本章开头语义距离（0 token embedding）/ 人物延续 / 上一章钩子承接），命中带原文引用；硬跳（三天后/一周后）必须补过渡，软跳（次日清晨）可接受；
-- **OOC 检测**（ooc 参数）：登记角色后对比每章该角色附近文本的情绪值 vs 全书基线（>2σ 或小样本 0.3），偏离先确认是否有剧情触发；
-- **大纲走偏**（outline 参数）：对照创作资料大纲方向行，重合率 <12% 提示可能偏离；
-- **报告精简**：novel_sentence_analysis / novel_style_report 传 brief:true 返回一句话结论；
-
-## 伏笔登记表（v0.6.0 新增）
-
-- `novel_plot`：list / add / update / done / delete / scan / graph 管理伏笔与剧情钩子（共 7 个动作）；
-- 续写前先 `novel_plot list` 查看未回收伏笔，续写中主动回收；
-- 存储于 `<书库根>/.novel-writer/plots/<书名>.json`。
-
-## 续写工作流
-
-> **v5.0.0 起：先试 `novel_chapter_brief`。** 它**一次调用**就能拿到下面第 1–3 步的全部材料（上一章结尾原文、本章大纲方向、相关人物、待回收伏笔含埋设距离、世界观用语规范、六维基线、原著锚段与句式骨架、本章禁用清单）。只有当它返回的 `degraded` 里列出了缺项时，才需要按 1–3 步手工补读。
-
-1. 先通读最近的章节（必要时读完全书），保持：人物设定、时间线、情节伏笔、文风、已提炼的关键词一致；
-2. **读风格基线（按需）**：基线通常已随开写包 / 建章返回；需要完整报告时才调用 `novel_style_report`（长书可 `brief=true`）。它是**事后校验**的参照，不是写作规则；
-3. `novel_plot list` 查看未回收伏笔；
-4. 动笔前简述：上一章结尾状态 → 本章目标 → 写作计划（说清要写什么即可，不必逐维对齐基线）；
-5. 用 `novel_new_chapter` 创建新章节文件（返回会自动附带全书风格基线 μ 摘要，动笔对照），或直接用 `write` 工具写入；
-6. 正文用中文，保持与原文一致的叙事风格与细节密度；句式分析开启时参考指纹与节奏序列，僵硬时回归自然表达；
-7. **写完建议自检（非强制）**：`novel_style_check` —— 只有偏离明显（≥2 倍容差）或那一处读起来确实别扭时才逐句修正，不要为对齐数字改文。收尾**按需**：确属本章新埋的伏笔才 `novel_plot add`；钩子与摘要在章节稳定后再回填（`novel_outline hook` / `novel_summary`）。想进一步省 token，可在侧边栏打开**「精简工作流」**。
-
-## 开写包（v5.0.0 新增，`novel_chapter_brief`）
-
-动笔前的一次调用材料装配。核心动机：这些材料原先分散在 6–8 次工具调用里、靠提示词叮嘱模型去取，**漏读正是文风漂移与设定矛盾的头号来源**。
-
-- 参数：`book`（必填）、`chapter`（默认 `next` = 当前最大章号 + 1，文件可尚未创建；也可给章号 / 文件名 / 标题子串）、`budget`（`compact` 默认 / `full`）、`root`。
-- 返回：`anchor`（上一章结尾原文，即**承接口**）｜`previousHook`｜`outlineDirection`｜`characters`｜`openPlots`（每条带 `distance` = 埋了多久没回收）｜`worldview`｜`lexicon`（必用词硬清单；`lexiconFirst` 开且词表非空时才出现）｜`baseline`（六维 μ/σ/容差）｜`baselineScope` / `baselineMode`（基线取样范围文案与档位）｜`anchors` + `skeletons`（**锚段只校准语感，不要照骨架造句**）｜`lastVerdict`｜`avoid`（**本章禁用清单**：已回收伏笔 ∩ 本章方向行的关键词、世界观禁词、已退场角色）｜`actionChains`｜`clauseFrames`｜`prevChapterIssues`｜`symptomPrescriptions`｜`referenceProvenance`（后五项 v7.0.0 近距护航材料，可能是空数组）｜`plan.checklist`｜`degraded`。<br>条件键：`rawMode`（仅 `features.rawWriting` 开启时）、`chatWriting`（仅 `features.chatWriting` 开启时）；`chapter` / `lexicon` / `baseline` 取不到时整键省略。
-- **只读**：不写任何文件（仅复用既有分析缓存）。
-- **优雅降级**：没有大纲 / 没有伏笔 / 没有设定表 / 书只有 1 章 —— 一律返回空值并在 `degraded` 说明原因，**绝不抛错**（唯一例外：书名目录不存在）。
-- 用法要点：拿到之后**先读锚段再动笔**；`baseline` 的数字只做事后校验，不要把数字翻译成写作规则；`avoid` 里的东西不要写。
-
-## 必用词表 / 优先用词（v6.2.0 新增，`novel_lexicon`）
-
-把「某场景**必须使用**的专有名词 / 作者惯用词」登记成表。与 `novel_settings category=worldview` 的 `bannedWords` 分工明确：**worldview 管"不要写什么"（禁词），本表管"必须写什么"（优先词）**。目的是阻止模型退回自己惯用的通用说法。
-
-- **两层存储**（书级同名覆盖全局）：全局层 `<root>/.novel-writer/lexicon/_global.json`（跨书惯用词）｜书级层 `<root>/.novel-writer/lexicon/<书名>.json`（本书专名）。
-- **开关**：功能开关 `lexiconFirst`（侧边栏「必用词优先（专有词表）」，**默认开**）；另有每层自己的 `enabled`（`action="toggle"`）。开关打开且词表非空时，`novel_chapter_brief` 返回 `lexicon` 分区并在 `plan.checklist` 里给硬指令。
-- **条目字段**：`term`（词条）｜`kind`（专名 / 偏好词 / 称呼 / 场景词 / 口头禅 / 其他，可自定义）｜`scene`（适用场景：本章大纲方向行含该词时优先注入）｜`avoid[]`（**通用替身词**：正文里出现它即等于没用必用词）｜`aliases[]`（等价写法，审计算命中）｜`note`｜`priority`（`high`）｜`enabled`。
-- **action**：`list`（默认合并两层，可按 `query` 过滤）｜`add`（`terms` 数组或 `text` 批量文本）｜`update`（含 `newTerm` 改名、单条停用）｜`delete`（`terms` 指定；整层清空须显式 `all=true`）｜`import`（`text` 每行一条：`词` 或 `词|类型|场景|替身1,替身2|备注`，`replace=true` 整层覆盖）｜`scan`（从本书正文高频词提候选，正文高频词往往就是作者的用词偏好）｜`audit`（**成稿审计**）｜`export`｜`toggle`。
-- **audit（只读）**：给 `chapter`（章号 / 文件名 / 标题子串，或 `all`=全书，省略=最后一章），返回 `covered`（已用必用词 + 首见行）｜`missing`（一次没用）｜`avoidHits`（**通用词顶替**：行号 + 原句片段 + 应改成的必用词）｜`coverage`。**它不改正文**，只把「该用没用」变成可定位的行号。
-- 用法要点：写完一章跑一次 `audit`，把 `avoidHits` 逐处改成表内词；`scan` 出的候选词由用户挑选后再 `add`（可一次几百条）。
-- 界面：侧边栏「必用词表」页可做分级列表、搜索、单条增删改、批量粘贴导入（书级 / 全局 / 合并三种视图），工具开关页也有 `novel_lexicon` 的启停与词表目录入口。
-
-## 改稿台（v5.0.0 新增，`novel_fix_plan`）
-
-把风格诊断从「数据」变成「按优先级排好的待办」，并支持改完复测。`novel_style_check` 给的是**判定**，本工具给的是**行动**。
-
-- `action="plan"`（默认）：返回 `items[]`，每条含 `id`｜`type`｜`locate{lineStart,lineEnd,excerpt}`（原句位置）｜`current` → `target`｜`anchor`（原著锚段）｜`severity`(1–5)｜`effort`(1–3)｜`hint`（改写**方向**）。排序：严重度降序 → 难度升序 → 行号升序 → `id` 字典序。
-- `action="verify"`：对当前正文复测，返回三态 `resolved` / `pending` / `new`（配对要求同 `type` **且**同一稳定问题身份 `issueIdentity`，不是只要同类型就算）。
-- `action="mark"`：标记单项处置状态，需 `itemId`（取自 plan）+ `state`（`done` 已按 hint 改过 / `skip` 有意不改）。
-- `action="audit"`（v7.2.0）：**严格对账**——只跑 8 条可机器判定的契约（`lexicon` / `banned` / `slop` / `loop` / `outline` / `ending` / `bare_dialogue` / `plot`），每条违约带 1-based 行号与原句片段，或明确标成全章层面（`line: 0`）；没跑的契约写 `ran:false` + 原因。只读、不评价文笔。
-- `action="audit_brief"`（v7.2.0）：生成给**没有写作上下文的 AI** 的审计任务书（Markdown + 机器可读 `protocol`），末尾附本章正文（行号从 1 开始）；不派 AI、不发网络请求。
-- `action="audit_verify"`（v7.2.0）：复核审计者交回的 `claims`（`{contract,line,text,why}`；`text` 必须是该行原文的连续子串）——行号错但原文在文中 → `corrected`；全文查不到 → `rejected`（编造证据）；最后给 `score`。只验存在性，不判断「算不算违约」。
-- 覆盖 **11 类**待办：句式偏离 / 抽象度过高 / 留白异常 / 情感过直 / 禁用词 / 语用不符 / 衔接缺失 / 伏笔未回收（阈值 20 章）/ AI套话 / 原地打转 / 大纲漏写（后三类 v7.0.0；向量两类受 `features.semanticEmbedding` 开关与本地引擎可用性双重门控）。
-- 行号是**段落级**归因：宁可粗（整段）也不给错的行号；定位不到时给 `lineStart=lineEnd=0` 并在 `hint` 里说明是全章层面。
-- 落盘 `<root>/.novel-writer/audits/fix-plan-<书>-<归一化章号>.json`；重跑保留人工 `done`/`skip` 状态。
-- **边界**：`hint` 只给方向，**绝不生成改写后的正文**——生成是宿主模型的事。这是本插件"零 token、正文不出本机"的立身之本。
-- **不误报**：正常文本不产出任何条目；若对某一章零条目，说明该章没有达到阈值的偏离。
-
-## 实时聊天写作（v7.3.0 新增，`novel_draft` + `features.chatWriting`）
-
-把「一口气写完整章再交稿」换成「一段段写、到量停下来问你」。**默认关闭**（节奏显著变慢，属于要用时才开的模式）。
-
-- 开关：侧边栏「功能」页「实时聊天写作」，或 `novel_sentence_config` 的 `features:{chatWriting:true}`。
-- `novel_draft`（第 22 个工具）只有一个动作 `commit`：把**这一段**正文交出去。路径、分段号、时间戳全由程序生成，AI 不拼路径、不拼格式。
-- 镜像落在 `<书库>/.novel-writer/drafts/<书>/<章键>__draft.md`，**与正文目录物理隔离**；工具层有断言，镜像路径落进 `novels/<书>/` 直接拒绝——半成品进了正文目录会污染字数、六维基线与语义索引。
-- **只追加**（`appendFile`，永不重写全文）：重复段落也照写；你手改的内容永远不会被抹掉。AI 不读、不改、不清。
-- **何时停下来问人由程序的字数阈值判定**（默认 400 字，用户可填 100~5000）：`nextAction="continue"` 就继续写、`"ask_user"` 才把 `question` + `combinedText` 交给追问工具。**AI 不得自己决定何时提问**。
-- 面板：诊断报告页「草稿镜像」卡片可以选书、看逐段正文（只读）。数据来自 `GET /api/dsh-novel-writer/draft?book=&chapter=`。
-- 定稿：`novel_new_chapter` 在开关打开时会自动追加一条「定稿落盘」记录（已有逐段内容只写标记；一个字都没有才补正文）。
-- 按书删除会连带清掉 `drafts/`（单独登记成 `data:drafts`，因为它是"按书一个目录"，不是扁平文件）。
-
-## 结构视图（v5.0.0 新增，`novel_plot action="graph"`）
-
-对全书做**跨章计算**（**不新增工具**，挂在既有伏笔表上）。它回答的是长篇最容易崩的三件事——**线断了、人丢了、伏笔忘了**。
-
-- `plotLifecycle`：每条 open 伏笔的埋设章与 `distance`（埋了多久没回收）
-- `characterMatrix`：人物 × 章节出场矩阵 + `absences`（**连续缺席 ≥ 5 章**；只统计首次出场之后的区间，出场前不算缺席；别名也算出场）
-- `threadActivity`：把伏笔按关联人物 / 地点聚类成"线"，算活跃章号、跨度、最大空档
-- `timelineOrder`：设定表时间线的登记顺序 vs 章号顺序
-- `planVsActual`：创作资料大纲方向行 vs 该章正文的关键词重合率
-- `totalChapters`｜`summary`｜`degraded`；**只读**，不写盘（也不做伏笔表的旧位置迁移写入）
-
-## 提示词档位与场景（v5.0.0 新增）
-
-系统提示词由**三个维度**决定，都在侧边栏「写作助手功能」面板调整，也可用 `novel_sentence_config` 读写：
-
-| 维度 | 取值 | 作用 |
-|---|---|---|
-| 档位 `systemPromptMode` | `off` / `brief` / `full` | **注入多少**：不注入 / 一句话 / 完整流程 |
-| 场景 `promptScene` | `general` / `writing` / `revising` / `auditing` / `setup` | **注入什么**：通用 / 写新章 / 改稿 / 审计（只体检不改稿）/ 建资料（只维护设定与创作资料） |
-| 精简工作流 `leanWorkflow` | `true` / `false`（默认 `false`） | **要不要催促动作**（v5.1.0 新增）：打开后注入约 480 字符（当前 `LEAN_TEXT` 实测 474 字符）的精简档，只保留"工具按需调用"一条原则，去掉自检/复测/登记的全部催促 |
-
-- 场景**仅 `full` 档下生效**；`brief` 档与场景无关。
-- **精简工作流优先于档位与场景**：打开后无论选了什么档位/场景，注入的都是精简档（`off` 除外）；它**任何时候都能切换**，不受 `full` 档限制。
-- 精简工作流打开时，`novel_style_report` 与 `novel_sentence_analysis` 在调用方**未显式指定 `brief`** 时默认走精简输出（省 token）。
-- **向后兼容**：`general` 就是 4.x 的那段通用工作流，老状态文件（没有 `promptScene` / `leanWorkflow` 键）自动落到 `general` + `false`，**既有工作流不变**。
-- 三者只改变注入的提示词内容与报告精简度，**不影响任何工具的能力**。
-
-## 按书删除（v6.8.0 新增，`novel_delete_book`）
-
-用户说「删掉这本书 / 放弃这个项目 / 清掉测试数据 / 想用同名重开」时才用。**默认先预览，不要直接 apply**。
-
-- 一本书的资料散在 **13 处主位置 + `legacy`**（正文 / 创作资料 / 数据目录 10 个按书子目录（含 v7.3.0 的 `drafts`）/ 旧位置的平铺伏笔表 / 设定库条目）。`action:"preview"` 会列出全部位置、文件数、体积与样例文件名，且**不动磁盘**；`action:"apply"` 才执行。
-- **只想删某一类**（例如只清报告历史 / 缓存，正文留着）：把 `preview` 返回的 `targets[].key` 中要清的那些作为 `keys` 传给 `apply`（如 `keys:["data:audits","data:style-reports","data:analysis"]`）；省略 `keys` = 全选 = 删整本书。返回体的 `partial` / `skipped` 说明哪些是**按选择保留**（不是残留），别再补一句"还有残留文件"。
-- 默认**移入回收站** `<书库根>/.novel-writer/trash/<书>-<时间戳>/` 并写 `manifest.json`：`action:"restore" trashId=…` 可原样移回（目标已存在则逐文件跳过、**绝不覆盖**），`action:"purge"` 才彻底删除。回收站**不自动清理**，且回收站里的内容仍占磁盘——所以删书后面板「数据目录」体积会变大而不是变小，这是可恢复的代价。
-- 只处理所选书籍：全局词表 `_global.json`、`state.json` 里的开关/容差/其他书条目、事件日志、其他书的文件都不动（返回体的 `notTouched` 会逐条写明）。
-- 书名匹配是「前缀 + 分隔符边界」：删《孤舟》不会碰到《孤舟子》。书名撞上 `_global` / `创作资料` / 点号目录会被拒绝并给出原因；`trashId` 只接受单段名，路径穿越一律报错。
-- **属于破坏性操作**：执行前把预览摘要（位置 / 体积 / 不会动什么）讲给用户，得到明确确认再 `apply`；用户没说要删就别调。
-
-## 注意事项
-
-- 用户放入章节文件的方式不限：自己复制、AI 用 `write`/`edit` 创建，或用 novel_import 批量导入。
-- 分析结果与续写正文都应使用中文呈现。
-
-## 世界观用语规范（v0.9.0 新增）
-
-- **文化基准自动判断**：`novel_settings`（category=worldview，action=detect）扫描全书，按中西词表命中自动判断文化基准（western/eastern/mixed/modern/unknown）并给出证据与置信度；
-- **用语规范登记**：detect 后可用 `novel_settings` add（category=worldview）登记：name（基准名）、basis（判断依据）、bannedWords（禁用词表）、recommended（替代词映射）、ritual（仪式规范，如"点烛不烧香"）；
-- **续写前检查**：动笔前先确认 worldview（detect 或人工指定），对照 bannedWords/recommended 用词，**并对照 speechStyle 检查说话方式**（称谓/客套/仪式/语气——不只管"词"，还管"怎么说话"）；
-- **语用级检查（v1.0.0）**：worldview 的 speechStyle 定义 title（称谓规范）/ honorBad（中式客套禁词）/ ritualBadPatterns（仪式通配，如"上X柱香"）/ tone（语气）；novel_continuity_check 会输出「语用冲突·客套 / 语用冲突·仪式 / 语用冲突·称谓」三类候选；
-- **示例**（欧式中世纪）：Miss+名（不用"XX小姐"）、不写"提点/承蒙/在下"、宗教点烛不烧香/不"上柱香"、对话口语化不文言；
-- **自动化审计**：`novel_continuity_check` 会自动扫描禁用词命中，输出「用语冲突」候选（含建议替换词）；
-- **时代错置分类**（词表按此组织）：器物 / 称谓 / 计量 / 宗教仪式 / 市井风貌 / 服饰 / 食物 / 制度；
-- **参考资料**（写作时校对）：
-  - Medieval Wordbook（Madeleine Pelner Cosman）
-  - The Writer's Complete Fantasy Reference
-  - Fantasy Writers Phrase Book（Jackson Dean Chase）
-  - 凌力谈历史小说语言：错用一个现代词会破坏整个历史氛围
-
-## 情感可信度与 AI 复核（v1.5.0）
-
-- novel_sentence_analysis 返回 emotion 含 `dominant`（raw）与 `cleanDominant`（仅强情绪词）与 `confidence`（high/medium/low）与 `caveat`（污染警告）与 `aiAction`（明确指令）；
-- **当 `caveat` 非空（confidence=low，检测到高密度成人向/战斗/恐怖描写）时，你必须执行 `aiAction`**：用 `novel_read` 抽查 2-3 段原文，复核真实情感基调后，在结论中同时给出"插件预警"与"AI 复核结果"，不得直接采信 dominant；
-- 例如：某作品 raw 主导"喜"但 clean 主导"哀"且成人向词密度超标 → 插件报 low + 警告，AI 抽查后应判断"整体基调为哀伤，'喜'来自感官反应词"；
-- 功能开关（侧边栏「写作助手功能」面板或 novel_sentence_config）：emotionCaveat（情感净化预警）/ genreTheme（题材与流派检测），关闭后对应输出消失。
-- **总开关 `enabled=false` 的语义（v4.0.0 补记）**：总开关关闭时两个工具行为**不同**——
-  - `novel_sentence_analysis` **不抛错**，直接返回桩结果：`enabled:false`、`totalChars:0`、`totalSentences:0`，`message` 提示"当前已关闭"（渲染文本无 undefined）。拿到桩结果说明分析被关闭，应引导用户在侧边栏「写作助手功能」面板开启（或 `novel_sentence_config` `action:"set", enabled:true`）后重试，**不要反复强行调用**；
-  - `novel_style_check` 会**直接报错拒绝执行**（提示"写作助手功能（句式模式分析）当前已关闭…"）。被拒绝时先开启总开关再重跑，不要换其他工具绕过；
-  - 总开关是全局门禁，关闭时各工具的独立开关设置仍会保留，重新开启后按原设置生效。
-
-## 情感量化解读（v1.6.0）
-
-novel_sentence_analysis 的 emotion.quantification 是纯规则计算的数字（0 token 成本），请直接读取并按以下方式理解：
-
-- **stats.variance（撕裂度 V）**：0~1。>0.3=情绪被反复撕扯（前半大喜后半大悲类）；<0.05=平静。
-- **stats.adjVariance（相邻撕裂）**：相邻窗口情绪差平均，抓"上一秒哭下一秒笑"的急转弯。
-- **stats.delta / deltaRobust（趋势 Δ）**：>+0.3 基调转好，<-0.3 基调转坏（滑向低谷），中间=拉锯。
-- **stats.conflict（矛盾指数 C，0~1）**：同窗正负词交织程度。>0.5=极度矛盾（悲喜交加/又爱又恨），续写必须"反复横跳"不能平滑解决；≈0=单一情感或无矛盾。
-- **implicit（隐性意象）**：雨/黄昏/枯枝等意象的负向占比。negative 高 + 显性 meanValence 正 → 表里不一（表面开心内心压抑）。
-- **compare.explicitImplicitConflict**：true = 强颜欢笑类复杂情感，心理刻画必须分两层。
-- **complexity.score（0~1）**：整体复杂度温度。high(≥0.6) 禁止贴单一情感标签。
-- **composites**：全书高频复合情感对（悲喜交加×N 等）。
-
-用法：把这些数字直接转化为写作指令（如"C=0.7 → 这段要矛盾螺旋，不能平滑"），不要为了判断情感去读整章原文。
-
-### 对外契约字段（v6.3.0 声明，**不是死代码**）
-
-`emotion.quantification.stats` 与 `emotion.quantification.implicit` 里有 9 个字段在**包内没有直接读取方**，但它们是对外契约的一部分——`lib/index.js` 的 `output.schema` 以 `additionalProperties: true` 把 stats / implicit 整包透传给模型，CHANGELOG 也已把 `deltaBasis` / `adjPairs` 公告为新增返回字段，因此**删不得**：
-
-| 字段 | 所属 | 语义 |
-|---|---|---|
-| `windows` | stats | 窗口总数（**不是**有命中的窗口数） |
-| `hitWindows` | stats | 有情绪命中的窗口数 |
-| `adjPairs` | stats | 相邻撕裂的有效对数（`adjVariance` 的分母）；`0` = 没有任何可测量的相邻撕裂 |
-| `deltaBasis` | stats | `delta` / `deltaRobust` 的采样基标识（二者现已统一为全窗口等距序列 `seriesFull`） |
-| `deltaRobust` | stats | 稳健趋势（首尾三分位均值差），与 `delta` 的差异只来自估计器，不再是采样基差异 |
-| `posRatio` / `negRatio` | stats | 正向 / 负向词占比（分母为情绪词总数） |
-| `totalAllHits` | implicit | 意象类命中总数（`topCarriers` 只是其 top 子集） |
-| `topCarriers` | implicit | 命中最多的意象载体清单 |
-
-口径：**「零读即删」只适用于纯内部中间变量**（如已删除的 `windowCount` / `hitWindowCount` / `weightedTotal`）；返回面字段一律「保留 + 本节声明」。若要收缩返回面，必须与 `lib/index.js` 的 `output.schema` 及 CHANGELOG **同批变更**，否则模型侧会静默少字段。
-
-（同款口径见 `lib/analysis.js` 头注释 v4.3.0 两节。）
-
-## 语义隐性情感（v2.0.0）
-
-novel_sentence_analysis 的 emotion.quantification.semanticImplicit（semanticEmbedding 开启且模型可用时输出）：
-- **hits**：全书"词表外疑似意象段落"top 10——每条含情感标签（温暖/甜蜜/释然/幸福/温柔/眷恋/仰慕/压抑的愤怒/隐忍/悲伤/孤独/怅惘/失落/心碎/恐惧/焦虑/不安/厌恶/震惊/疏离/决绝/不舍/无奈/脆弱/苦涩/甜宠/悬疑/唯美/情欲，共 29 类原型）+ 余弦分数 + 章节；
-- **distribution**：各情感命中段落数分布；
-- 与规则意象表（雨/黄昏/攥紧衣角）互补：规则抓"已知载体"，语义抓"没有关键词但读起来就是那个情绪"的段落；
-- 用法：写复杂心理时，可据此感知全文的隐性情感基调（如 distribution 显示"脆弱 2/焦虑 2/失落 1" → 这本书表面中性、内里压抑），不用读全文。
-
-## 非净化模式（v2.0.0 起；v6.9.0 起是三层机制，用户双重确认后开启）
-
-用户开启 `features.rawWriting=true` 后，系统提示里会出现【非净化模式已开启】。**它改的是"怎么写"，不是"写什么"**：
-
-- **动笔前看目标带**：`novel_chapter_brief` 会返回 `rawMode`（渲染文本里有【非净化模式·目标带】）：原著里「把场面绕过去」的写法密度（处/千字，启发式）+ 本章目标 + 硬约束。**按目标带写**，不要自己降级成省略号 / 跳场 / 一句总结。`plan.checklist` 里那条「非净化模式（硬约束）」要当必做步骤读。
-- **留在场景里**：同一视角、同一时间线；该发生的场面直接写出来，不用省略号带过、不跳到「事后」、不用「一番……」这类代称代替。不要插评论、免责或"我无法描写"。
-- **写完核对**：跑 `novel_style_check`，返回体的 `explicitness` 会给出「本章 X 处/千字 vs 原著 Y 处/千字」与结论。判为 `much-softer` / `softer` 时，**回去把那几处被绕过去的场面补写出来**（按原著密度），而不是加说明或改别处；判为 `clean` / `similar` 就不用再动。
-- **兜底是自动的**：模型若在开头就自我刹车，插件会丢弃本次输出并只重试一次（`llm/stream` 层）。你不需要手动重发；日志里会有 `raw` 事件。
-- 该模式由用户显式开启（双重确认 + 承诺输入），仅限个人创作用途；未开启时照常按平台安全边界处理。
-
-## 风格画像报告（v2.5.0）
-
-- 分析/续写前先跑 novel_style_report：输出 6 维测量数据（文风指纹/高频词汇/题材流派/情感量化/氛围光谱 12 轴/语义风格距离），插件不贴标签；
-- **风格基线（v3.0.0）**：novel_style_report 额外输出「文笔六维基线带」（句法复杂度/修饰密度/抽象度/动作密度/不确定性/留白指数，按章节 μ±σ）；
-  原创或风格模仿时：① 先读原书基线带 → ② 动笔前声明本书基线（默认取原书 μ±σ，可声明有意偏移，如“节奏加快一档”）→ ③ 每章写完跑 novel_style_check，对照「文笔六维对照」节，出带（超出 ±容差）的维度定向修正后再续写；
-  容差带（允许低于/高于基线的百分比）可在侧边栏「写作助手功能 → 风格基线」调整，默认推荐 = 原著章节波动的 1.5σ（每维独立，下限 ±10%~100%（推荐值自动取整））；主题/情节/人物完全自由，基线只管写法层面。
-- AI 结合数据给出风格气质判断，通过 aiJudgment 参数回传（插件存入 .novel-writer/style-reports/，后续 action=get 读取）；续写时参考已保存判断保持风格一致。
-
-## 原创模式（v3.1.0）
-
-原创前先确认书名——侧边栏「原创模式」是**设定库**（每本书一份设定，含未建目录的新书预配置；没在库里的新书用「默认设定」）；模型原创时用**该书专属设定**（novel_outline init 自动预填），绝不混用其他书的设定。先读侧边栏「写作助手功能 → 原创模式」的创作设定（世界观/角色设定/不允许的事件/主线目的/题材偏好/额外要求，留空项由模型自行设定）；随后用 novel_outline 建立创作资料（init 时自动把用户设定预填为创作设定.md 的「【用户原创设定】」段），强制走「设定书 → 大纲 → 钩子」链，避免剧情跳跃与角色 OOC。
-
-### 创作资料结构（novels/创作资料/<书名>/）
-- 创作设定.md：世界观规则/主线冲突/分卷目的/禁忌；
-- 主要人物设定.md：主角团卡（目标→动机→弱点→说话方式→关系）；
-- 次要人物设定.md：出场即登记（谁/作用/特征），不再出场标注；
-- 剧情大纲.md：批次大纲（每章方向行，**不写钩子**）；
-- 钩子记录.md：每章写完**回填**结尾钩子（状态/悬念/时间场景）；
-- 创作状态卡.md：几十字快照（进度/上一章结尾/时间线/活跃角色/下章方向/未回填钩子）。
-
-### 设定来源声明（v3.1.0）
-- 用户在侧边栏「原创模式·设定库」保存的设定，保存时会**自动同步**为创作设定.md 顶部的【用户原创设定】段（含未建目录的新书——保存即创建 novels/创作资料/<书>/创作设定.md）；删除设定则自动移除该段。
-- 模型写书时以 **创作设定.md 的【用户原创设定】段**为准（该书专属；无专属时 init 回退「默认设定」）——**无需怀疑设定来源**，文件就是唯一事实；用户改设定后文件自动更新，不用重新 init。
-- 用户填写的「角色设定」还会同步到 **主要人物设定.md 的【用户角色设定】段**（init 首次创建与已存在均生效）——写人物时以该段为准，登记/提升人物不要与它重复冲突。
-
-### 档位与动态批次
-- 按目标字数选档：超短篇(≤1万字/一次列全) / 短篇(1-10万/10章批) / 中篇(10-30万/20章批) / 长篇(30-80万/30章批) / 超长篇(80万+/30章批)；用户没报字数 → 从 10 章/批起步；
-- 一批写完后若用户想继续 → 先回填更新创作设定（角色/线络变化），再列下一批；批次可升档（10→20→30）。
-
-### 创作资料维护节奏（原创/续写都适用；**v5.1.0 起改为按需，不再逐章强制**）
-1. 动笔前（需要时）：`novel_outline read status` 看几十字快照；本章方向不明时再 `read outline`；人物/设定按需读，不必每次全读；
-2. 写完一章：**有新出场且有戏份的角色**才 `novel_outline character` 登记（minor 登记，升咖改 main）；`hook` 回填与 `status` 刷新可以等章节稳定后一次做完，不必每章一趟；
-3. 下一章开头从上一章钩子接续（时间/场景变化必须写过渡句）；
-4. `read status` 会提示「未回填钩子章节」——**那是提醒，不是必须立刻补**；建议每几章统一补一次；
-5. 大纲只定方向（核心事件），**结尾钩子不预写**——写完回填，创作自由且衔接有据。
-
-## 网文信号层（v2.2.0）
-- 网文动作/套路词群（含 genre-tropes 现成词）、题材联动（豪门总裁→甜宠等）、情感直给词密度——三层信号只加分不换引擎，权重封顶防污染；
-- 三组回归（公版文学/手写样本/网文库）验证无污染。
+## 目录与数据约定
+
+- **小说正文**：`novels/<书名>/`（每章一个 `.md`，如 `第01章.md`）；优先用 `novel_books` / `novel_chapters` / `novel_read` 浏览阅读，批量导入用 `novel_import`；分析与续写均用中文。
+- **创作资料**：`novels/创作资料/<书名>/`（`创作设定.md`、`主要人物设定.md`、`次要人物设定.md`、`剧情大纲.md`、`钩子记录.md`、`创作状态卡.md`）；以 `创作设定.md`【用户原创设定】与 `主要人物设定.md`【用户角色设定】为准；大纲只定方向、不预写钩子，按字数分批推进。
+- **插件数据**：`<书库根>/.novel-writer/`（伏笔、设定、双层词表、缓存、改稿计划、草稿镜像 `drafts/`、回收站 `trash/`）。
+
+## 核心创作原则
+
+- **自然表达优先**：读起来自然 > 指标好看，不为凑数字强改。
+- **基线与量化仅作诊断**：六维基线（`baseline`）与情感量化（撕裂度、趋势、矛盾指数、隐性意象等）仅作诊断与写后复核信号，**绝不**当成机械写作指令或公式。
+- **锚段校准语感、不套模板**：原著锚段（`anchors`）只用来找语感，不照句式骨架（`skeletons`）或动作链例句造句。
+- **克制局部微调**：单维轻微出带（1.5σ 容差内常见）属正常波动；仅当明显失真、某维偏离 ≥2 倍容差或读着别扭时才局部修正，**绝不整章重写**。
+- **只给方向不代写**：诊断与改稿台只给定位和方向，正文创作与改写由宿主模型完成。
+
+## 一章标准闭环
+
+1. **开写取材料**：先调 `novel_chapter_brief`（只读不写盘，一次取齐上章结尾 `anchor`、上章钩子、大纲方向、人物、未回收伏笔及 `distance`、世界观规范、必用词 `lexicon`、六维基线、锚段/骨架、`avoid` 禁用清单等；缺项在 `degraded` 说明而不抛错）。仅 `degraded` 缺关键项时，再用 `novel_read` / `novel_summary` / `novel_outline` / `novel_plot` / `novel_semantic_search` / `novel_keywords` 补读。
+2. **计划与成章**：可简述「上章结尾 → 本章目标 → 剧情计划」；用 `novel_new_chapter` 建章（可传 `plan` 记录各事件子句的具象执行计划用于写后核对，该字段不写进正文）。开启实时聊天写作时改用 `novel_draft` 分段提交。
+3. **按需自检改稿**：写完按需跑 `novel_style_check` 看相似度与六维对照；需要可执行待办或契约对账时跑 `novel_fix_plan`；按需跑 `novel_lexicon`（`audit`）与 `novel_continuity_check`。仅达判据时局部修改。
+4. **按需收尾**：有新埋伏笔或重要新角色才调 `novel_plot add` / `novel_outline character`；`novel_outline hook` / `status` 与 `novel_summary add`（200–500 字摘要）可等章节稳定后批量回填。长书省 token 可开 `leanWorkflow`（优先于 `systemPromptMode` 与 `promptScene`，未传 `brief` 时报告默认精简）。
+
+## 关键工具边界与特殊语义速查
+
+- **`novel_fix_plan`（改稿台与严格对账）**：
+  - `plan`（默认）：输出按严重度降序的段落级待办（`hint` 只给方向不代写；正常文本返回空列表，全章级 `lineStart=lineEnd=0`）。
+  - `verify`：复测正文返回 `resolved` / `pending` / `new`（须同 `type` 且同稳定 `issueIdentity`）；`mark` 标记 `done` / `skip`（重跑保留）。
+  - 严格对账：`audit`（只跑可机器判定的 8 条契约，附 1-based 行号与片段或 `line:0`，未跑写 `ran:false` + 原因，不评文笔）、`audit_brief`（生成无上下文审计任务书与带行号正文，不发网络请求）、`audit_verify`（校验 `claims` 原文连续子串存在性并给 `score`，不裁决是否违约）。
+- **`novel_settings` vs `novel_lexicon` vs `novel_continuity_check`**：
+  - `novel_settings`（`category="worldview"`）：管理本书禁词（`bannedWords`）、替代词（`recommended`）与语用规范（`speechStyle`：`title`、`honorBad`、`ritualBadPatterns`、`tone`）；可先 `detect` 文化基准，完全依本书自身设定执行，不套固定模板。
+  - `novel_lexicon`（书级覆盖 `_global`）：管理必用专名/惯用词（含 `avoid` 通用替身词与 `aliases`）；`lexiconFirst` 开启且非空时由 `novel_chapter_brief` 注入。**`audit` 只审必用词覆盖率与替身词命中，不扫世界观禁词**。
+  - `novel_continuity_check`：扫禁词命中、语用冲突（客套/仪式/称谓）、四路衔接（时间硬跳/语义距离/人物延续/钩子承接）、OOC 与大纲走偏（传 `chapter` 审单章，不传审全书/设定）。
+- **`novel_plot` 与 `novel_outline` / `novel_summary`**：
+  - `novel_plot` 含只读跨章结构视图 `action="graph"`：汇总未回收伏笔距离（`plotLifecycle`）、人物矩阵与连续缺席 ≥5 章提醒（`characterMatrix.absences`）、线索活跃度（`threadActivity`）、时间线顺序（`timelineOrder`）及大纲重合率（`planVsActual`）。
+  - `novel_outline` 管设定、人物、批次大纲、钩子与状态卡；`novel_summary` 管单章摘要，长书先看摘要再按需细读。
+- **`novel_sentence_analysis` & `novel_style_report`**：
+  - 问「怎么写」用 `novel_sentence_analysis`，问「什么风格」用 `novel_style_report`（可存 `aiJudgment`），问「写得像不像」用 `novel_style_check`，三者共引擎缓存（`fresh=true` 重算）；长书传 `brief=true` 取摘要。基线与情感量化只作诊断参照。
+  - **`caveat` 复核**：`novel_sentence_analysis` 返回非空 `caveat`（`confidence=low`）时，必须按 `aiAction` 用 `novel_read` 抽读 2–3 段原文核实真实基调，不得直信 `dominant`。
+  - **`enabled=false` 差异**：`novel_sentence_analysis` 返回禁用桩（`enabled:false`、`totalChars:0` 等）；`novel_style_check` 直接抛错拒绝。应提示先开总开关（侧边栏或 `novel_sentence_config`），勿反复调用或绕过。
+- **`novel_draft`（`features.chatWriting`）**：
+  - 默认关闭；仅动作 `commit`，只向 `.novel-writer/drafts/<书>/<章键>__draft.md` 追加段落（与 `novels/<书>/` 物理隔离）。
+  - AI **不读、不改、不清**草稿镜像，且**不由 AI 决定何时提问**：须按程序字数阈值返回的 `nextAction`（`continue` 继续写 / `ask_user` 才提问）执行；定稿由 `novel_new_chapter` 收口标记。
+- **`rawWriting`（非净化模式）**：
+  - 经用户明确要求并双重确认开启后生效；**只改「怎么写」，不改「写什么」**。同视角同时间线按 `rawMode` 目标带直接写出场面，不用省略号、跳场或事后概括，不插免责；写后用 `novel_style_check` 核对 `explicitness`，偏软才补写。
+- **`novel_delete_book` 与 `novel_diagnose`**：
+  - `novel_delete_book` 仅在用户明确要求删书/清数据时使用，**必须先 `preview` 说明范围、体积与保留项，经确认再 `apply`**（可用 `keys` 局部清理）。默认移入 `.novel-writer/trash/`（`restore` 移回不覆盖，仅 `purge` 彻底删除），不动 `_global` 与其他书。
+  - `novel_diagnose` 读本地日志与目录状态输出排查报告（`report` / `events` / `clear`）；采用**分享层脱敏口径**（仅含元数据，绝不含正文）。

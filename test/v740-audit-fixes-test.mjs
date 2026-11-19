@@ -87,6 +87,7 @@ resetStateFile();
 const REPO_ROOT = fileURLToPath(new URL("../", import.meta.url));
 const PLUGIN = await import("../lib/index.js");
 const CORE = await import("../lib/core.js");
+const PROMPTS = await import("../lib/prompts.js");
 const DIAG = await import("../lib/chapter-diagnose.js");
 const VEC = await import("../lib/vector-audit.js");
 const AUDIT = await import("../lib/audit.js");
@@ -1287,6 +1288,89 @@ test("D3 (#60, #76, #77, #78): client.js 词典英中键全对称、9 组死键�
   assert.ok(v6Css.includes(".nwPrefGlyph{color:inherit}"));
   assert.ok(v6Css.includes(".nwPref.nwPrefDanger{background:none}"));
   assert.match(clientSrc, /导出 6 个原语：5 个用于生产 render，DisclosureRow 保留/);
+});
+
+test("D4 (v7.4.1): 提示词瘦身去重、骨架口径统一、SKILL 元数据同步与工具 schema 体积守卫", async () => {
+  // 1. WORKFLOW_TEXT (full + general) 消除骨架矛盾且长度受控
+  const general = PROMPTS.promptTextFor("full", "general", false);
+  assert.equal(general.includes("句式的形状写"), false, "WORKFLOW_TEXT 不得残留「句式的形状写」矛盾表述");
+  assert.match(general, /不要照\s*skeletons\s*造句/, "WORKFLOW_TEXT 必须明确禁止照 skeletons 造句");
+  assert.ok(general.length <= 1350, `WORKFLOW_TEXT 长度应 <= 1350，实际 ${general.length}`);
+
+  // 2. writing / revising 去除了跨题材硬编码禁用词表，且各系统提示词长度受控
+  const writing = PROMPTS.promptTextFor("full", "writing", false);
+  const revising = PROMPTS.promptTextFor("full", "revising", false);
+  const auditing = PROMPTS.promptTextFor("full", "auditing", false);
+  const setup = PROMPTS.promptTextFor("full", "setup", false);
+  const brief = PROMPTS.promptTextFor("brief", "general", false);
+  const lean = PROMPTS.promptTextFor("full", "general", true);
+
+  for (const [label, text] of [["writing", writing], ["revising", revising]]) {
+    for (const banned of ["掌柜", "火折子", "衙门", "Miss+名"]) {
+      assert.equal(text.includes(banned), false, `${label} 不得包含跨题材硬编码禁用词：${banned}`);
+    }
+  }
+
+  for (const [label, text, cap] of [
+    ["writing", writing, 650],
+    ["revising", revising, 520],
+    ["auditing", auditing, 380],
+    ["setup", setup, 480],
+    ["brief", brief, 190],
+    ["lean", lean, 360],
+    ["RAW_WRITING_PROMPT", PROMPTS.RAW_WRITING_PROMPT, 250],
+    ["CHAT_WRITING_PROMPT", PROMPTS.CHAT_WRITING_PROMPT, 450]
+  ]) {
+    assert.ok(text.length > 0 && text.length <= cap, `${label} 长度应 <= ${cap}，实际 ${text.length}`);
+  }
+
+  // 3. SKILL.md 体积、冲突词清理与 skillProvider.list() 元数据逐字同步
+  const skillMd = readFileSync(join(REPO_ROOT, "skills", "novel-writing", "SKILL.md"), "utf8");
+  assert.ok(skillMd.length <= 5000, `SKILL.md 长度应 <= 5000，实际 ${skillMd.length}`);
+  for (const forbidden of ["不是死代码", "零读即删", "把这些数字直接转化为写作指令"]) {
+    assert.equal(skillMd.includes(forbidden), false, `SKILL.md 不得包含已废弃/冲突表述：${forbidden}`);
+  }
+  const fmMatch = skillMd.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  assert.ok(fmMatch, "SKILL.md 必须包含 YAML frontmatter");
+  const frontmatter = {};
+  for (const line of fmMatch[1].split(/\r?\n/)) {
+    const idx = line.indexOf(":");
+    if (idx > 0) frontmatter[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+  }
+
+  const registry = [];
+  let skillProvider = null;
+  const ctx = {
+    tools: { register: (d) => { registry.push(d); return () => {}; } },
+    systemPrompt: { section: () => () => {} },
+    inject: (names, cb) => {
+      if (Array.isArray(names) && names.includes("skills")) {
+        cb({
+          skills: { registerProvider: (factory) => { skillProvider = factory(); } },
+          effect: (fn) => fn()
+        });
+        return;
+      }
+      cb({ webServer: { register: () => () => {} }, effect: (fn) => fn() });
+    }
+  };
+  PLUGIN.apply(ctx, { root: freshLib("prompt-guard"), sentenceAnalysis: { enabled: true, autoAnalyze: true }, allowLanState: false });
+
+  assert.ok(skillProvider && typeof skillProvider.list === "function", "ctx.inject(['skills']) 应注册 skillProvider");
+  const listedSkills = await skillProvider.list();
+  assert.equal(listedSkills.length, 1);
+  assert.equal(listedSkills[0].name, frontmatter.name);
+  assert.equal(listedSkills[0].description, frontmatter.description, "skillProvider description 必须与 SKILL.md frontmatter 一致");
+  assert.equal(listedSkills[0].whenToUse, frontmatter.whenToUse, "skillProvider whenToUse 必须与 SKILL.md frontmatter 一致");
+
+  // 4. 全部 22 个工具元数据 JSON 总长受控
+  assert.equal(registry.length, 22, `应注册 22 个工具，实际 ${registry.length}`);
+  const toolsJson = JSON.stringify(registry.map((t) => ({
+    name: t.name,
+    description: t.description,
+    parameters: t.parameters
+  })));
+  assert.ok(toolsJson.length <= 15500, `22 个工具元数据 JSON 总长应 <= 15500，实际 ${toolsJson.length}`);
 });
 
 test("隔离守卫：用户真实 ~/.dsh 目录全程未被写入", () => {
