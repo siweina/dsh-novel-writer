@@ -14,6 +14,7 @@
 
 | 版本 | 日期 | 摘要 |
 | --- | --- | --- |
+| 7.4.2 | 2026-11-19 | 补齐宿主侧与 MCP 侧按需工具隐藏与预设过滤：DSH 宿主通过 `register(def, { when })` 在模型步动态省略已关闭工具、系统提示追加防悬空固定提醒，侧栏面板对纯工具开关加入 `350ms` 静默防抖合并与卸载自动 flush；MCP 服务器支持 `tools/list` 按 `state.json` 动态过滤及五档 `--preset` 预设；同步补齐 `novel_sentence_config` 全链路防死锁与第 39 套回归测试 |
 | 7.4.1 | 2026-11-19 | 提示词与工具契约全局瘦身＋指令冲突清理：清除系统提示词跨题材欧式禁词例句与骨架/量化矛盾指令、`SKILL.md`（17,977→4,367 字）与 22 工具 schema/描述（21,940→14,933 字）减负，同步精简重构中英文 `README` 并补齐防回退测试守卫 |
 | 7.4.0 | 2026-11-18 | 按 78 条独立核验源码审计清单全仓整修：回收站畸形清单保底与删书防越界/Windows 大小写对齐、短章基线回退全书、站桩感知词剥离、单换行向量行号、ReDoS 正则拦截/放行与 MCP/Web 面板竞态清理；工具数仍 22，新增第 38 套回归测试 |
 | 7.3.5 | 2026-11-14 | 修 7.3.4 自己引入的删书「已达成」分支失真：补齐 remaining / partial / skipped 与 fail-closed 断言；工具数仍 22 |
@@ -80,6 +81,41 @@
 | 0.4.0 | 2026-08-16 | 新增批量导入：整个文件夹的稿件一次扫进来，按书名自动分组 |
 | 0.3.0 | 2026-08-16 | 新增句式模式分析：统计九类句式占比与排列规律，看清一本书的行文节奏 |
 | 0.2.0 | 2026-08-16 | 章节库管理：列出作品、查看章节、按章阅读，全程在对话里完成 |
+
+---
+
+## [7.4.2] - 2026-11-19
+
+在 7.4.1 压缩静态提示词和工具 Schema 体积的基础上，本次补齐了工具列表的运行时按需可见性：在侧栏或配置里关掉暂时不用的工具后，DSH 宿主和外部 MCP 客户端都不会再把它的 Schema 和描述塞给模型，进一步减少每轮对话的无关工具占位。全部 22 个工具的功能与分析口径保持不变，无需迁移配置。
+
+### DSH 宿主侧：按模型步动态控制工具可见性
+
+- **注册期统一挂载 `when` 条件并透传第 2 参数 `options`（`lib/index.js`）**：
+  - 修复 `installToolAudit` 此前仅转发 `original.call(this, def)` 而丢弃第 2 参数 `options` 的问题，并在注册层统一通过 `attachToolVisibilityOptions` 为全部 22 个 `ALL_TOOLS` 挂载同步判定函数 `when(activationCtx)`。
+  - 若宿主将 `ctx.tools.register` 设为只读（审计包裹自动降级），`apply()` 通过轻量的 `regCtx` 回退包装继续挂载 `{ when }`，既保留审计降级行为，也不丢失按需可见能力；外部非 `ALL_TOOLS` 注册保持原参数透传不注入。
+- **进程内 fail-open 快照缓存与写盘即刻同步（`lib/core.js`）**：
+  - 新增 `isToolVisibleSync(name, opts)`、`ALWAYS_VISIBLE_TOOLS`（含 `novel_sentence_config`）与 `resetToolVisibilityCache()`。热路径直接读取进程内存快照，通过 `300ms` 节流间隔配合 `statSync` 的 `mtimeMs` / `size` 以及 `DSH_NOVEL_WRITER_STATE` 路径变化按需重读，避免每步重复同步读盘。
+  - `writeSentenceState` 在原子落盘后立即同步刷新该缓存，同进程内通过面板（`POST /api/dsh-novel-writer/state`）或 `novel_sentence_config` 关闭/重开工具时下一轮模型步即刻生效。
+  - 外层与内部 `try/catch` 严格 fail-open 返回 `true`（文件缺失或损坏时均不抛错），避免触发宿主 `TOOL_ACTIVATION_FAILED`；同时可见性与句式分析总开关 `state.enabled` 完全隔离——关掉句式分析只会停掉 `novel_sentence_analysis` 与 `novel_style_check`，不会误隐藏其余工具。
+- **补齐 `novel_sentence_config` 全链路防死锁（`lib/core.js`）**：
+  - 将 `ALWAYS_VISIBLE_TOOLS` 豁免下沉到 `toolEnabled(state, name)` 入口。即便磁盘 `state.json` 中被手工写入 `tools.novel_sentence_config: false`，`isToolVisibleSync`、`toolEnabled` 与 `assertToolEnabled` 均统一放行，确保该开关工具始终「既看得见，也调得动」。
+- **系统提示防悬空补白（`lib/index.js`）**：
+  - 在 `novel-writing` 动态 section 装配时，当系统提示词档位不为 `off` 且至少有一个工具处于关闭状态时，自动在末尾追加一行固定提示，明确告知模型未在当前工具列表中提供的工具不要调用，需开启时引导用户使用 `novel_sentence_config` 或侧栏面板；工具全开或设为 `off` 档时零额外注入。
+- **侧栏面板纯工具开关静默防抖合并（`lib/client.js`）**：
+  - 连续点选多个纯 `tools` 开关时，界面仍即时乐观更新，底层以 `350ms` 防抖窗口合并成单次 `POST /api/dsh-novel-writer/state` 落盘，并在防抖窗口内持有 `beginWrite()` 防止并发刷新覆写，减少连续写盘与模型请求前缀缓存抖动；遇到非 `tools` 修改或 `ctx.effect` 卸载清理时会立即把排队变更一并 flush，不丢最后一次点击也不留悬空定时器。
+
+### MCP 服务器侧：动态 `tools/list` 过滤与五档预设
+
+- **按 `state.json` 动态裁剪 `tools/list`（`mcp/server.mjs`）**：
+  - 每次响应 `tools/list` 时实时刷新并对齐 `state.json` 的 `tools` 开关（始终保留 `novel_sentence_config`；损坏时 fail-open；同时维持启动期全量 22 个注册表校验、未知工具 `-32602` 与 `capabilities.tools: {}` 协议行为不变，不向客户端推送未请求的游离通知）。
+- **新增 `--preset` 启动参数与 `DSH_NOVEL_WRITER_PRESET` 环境变量（`mcp/server.mjs`、`mcp/README.md`）**：
+  - 支持 `all`（默认，22 个）、`writing`（9 个：读写 + 开写包/建章/草稿镜像/自检/词表/开关）、`revising`（8 个：读写 + 改稿台/自检/连贯性审计/词表/开关）、`auditing`（10 个：读写 + 画像/自检/句式/连贯/伏笔/语义检索/开关）与 `setup`（10 个：读写 + 导入/大纲/设定/伏笔/摘要/词表/开关）五档，CLI 参数优先于环境变量。
+  - `tools/list` 输出「激活预设 ∩ `state.json` 启用项」的交集；直接 `tools/call` 预设外工具时返回清晰的 `isError: true` 提示；缺值或未知预设名时在 `stderr` 打警告并安全回退 `all`。
+
+### 文档与回归测试
+
+- **同步使用文档与技术参考（`mcp/README.md`、`docs/tools/novel-sentence-config.html`）**：补充 `--preset` 用法、预设清单、动态 `tools/list` 行为、宿主 `when` 机制、系统提示防悬空、面板防抖、fail-open 策略及防死锁口径说明。
+- **新增第 39 套自动化回归测试与客户端防抖用例（`test/tool-visibility-test.mjs`、`test/client-test.mjs`）**：`tool-visibility-test.mjs` 共 18 项断言，覆盖可写/只读 `tools.register` 的 `{ when }` 注入、非插件探针透传、`writeSentenceState` 零等待生效、手工置 `novel_sentence_config: false` 防死锁、与 `state.enabled === false` 隔离、损坏 JSON fail-open、`DSH_NOVEL_WRITER_STATE` 路径切换即刻刷新、系统提示防悬空补白，以及真实 stdio `mcp/server.mjs` 子进程的 `tools/list` 动态过滤、预设交集、预设外拒绝、未知预设回退与 `stdout` 纯净性验证；`client-test.mjs` 同步新增连续纯 `tools` 连点 350ms 合并、混入非 `tools` 即刻打包与 `ctx.effect` 卸载自动 flush 断言。
 
 ---
 

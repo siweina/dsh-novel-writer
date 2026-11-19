@@ -13,8 +13,9 @@
  * 协议：换行分隔的 JSON-RPC 2.0（stdio），stdout 只走协议帧，日志一律写 stderr。
  * 依赖：仅 Node 内置模块（不依赖 @modelcontextprotocol/sdk）。
  *
- * 用法：node mcp/server.mjs [--root <书库根目录>] [--allow-external-src] [--ignore-plugin-load-error]
+ * 用法：node mcp/server.mjs [--root <书库根目录>] [--preset <all|writing|revising|auditing|setup>] [--allow-external-src] [--ignore-plugin-load-error]
  *   --root 缺省时读环境变量 DSH_NOVEL_WRITER_ROOT，再缺省用 process.cwd()。
+ *   --preset 缺省时读环境变量 DSH_NOVEL_WRITER_PRESET，再缺省用 all；控制暴露的工具预设子集。
  *   v4.3.0：工具参数里的 root 必须落在 --root 之内；novel_import 的 src 同样默认限根内，
  *           确需导入外部目录时加 --allow-external-src。
  *   --ignore-plugin-load-error：插件 apply() 失败时不再直接 exit(1)，改为照常应答 initialize，
@@ -214,6 +215,88 @@ function resolveLibraryRoot(argv) {
   return { root: process.cwd(), source: "process.cwd()" };
 }
 
+// ---------------------------------------------------------------------------
+// 工具预设过滤（与 PROMPT_SCENES 对齐）：--preset > DSH_NOVEL_WRITER_PRESET > all
+// 每个预设均保留基础读写（novel_books/novel_chapters/novel_read）及防死锁的 novel_sentence_config。
+// ---------------------------------------------------------------------------
+const MCP_TOOL_PRESETS = Object.freeze({
+  all: null,
+  writing: Object.freeze([
+    "novel_books", "novel_chapters", "novel_read",
+    "novel_chapter_brief", "novel_new_chapter", "novel_draft",
+    "novel_style_check", "novel_lexicon", "novel_sentence_config"
+  ]),
+  revising: Object.freeze([
+    "novel_books", "novel_chapters", "novel_read",
+    "novel_fix_plan", "novel_style_check", "novel_continuity_check",
+    "novel_lexicon", "novel_sentence_config"
+  ]),
+  auditing: Object.freeze([
+    "novel_books", "novel_chapters", "novel_read",
+    "novel_style_report", "novel_style_check", "novel_sentence_analysis",
+    "novel_continuity_check", "novel_plot", "novel_semantic_search",
+    "novel_sentence_config"
+  ]),
+  setup: Object.freeze([
+    "novel_books", "novel_chapters", "novel_read",
+    "novel_import", "novel_outline", "novel_settings",
+    "novel_plot", "novel_summary", "novel_lexicon",
+    "novel_sentence_config"
+  ])
+});
+
+function parseCliPreset(argv) {
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg === "--preset") {
+      const value = argv[i + 1];
+      if (typeof value !== "string" || value.trim() === "" || value.trim().startsWith("-")) {
+        log(value && value.trim().startsWith("-")
+          ? `警告：--preset 缺少预设名（下一个参数 "${value.trim()}" 是开关，不是预设名），忽略该参数，回退到环境变量或默认预设 all`
+          : "警告：--preset 缺少预设名，忽略该参数");
+        return null;
+      }
+      return value.trim();
+    }
+    if (arg.startsWith("--preset=")) {
+      const value = arg.slice("--preset=".length).trim();
+      if (value === "" || value.startsWith("-")) {
+        log(value === ""
+          ? "警告：--preset= 缺少预设名，忽略该参数"
+          : `警告：--preset= 的取值 "${value}" 以 - 开头（疑似把开关写成了预设名），忽略该参数，回退到环境变量或默认预设 all`);
+        return null;
+      }
+      return value;
+    }
+  }
+  return null;
+}
+
+function resolveToolPreset(argv) {
+  const cliPreset = parseCliPreset(argv);
+  const envPreset = process.env.DSH_NOVEL_WRITER_PRESET;
+  let raw = null;
+  let source = null;
+  if (cliPreset !== null) {
+    raw = cliPreset;
+    source = "命令行 --preset";
+  } else if (typeof envPreset === "string" && envPreset.trim() !== "") {
+    raw = envPreset.trim();
+    source = "环境变量 DSH_NOVEL_WRITER_PRESET";
+  }
+  if (raw === null) {
+    return { name: "all", set: null, source: "默认 all" };
+  }
+  const key = raw.trim().toLowerCase();
+  if (Object.prototype.hasOwnProperty.call(MCP_TOOL_PRESETS, key)) {
+    const tools = MCP_TOOL_PRESETS[key];
+    return { name: key, set: tools ? new Set(tools) : null, source };
+  }
+  const supported = Object.keys(MCP_TOOL_PRESETS).join(", ");
+  log(`警告：未知的工具预设 "${raw}"（来源：${source}），支持的预设为：${supported}；已回退到 all`);
+  return { name: "all", set: null, source: "fallback(all)" };
+}
+
 /** 参数类错误的标记：由 buildArgs 的调用方转成 JSON-RPC -32602（Invalid params）。 */
 const INVALID_PARAMS = "INVALID_PARAMS";
 
@@ -231,6 +314,7 @@ REDACT_ROOTS = CANONICAL_LIBRARY_ROOT !== LIBRARY_ROOT
   : [LIBRARY_ROOT];
 // v4.3.0：默认禁止 novel_import 读取书库根之外的目录（防"文档注入 → 复制任意 .md/.txt 进书库再读出"）
 const ALLOW_EXTERNAL_SRC = process.argv.slice(2).includes("--allow-external-src");
+const { name: ACTIVE_PRESET_NAME, set: ACTIVE_PRESET_SET, source: PRESET_SOURCE } = resolveToolPreset(process.argv.slice(2));
 
 // ---------------------------------------------------------------------------
 // 用 stub ctx 启动插件，捕获全部工具定义
@@ -277,17 +361,35 @@ try {
 }
 
 const toolMap = new Map(registry.map((definition) => [definition.name, definition]));
-log(`已注册 ${toolMap.size} 个工具；书库根目录 = ${LIBRARY_ROOT}（来源：${ROOT_SOURCE}）`);
+const presetToolCount = ACTIVE_PRESET_SET !== null
+  ? registry.filter((definition) => ACTIVE_PRESET_SET.has(definition.name)).length
+  : toolMap.size;
+const presetInfo = ACTIVE_PRESET_SET !== null
+  ? `；工具预设 = ${ACTIVE_PRESET_NAME}（暴露 ${presetToolCount} 个，来源：${PRESET_SOURCE}）`
+  : "";
+log(`已注册 ${toolMap.size} 个工具；书库根目录 = ${LIBRARY_ROOT}（来源：${ROOT_SOURCE}）${presetInfo}`);
 // v5.0.0：预期工具数不再硬编码，改为从 lib/core.js 的 ALL_TOOLS **单一事实源**派生。
 // 旧版写死 16，插件一加工具就必然失配——5.0.0 新增两个工具时每次启动都会打一条假告警
 // （"工具数 18 != 预期 16"），而真正该被发现的是"注册表与 ALL_TOOLS 不一致"。
 // 动态取放在插件加载之后、且带 try：与插件加载共用同一条降级路径，取不到就跳过这项校验，
 // 不让它把整个服务器拖挂（--ignore-plugin-load-error 的语义保持不变）。
 let expectedToolCount = null;
+let isToolVisibleHelper = null;
 try {
-  const { ALL_TOOLS } = await import(pathToFileURL(join(PLUGIN_DIR, "lib", "core.js")).href);
-  expectedToolCount = ALL_TOOLS.length;
-} catch { /* 取不到就跳过数量校验 */ }
+  const core = await import(pathToFileURL(join(PLUGIN_DIR, "lib", "core.js")).href);
+  if (Array.isArray(core.ALL_TOOLS)) expectedToolCount = core.ALL_TOOLS.length;
+  if (typeof core.isToolVisibleSync === "function") {
+    isToolVisibleHelper = (name, options) => core.isToolVisibleSync(name, options);
+  } else if (typeof core.readSentenceStateSync === "function" && typeof core.toolEnabled === "function") {
+    let cachedState = null;
+    isToolVisibleHelper = (name, options) => {
+      if (options?.force || cachedState === null) {
+        cachedState = core.readSentenceStateSync();
+      }
+      return core.toolEnabled(cachedState, name);
+    };
+  }
+} catch { /* 取不到就跳过数量校验与状态文件动态过滤 */ }
 if (expectedToolCount !== null && toolMap.size !== expectedToolCount) {
   log(`警告：实际注册 ${toolMap.size} 个工具，而 ALL_TOOLS 声明 ${expectedToolCount} 个（注册表与 ALL_TOOLS 不一致，请检查 lib/index.js 的 apply()）`);
 }
@@ -485,14 +587,34 @@ function renderToolText(definition, args, value) {
   }
 }
 
+/** 按 state.json 动态判断工具在 tools/list 中是否可见（novel_sentence_config 防死锁恒可见，异常 fail-open）。 */
+function isToolVisible(name, forceRefresh) {
+  if (name === "novel_sentence_config") return true;
+  if (typeof isToolVisibleHelper !== "function") return true;
+  try {
+    return isToolVisibleHelper(name, { force: forceRefresh }) !== false;
+  } catch {
+    return true;
+  }
+}
+
 function toolListPayload() {
-  return {
-    tools: registry.map((definition) => ({
+  let refreshed = false;
+  const tools = [];
+  for (const definition of registry) {
+    if (ACTIVE_PRESET_SET !== null && !ACTIVE_PRESET_SET.has(definition.name)) continue;
+    const force = !refreshed;
+    if (definition.name !== "novel_sentence_config" && typeof isToolVisibleHelper === "function") {
+      refreshed = true;
+    }
+    if (!isToolVisible(definition.name, force)) continue;
+    tools.push({
       name: definition.name,
       description: definition.description,
       inputSchema: definition.parameters
-    }))
-  };
+    });
+  }
+  return { tools };
 }
 
 async function handleToolCall(id, params) {
@@ -521,6 +643,16 @@ async function handleToolCall(id, params) {
     return rpcError(id, -32602, `Unknown tool: ${name}`, {
       hint: `本服务器提供 ${toolMap.size} 个 novel_* 工具，可用 tools/list 查看`,
       availableToolCount: toolMap.size
+    });
+  }
+  if (ACTIVE_PRESET_SET !== null && !ACTIVE_PRESET_SET.has(name)) {
+    log(`拒绝预设外工具：${name}（当前 --preset=${ACTIVE_PRESET_NAME}）`);
+    return rpcResult(id, {
+      content: [{
+        type: "text",
+        text: `错误：工具 ${name} 不在当前 MCP 预设（--preset ${ACTIVE_PRESET_NAME}）范围内。如需使用，请改用 --preset all（或移除 --preset）重启本 MCP 服务器。`
+      }],
+      isError: true
     });
   }
   // v7.0.1（审查 #6）：路径解析失败属于**参数错误**（-32602），不是内部错误（-32603）。

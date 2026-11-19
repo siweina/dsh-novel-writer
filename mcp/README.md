@@ -120,14 +120,28 @@ printf '%s\n' \
 | 名称 | 类型 | 说明 |
 |---|---|---|
 | `--root <path>` / `--root=<path>` | 命令行 | 书库根目录。**优先级最高**，同时是 `root`/`src` 越界判定基准。 |
+| `--preset <name>` / `--preset=<name>` | 命令行 | 工具暴露预设（`all` / `writing` / `revising` / `auditing` / `setup`，默认 `all`）。**优先级高于环境变量**。 |
 | `--allow-external-src` | 命令行 | 放开 `novel_import` 的 `src` 限制，允许导入书库根之外的目录（`tools/call` 里 `root` 的限制不受影响）。 |
 | `--ignore-plugin-load-error` | 命令行 | 插件 `apply()` 失败时不 `exit(1)`，改为照常应答 `initialize`、其余请求回 `-32603`（见第 5 节"启动失败"）。 |
 | `DEBUG=1` | 环境变量 | stderr 输出完整错误堆栈（默认只输出一行摘要）。 |
 | `DSH_NOVEL_WRITER_ROOT` | 环境变量 | 书库根目录。优先级低于 `--root`，高于 `process.cwd()`。 |
+| `DSH_NOVEL_WRITER_PRESET` | 环境变量 | 工具暴露预设（同 `--preset`）。优先级低于 `--preset`，缺省为 `all`。 |
 | `DSH_NOVEL_WRITER_STATE` | 环境变量 | 插件状态文件路径。默认 `~/.dsh/dsh-novel-writer/state.json`。 |
 | `DSH_HOME` | 环境变量 | 插件 UI 配置目录基准（`<DSH_HOME>/novel-writer.json`），默认 `~/.dsh`。 |
 
 **root 优先级**：`--root` > `DSH_NOVEL_WRITER_ROOT` > `process.cwd()`。
+
+**preset 优先级与预设清单**：`--preset` > `DSH_NOVEL_WRITER_PRESET` > 默认 `all`（忽略前后空白与大小写）。参数缺值或取值以 `-` 开头时写 stderr 告警并按缺省回退；传入未知预设名时会在 stderr 打印告警及可选预设列表并回退到 `all`（不会中断启动）。每个非 `all` 预设均保留基础读写（`novel_books` / `novel_chapters` / `novel_read`）与防死锁的 `novel_sentence_config`：
+
+| 预设名 | 适用场景 | 暴露工具（精确清单） |
+|---|---|---|
+| `all` | 全量模式（默认，22 个） | 全部已注册工具 |
+| `writing` | 写新章（9 个） | `novel_books`、`novel_chapters`、`novel_read`、`novel_chapter_brief`、`novel_new_chapter`、`novel_draft`、`novel_style_check`、`novel_lexicon`、`novel_sentence_config` |
+| `revising` | 改稿（8 个） | `novel_books`、`novel_chapters`、`novel_read`、`novel_fix_plan`、`novel_style_check`、`novel_continuity_check`、`novel_lexicon`、`novel_sentence_config` |
+| `auditing` | 审计（10 个） | `novel_books`、`novel_chapters`、`novel_read`、`novel_style_report`、`novel_style_check`、`novel_sentence_analysis`、`novel_continuity_check`、`novel_plot`、`novel_semantic_search`、`novel_sentence_config` |
+| `setup` | 建资料（10 个） | `novel_books`、`novel_chapters`、`novel_read`、`novel_import`、`novel_outline`、`novel_settings`、`novel_plot`、`novel_summary`、`novel_lexicon`、`novel_sentence_config` |
+
+调用不在当前预设内的已注册工具时，服务器会写 stderr 日志并返回 `isError: true`（提示改用 `--preset all` 或移除 `--preset` 重启）；调用不存在的工具名仍回 `-32602`。
 
 **root 注入规则**：每次 `tools/call` 时，若调用方**未显式**在 `arguments` 中传 `root`（或传空串），服务器会把上面解析出的
 书库根目录注入 `arguments.root`；调用方显式传的 `root` **必须落在该根之内**（越界则拒绝并回退，v4.3.0 起）。
@@ -135,8 +149,8 @@ printf '%s\n' \
 **src 限制**：`novel_import` 的 `arguments.src` 默认必须落在书库根内，越界时返回 `isError: true` 并提示加
 `--allow-external-src`；加该开关后不再检查 `src`（这是唯一的文件系统例外，见 README 的「权限与外部服务」）。
 
-**状态文件共享**：MCP 服务器与 DSH 插件使用同一个状态文件（`DSH_NOVEL_WRITER_STATE` 可覆盖）。
-因此 DSH 侧边栏「写作助手功能」面板里关闭的工具，在 MCP 侧调用会返回
+**状态文件共享与动态 `tools/list` 过滤**：MCP 服务器与 DSH 插件使用同一个状态文件（`DSH_NOVEL_WRITER_STATE` 可覆盖）。
+每次 `tools/list` 调用都会在 `--preset` 过滤的基础上实时检查 `state.json` 的 `tools` 开关：已关闭的工具会从返回清单中隐藏，从而减小上下文占用；无论是通过 `novel_sentence_config` 还是外部 DSH 界面修改了开关，都会在**下一次 `tools/list` 调用**立即生效（服务器不主动发送未请求的 `notifications/tools/list_changed`）。为防止关闭所有工具后无法恢复，`novel_sentence_config` 在 `tools/list` 中**始终保持可见**；若 `state.json` 不存在、损坏或不可读，服务器会 fail-open（不做额外隐藏）以保证列表可用。若客户端在旧清单下仍调用了在面板中关闭的工具，MCP 侧会返回
 `错误：工具 novel_xxx（…）当前已在「写作助手功能」UI 中关闭。…`——用 `novel_sentence_config` 或 GUI 重新开启即可。
 
 ---
@@ -183,8 +197,8 @@ printf '%s\n' \
 | `initialize` | 返回协商后的 `protocolVersion`、`capabilities: { tools: {} }`、`serverInfo: { name: "dsh-novel-writer", version: <package.json version> }` |
 | `notifications/initialized` | 通知，无响应（`notifications/cancelled`、`notifications/progress` 等同样静默） |
 | `notifications/cancelled` | 通知，无响应；**会真的取消在途请求**：`params.requestId` 命中的 `tools/call` 会被 abort（服务器把 `exec.signal` 传给插件） |
-| `tools/list` | `{ tools: [{ name, description, inputSchema }] }`，共 22 个 |
-| `tools/call` | 参数 `{ name, arguments }`；成功 → `{ content: [{ type: "text", text }] }` |
+| `tools/list` | `{ tools: [{ name, description, inputSchema }] }`（全量 22 个，按 `--preset` 与 `state.json` `tools` 开关动态过滤；`novel_sentence_config` 始终可见，`state.json` 损坏时 fail-open） |
+| `tools/call` | 参数 `{ name, arguments }`；成功 → `{ content: [{ type: "text", text }] }`（预设外工具回 `isError: true`） |
 | `tools/call`（未知工具） | 回**协议错误 `-32602`**（`Unknown tool: <name>`），可读提示在 `error.data.hint`/`availableToolCount`（v4.3.0 起符合规范） |
 | `ping` | `{}` |
 | 未知方法 | JSON-RPC error `-32601` |
@@ -278,7 +292,9 @@ render 精修文本（非 JSON 兜底）、`novel_import` 的 src 越界拦截�
 | stderr 出现 `已丢弃超长行` | 单行报文超过 4 MiB，整行被丢弃。正常 MCP 报文不会这么大，检查客户端是否把文件内容塞进了参数。 |
 | 客户端报「连接已关闭」且 stderr 说插件加载失败 | 默认 `exit(1)`（客户端看不到错误帧）。加 `--ignore-plugin-load-error` 可保留进程并收到 `-32603` 错误帧，再照提示修依赖。 |
 | `错误：工具 … 当前已在「写作助手功能」UI 中关闭` | 用 `novel_sentence_config` 重新开启，或在 DSH 侧边栏面板打开。 |
+| `错误：工具 … 不在当前 MCP 预设（--preset …）范围内` | 启动时传了 `--preset`（或设置了 `DSH_NOVEL_WRITER_PRESET`），该工具不在当前预设内；改用 `--preset all` 或移除对应参数/环境变量后重启服务器。 |
+| 开关改完后客户端工具列表未更新 | 服务器在每次 `tools/list` 时按 `state.json` 实时过滤（不主动推 `notifications/tools/list_changed`）；请让客户端重新拉取工具列表或重连。 |
 | 首次语义检索/风格分析较慢 | `novel_semantic_search` 会加载本地 embedding 模型并建索引，首次调用耗时较长属正常；中途不想等可发 `notifications/cancelled`（带 `requestId`）取消。 |
 | 正文乱码 | 章节文件需为 UTF-8；GBK 文件请先转码。 |
-| 客户端看不到工具 | 确认 `args` 中 `server.mjs` 为绝对路径、`node` 在 PATH；查看客户端 MCP 日志中的 stderr 输出（应能看到「已注册 22 个工具」）。用 `npx` 时必须写 `-p dsh-novel-writer dsh-novel-writer-mcp`（包名 ≠ bin 名）。 |
+| 客户端看不到工具 | 确认 `args` 中 `server.mjs` 为绝对路径、`node` 在 PATH；查看客户端 MCP 日志中的 stderr 输出（应能看到「已注册 22 个工具」）。若只少了部分工具，检查是否传了 `--preset` / `DSH_NOVEL_WRITER_PRESET`，或在 `state.json`（可通过始终可见的 `novel_sentence_config`）中关闭了对应工具。用 `npx` 时必须写 `-p dsh-novel-writer dsh-novel-writer-mcp`（包名 ≠ bin 名）。 |
 | Windows 路径报错 | JSON 中反斜杠需转义 `\\`，或直接使用正斜杠 `/`。 |

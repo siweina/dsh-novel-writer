@@ -1145,6 +1145,99 @@ console.log("v7-A：工具默认值/三组全开全关混合态/单工具 patch/
   }
 }
 
+// v7.4.2：面板纯 tools 开关静默防抖合并 + 非 tools 即时混并 + 卸载 flush
+{
+  const savedFetchDb = globalThis.fetch;
+  const postCalls = [];
+  globalThis.fetch = (url, init) => {
+    const u = String(url);
+    const method = String(init?.method || "GET").toUpperCase();
+    if (u.endsWith("/api/dsh-novel-writer/state") && method === "POST") {
+      const body = JSON.parse(String(init?.body || "{}"));
+      postCalls.push(body);
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({
+          ok: true,
+          enabled: typeof body.enabled === "boolean" ? body.enabled : true,
+          autoAnalyze: true,
+          systemPromptMode: "brief",
+          promptScene: "general",
+          leanWorkflow: false,
+          chatThreshold: 400,
+          tools: Object.assign({}, controller.getSnapshot().tools || {}, body.tools || {}),
+          features: {}
+        })
+      });
+    }
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ ok: true, enabled: true, autoAnalyze: true, systemPromptMode: "brief", promptScene: "general", leanWorkflow: false, chatThreshold: 400, tools: {}, features: {} })
+    });
+  };
+  try {
+    const realToggleDb = panelRender.element.props.toggle;
+    controller.set({ enabled: true, loading: false, saveFailed: false, hostOk: true, tools: { novel_plot: true, novel_import: true, novel_read: true, novel_outline: true }, features: {} }, { silent: true });
+
+    // ① 连续快速点 4 次纯 tools 开关：乐观状态立即生效，防抖窗口内合并成 1 次 POST /state（同键取末值）
+    const p1 = realToggleDb({ tools: { novel_plot: false } });
+    const p2 = realToggleDb({ tools: { novel_import: false } });
+    const p3 = realToggleDb({ tools: { novel_read: false } });
+    const p4 = realToggleDb({ tools: { novel_plot: true } });
+    const midTools = controller.getSnapshot().tools;
+    if (midTools.novel_plot !== true || midTools.novel_import !== false || midTools.novel_read !== false) {
+      fail("v7.4.2 乐观更新必须立即生效，实际 tools=" + JSON.stringify(midTools));
+    }
+    if (postCalls.length !== 0) fail("v7.4.2 纯 tools 连点应在防抖窗口内暂缓发送，实际立刻发出了 " + postCalls.length + " 次");
+    await Promise.all([p1, p2, p3, p4]);
+    if (postCalls.length !== 1) fail("v7.4.2 连续 4 次纯 tools 切换应合并为 1 次 POST /state，实际 " + postCalls.length + " 次");
+    if (JSON.stringify(postCalls[0].tools) !== JSON.stringify({ novel_plot: true, novel_import: false, novel_read: false })) {
+      fail("v7.4.2 合并载荷不符预期：" + JSON.stringify(postCalls[0]));
+    }
+
+    // ② 防抖窗口内遇到非 tools patch：立刻打包发出，不拆请求、不丢排队中的 tools
+    postCalls.length = 0;
+    const q1 = realToggleDb({ tools: { novel_outline: false } });
+    const q2 = realToggleDb({ enabled: false });
+    await Promise.all([q1, q2]);
+    if (postCalls.length !== 1 || postCalls[0].enabled !== false || postCalls[0].tools?.novel_outline !== false) {
+      fail("v7.4.2 非 tools 修改应立即把排队 tools 一并合并提交，实际：" + JSON.stringify(postCalls));
+    }
+
+    // ③ 卸载（ctx.effect 清理回调）前必须立即 flush 排队中的 tools 变更，不丢失也不留定时器
+    const unmountSeats = [];
+    const unmountCleanups = [];
+    const unmountCtx = {
+      effect: (fn) => { const c = fn?.(); if (typeof c === "function") unmountCleanups.push(c); return () => {}; },
+      slots: {
+        inject: (_name, fn) => { fn(); return () => {}; },
+        register: (opts, component) => { unmountSeats.push({ opts, component }); return () => {}; },
+        specDynamic: () => ({}),
+        subscribe: () => () => {}
+      }
+    };
+    loaded.factory(fakeRequire).apply(unmountCtx);
+    const unmountMain = unmountSeats.find((s) => s.opts.name === "main");
+    if (!unmountMain) fail("v7.4.2 卸载 flush 测试未注册 main 席位");
+    const { controller: uCtrl, toggle: uToggle } = unmountMain.opts.inject();
+    for (let i = 0; i < 50 && uCtrl.getSnapshot().loading !== false; i += 1) await new Promise((r) => setImmediate(r));
+    postCalls.length = 0;
+    const pu = uToggle({ tools: { novel_settings: false } });
+    if (postCalls.length !== 0) fail("v7.4.2 卸载前应在防抖期暂存，实际提前发了请求");
+    for (const c of unmountCleanups) c();
+    await pu;
+    if (postCalls.length !== 1 || postCalls[0].tools?.novel_settings !== false) {
+      fail("v7.4.2 ctx.effect 清理应立即 flush 排队中的 tools 修改，实际：" + JSON.stringify(postCalls));
+    }
+    console.log("v7.4.2：纯 tools 开关 350ms 防抖合并 / 混入非 tools 即刻打包 / 卸载自动 flush ✓");
+  } finally {
+    globalThis.fetch = savedFetchDb;
+    controller.set({ enabled: true, autoAnalyze: true, systemPromptMode: "brief", promptScene: "general", leanWorkflow: false, tools: {}, features: {}, hostOk: true, saveFailed: false, revealMsg: "", revealErr: false, chatThreshold: null, chatThresholdDraft: null }, { silent: true });
+  }
+}
+
 // v7.3.1 修（#79）：容差单侧填写必须真的拦住——旧表每行只有内部键，显示名恒 undefined，
 // 于是不提示、该维被丢，any 恒 false 时甚至 toggle(null) 把整份容差清掉。
 {
