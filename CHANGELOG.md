@@ -14,6 +14,9 @@
 
 | 版本 | 日期 | 摘要 |
 | --- | --- | --- |
+| 7.8.0 | 2026-11-20 | 完成 Web UI 前端单文件模块化重构：将原 8,000+ 行单文件 [lib/client.js](lib/client.js) 拆分为 `tools/client-src/` 下 7 个职责目录（`core/` / `styles/` / `i18n/` / `controller/` / `components/` / `views/` / `host/`，保留既有 `V6-*` 源不变），由升级后的零依赖构建脚本 [tools/build-client.mjs](tools/build-client.mjs)（新增单模块语法、孤立文件、CSS 禁区、`zh/en` 键对称与整包不变量七重构建前检查）确定性装配为单一运行时产物 [lib/client.js](lib/client.js)；界面视觉、工具契约（22 工具 / 13 路由）与运行行为零变化，新增第 44 套回归测试 [test/client-build-test.mjs](test/client-build-test.mjs) |
+| 7.7.0 | 2026-11-20 | 上线「题材规则包工作室」：支持在 Web UI 可视化新建、从内置包派生微调（`extends`）与编辑/删除自定义规则包；新增人类可读的 `[DSH-PACK v1]` 剪贴板分享信封与 `.json` 文件一键导出，以及「粘贴分享文本或选择 `.json` 文件 → 只读安全体检预览（披露进提示词字段 / ReDoS 剔除报告 / 重名与内置 ID 冲突处理）→ 确认落盘」安全导入闭环；后端扩展 `lib/packs.js`（`toSerializablePack` / `formatPackEnvelope` / `parsePackInput` / `saveCustomPack` / `deleteCustomPack` / `getRawPack` / `invalidatePackCache`）并复用 `/api/dsh-novel-writer/packs`（保持 13 条路由与 22 工具不变），新增第 43 套回归测试 [test/packs-studio-test.mjs](test/packs-studio-test.mjs) |
+| 7.6.0 | 2026-11-20 | 重构 Web UI 信息架构并打通独立 / MCP / Antigravity 运行时：`lib/client.js` 首页重组为「工作台 / AI 与工具 / 体检与报告 / 维护与高级」四标签工作台，工具开关重排为 5 个工作流分组并加入 5 档场景预设按钮与即时搜索，新增「题材规则包」视图（按书绑定/解绑与 ReDoS 正则告警）并在「风格基线」页展示对话/动作/叙事分场景基线；后端抽取 `buildUiRoutes(config)` 并新增 `/api/dsh-novel-writer/packs` 与只读 `sceneBaselines`；新增零依赖独立宿主 `lib/web-ui.js`（含轻量 React 18 兼容层与浅深双主题）、`mcp/server.mjs --ui` 与 `antigravity/` 侧栏插件包，更新 `docs/` 首页与工具总览并新增第 42 套测试 |
 | 7.5.0 | 2026-11-19 | 完成宿主底座模块化重构与「场景分带基线 + 外置题材包」两项写作能力升级：新增零依赖清单单一事实源 `lib/manifest.js`，将 `lib/core.js` 拆分为 DAG 四层子模块并通过 barrel 透传，将 `lib/index.js` 工具实现拆至 `lib/tools/*` 七模块（`lib/client.js` 与 22 工具总数不变）；新增对话/动作/叙事三类场景分带基线对照，并上线 5 套内置 + `.novel-writer/packs/*.json` 热加载外置 JSON 题材规则包及 `novel_settings` `packs` 操作；同步技术文档与第 40/41 套回归测试 |
 | 7.4.2 | 2026-11-19 | 补齐宿主侧与 MCP 侧按需工具隐藏与预设过滤：DSH 宿主通过 `register(def, { when })` 在模型步动态省略已关闭工具、系统提示追加防悬空固定提醒，侧栏面板对纯工具开关加入 `350ms` 静默防抖合并与卸载自动 flush；MCP 服务器支持 `tools/list` 按 `state.json` 动态过滤及五档 `--preset` 预设；同步补齐 `novel_sentence_config` 全链路防死锁与第 39 套回归测试 |
 | 7.4.1 | 2026-11-19 | 提示词与工具契约全局瘦身＋指令冲突清理：清除系统提示词跨题材欧式禁词例句与骨架/量化矛盾指令、`SKILL.md`（17,977→4,367 字）与 22 工具 schema/描述（21,940→14,933 字）减负，同步精简重构中英文 `README` 并补齐防回退测试守卫 |
@@ -82,6 +85,106 @@
 | 0.4.0 | 2026-08-16 | 新增批量导入：整个文件夹的稿件一次扫进来，按书名自动分组 |
 | 0.3.0 | 2026-08-16 | 新增句式模式分析：统计九类句式占比与排列规律，看清一本书的行文节奏 |
 | 0.2.0 | 2026-08-16 | 章节库管理：列出作品、查看章节、按章阅读，全程在对话里完成 |
+
+---
+
+## [7.8.0] - 2026-11-20
+
+完成 Web UI 前端单文件模块化重构：将原 `8,028` 行单文件 [lib/client.js](lib/client.js) 按职责拆分为 `tools/client-src/` 下的模块化源码，并由升级后的零依赖构建脚本 [tools/build-client.mjs](tools/build-client.mjs) 确定性装配为单一运行时产物 [lib/client.js](lib/client.js)。本次发布为纯内部架构与工程化升级，界面视觉、交互体验、13 条 Web UI HTTP 路由、22 个 MCP/DSH 工具契约及零 npm `devDependencies` 依赖策略均保持完全不变，可无感平滑升级。
+
+### 内部架构优化
+
+- **客户端源码模块化拆分（`tools/client-src/`）**：
+  - 将原 `8,028` 行单文件 `lib/client.js` 拆分为 `tools/client-src/` 下 7 个职责子目录，连同保留不变的既有 `V6-*` 源区块，共计 **40 个 JS 模块 + 4 个 CSS 片段**（`3` 份 `.css` + `V6-slider-css.txt`），且所有非词典 JS 模块均控制在 **`< 600` 行**（实测最大 `476` 行）：
+    - `core/`（5 模块）：`runtime.js`、`primitives-adapter.js`、`icons-glue.js`、`style-inject.js`、`http.js`。
+    - `styles/`（2 片段）：`base.css`、`overrides.css`。
+    - `i18n/`（3 模块）：`zh.js`、`en.js`、`index.js`。
+    - `controller/`（6 模块）：`lexicon.js`、`baseline.js`、`diagnose.js`、`packs.js`、`trash.js`、`index.js`。
+    - `components/`（3 模块）：`sidebar-entry.js`、`controls.js`、`delete-shared.js`。
+    - `views/`（12 模块）：`helpers.js`、`home.js`、`tools-features.js`、`lexicon.js`、`baseline.js`、`reports.js`、`creation.js`、`diagnose.js`、`trash.js`、`packs.js`、`dialogs.js`、`panel.js`。
+    - `host/`（2 模块）：`mount.js`、`apply.js`。
+    - 既有 `V6-*` 源区块（9 JS + 2 CSS）：`V6-icons-a/b1a/b1b/b2/c/d.js`、`V6-uikit-rows.js`、`V6-uikit-wrappers.js`、`V6-slider.js`、`V6-components.css`、`V6-slider-css.txt`。
+- **零依赖全量装配与七重构建前安全检查（`tools/build-client.mjs`）**：
+  - 升级为仅使用 Node 内置模块（`node:fs` / `node:path` / `node:crypto` / `node:url` / `node:vm`）的确定性全客户端装配器，保持 `npm run build`（`node tools/build-client.mjs`）与 `npm run build:check`（`node tools/build-client.mjs --check`）CLI 契约不变。
+  - 写盘前执行 **7 重构建安全检查**，任一检查失败立即报错退出且绝不写盘：
+    1. 清单源文件存在性与非空校验（覆盖 40 JS + 4 CSS）；
+    2. 递归孤儿 `.js`/`.css` 文件扫描（严禁未纳入显式清单的源残留）；
+    3. 全量单模块 `vm.Script` 独立语法解析；
+    4. CSS 模板片段反引号（`` ` ``）与模板插值（`${`）禁令校验；
+    5. `i18n/zh.js` 与 `i18n/en.js` 键集合完全对称校验；
+    6. 装配后完整 `lib/client.js` 的 `vm.Script` 语法解析；
+    7. 整包不变量校验（4 组 `V6:*` 标记成对且有序、代码态与全文 `react.use[A-Z] === 12`、`ctx.inject(` 为 `0`、`NW_UI.<X>(` 直接调用为 `0`、CSS `{`/`}` 括号配平且零内联 `#hex` / `rgb` / `hsl` 颜色字面量）。
+- **工程文档同步更新**：
+  - 更新 [tools/client-src/README.md](tools/client-src/README.md) 说明目录结构、装配顺序与构建门禁，并同步更新 [tools/UI-REDESIGN.md](tools/UI-REDESIGN.md) 明确所有 `lib/client.js` 渲染/CSS/`i18n`/controller/host 源模块现均位于 `tools/client-src/*`（`lib/client.js` 为 `node tools/build-client.mjs` 的构建产物）。
+
+### 验证与兼容性
+
+- **零界面与零契约变更**：前端视觉样式、用户体验、13 条 Web UI HTTP 路由、22 个 MCP/DSH 工具契约、运行时导出（`apply` / `inject` / `__internals.NW_UI`）及零 npm `devDependencies` 约束全部保持不变。
+- **新增第 44 套回归测试（[test/client-build-test.mjs](test/client-build-test.mjs)）**：验证全部 40 个 `.js` 模块独立 `vm.Script` 语法解析、`build-client.mjs --check` 零孤儿源一致性、`zh.js`/`en.js` 键对称与非空值、所有非词典 `.js` 模块 `< 600` 行，以及 `lib/client.js` 完整 `V6:*` 标记、Hook/CSS/安全不变量与 `window.__ModuleLoader__.load` 模块导出。
+
+---
+
+## [7.7.0] - 2026-11-20
+
+上线「题材规则包工作室（Pack Studio）」，让作者可在 Web UI 中直接新建、基于内置包派生微调（`extends`）与编辑自定义规则包，通过可读的 `[DSH-PACK v1]` 剪贴板分享信封或 `.json` 文件实现跨用户/社区仓库的一键导出与先体检后导入，插件全程保持离线零联网。全插件 22 个工具语义、13 条 Web UI HTTP 路由数量及 DSH/MCP/Antigravity 运行时契约保持向后兼容。
+
+### 新增功能
+
+- **可视化题材规则包工作室（`lib/client.js`、`tools/client-src/V6-components.css`）**：
+  - 「题材规则包」列表页顶部新增「＋ 新建规则包」「↓ 导入规则包」工具栏：内置规则包卡片提供「派生微调」，自定义规则包卡片提供「编辑」「派生微调」「复制分享」「导出 JSON」「删除（内建 `DialogCard` 确认）」，并在元数据标签区展示 `继承自 {id}`。
+  - 新增 `packs-form` 编辑子页：按「基础信息（ID / 名称 / 说明 / 文化基准 / 继承源 / 别名）」「词表与套话静音（逐行 `禁用词 -> 推荐替代` 解析、放行词列表、8 类套话静音勾选框）」「高级折叠区（称谓规范 / 语气规范 / 仪式说明 / 错位称呼替代 / 忌用仪式正则）」组织表单；支持保存后顺便绑定到当前书、直接分享或导出，未保存离开自动提醒，保持 `react.use* === 12` 零新增 Hook。
+- **人类可读 `[DSH-PACK v1]` 分享信封与 `.json` 文件一键导出**：
+  - 新增可读分享文本格式 `[DSH-PACK v1] <名称> (<id>)` 包裹格式化 JSON 代码块（既方便在群聊与社区仓库直接审阅规则差异，又兼容单行/裸 JSON）；「复制分享」优先写入剪贴板，若运行环境剪贴板不可用/被拒则自动弹出带全文的只读 `DialogCard` 供全选复制或直接转存 `.json`。
+  - 「导出 JSON」通过浏览器标准文件下载直接产出 `<id>.json`（兼容未保存编辑器草稿导出），彻底避免超长词表在聊天平台被截断的问题；环境受限时自动回退到分享弹窗。
+- **双通道安全导入与只读预检（`packs-import`）**：
+  - 支持「粘贴 `[DSH-PACK v1]` / ````json 代码块 / 纯 JSON / 聊天前缀噪点文本」与「选择本地 `.json` 文件（限 256 KB）」双通道导入。
+  - 导入前必须通过只读预检：展示词数统计、**强制明文披露所有会拼入 AI 提示词的自由文本**（`description`、`titleGuideline`、`toneGuideline`、`ritualGoodNote`）、列出被安全门禁剔除的 ReDoS/非法正则（`rejectedPatterns`）及缺失父包提醒，并对内置保留 ID 强制改名、对本机重名自定义包提供「覆盖确认或改名另存」。
+- **后端序列化、解析器与原子读写扩展（`lib/packs.js`、`lib/tools/system.js`）**：
+  - `lib/packs.js` 新增 `PACK_SCHEMA_V1`、`PACK_ENVELOPE_HEADER`、`getRawPack`（返回未展开 `extends` 的原始增量定义）、`invalidatePackCache`（写入/删除同毫秒缓存立即失效）、`toSerializablePack`、`formatPackJson`、`formatPackEnvelope`、`parsePackInput`（支持 UTF-8 BOM、线性多围栏扫描与单遍 `O(n)` 字符串/转义感知栈式 `{...}` 配平抽取，配合 50 次尝试上限与 50 ms 时间预算防止 200 KB+ 畸形输入阻塞事件循环，严守 256 KB 上限且绝不泄漏解析原文片段）、`saveCustomPack` 与 `deleteCustomPack`（原子写入/删除、内置 ID 保护、符号链接防逃逸与 409 重名保护）。
+  - `lib/tools/system.js` 复用既有 `/api/dsh-novel-writer/packs` 路由（路由总数仍为 13 条）：`GET` 增补 `rawPacks` 与 `slopCategories`；`POST`（严格限本机回环）新增 `action: "preview" | "save" | "delete"`，省略 `action` 时保持原按书绑定/解绑语义完全兼容（`preview` 与 `save` 均复用抗阻塞 `parsePackInput`）。
+
+### 验证与兼容性
+
+- 新增第 43 套回归测试 [test/packs-studio-test.mjs](test/packs-studio-test.mjs)（覆盖序列化、多格式 `[DSH-PACK v1]` 信封解析、`>256 KB` 与金丝雀不泄漏、`200,000` 个未闭合 `{` 与大量围栏/深度嵌套退化输入的 `O(n)` 抗事件循环阻塞回归、`saveCustomPack`/`deleteCustomPack` 409/symlink/缓存失效、`/api/dsh-novel-writer/packs` 全动作与非回环 403 拦截），并补全 [test/client-test.mjs](test/client-test.mjs) 规则包工作室渲染/交互测试（含内置包隐藏分享/导出校验及回退与官方原语双路径通过）。
+- 通过隔离临时书库下的无头浏览器端到端视觉审计，验证列表工具栏、内置派生、编辑保存、分享弹窗、带 ReDoS 正则与提示词披露的导入预检及自定义包删除弹窗（浅色与深色模式零控制台错误与布局溢出）。
+
+---
+
+## [7.6.0] - 2026-11-20
+
+围绕「解决 Web UI 臃肿杂乱、在界面上接通 v7.5.0 新能力、让外部 MCP 与 Antigravity 用户也能直接打开 Web UI」三条目标完成全面升级。全插件 22 个工具语义、测量口径与 DSH 宿主扩展契约保持兼容，可直接升级使用。
+
+### 新增功能
+
+- **独立零依赖 Web UI 宿主（`lib/web-ui.js`）与 CLI 入口（`npm run ui`）**：
+  - 不依赖 DSH 客户端宿主即可通过内置 HTTP 服务器（仅绑定回环地址 `127.0.0.1`，严格校验 `Host`/`Origin`）直接运行完整 `lib/client.js` 面板。
+  - 内置零依赖 React 18 兼容渲染/Hook 运行时（`/assets/react-shim.js`，支持就地 DOM 更新以保留输入框焦点与 `useState` / `useEffect` / `useRef` / `useId`）、完整的 `--dsw-*` 浅色/深色双主题令牌表（`/assets/theme.css`），以及顶部即时切换浅深色与中/英文的工具栏。
+- **MCP `--ui` 参数直连与 Antigravity 侧栏插件支持**：
+  - `mcp/server.mjs` 新增 `--ui`（或 `DSH_NOVEL_WRITER_UI=1`）与 `--ui-port <端口>` 参数：在拉起 stdio MCP 服务的同时附带启动本地 Web UI，启动 URL 仅写入 `stderr`，确保 `stdout` JSON-RPC 帧流纯净并在关闭 `stdin` 后自动清理退出。
+  - 新增 `antigravity/` 侧栏插件包（`antigravity/plugin.json`、`antigravity/assets/logo.svg`、`antigravity/sidecars/panel/sidecar.json` 与 `main.mjs`，复用 `invokeRouteInMemory` 对接 `SidecarApp` 与 `SIDECAR_UI_ENTRYPOINT_AUX_PANE` 辅助侧栏视图）及安全安装脚本 `tools/install-antigravity-ui.mjs`（默认预演，`--apply` 安装到插件目录且不改动用户全局配置文件）。
+- **「题材规则包」Web UI 视图与 `/api/dsh-novel-writer/packs` 路由**：
+  - `lib/tools/system.js` 抽出共用路由表构建器 `buildUiRoutes(config)`（统一供 DSH `webServer` 与独立 `lib/web-ui.js` 消费，共 13 条精确路由），新增 `GET/POST /api/dsh-novel-writer/packs` 路由（支持按书查询激活包、列出 5 套内置 + `.novel-writer/packs/*.json` 自定义包与告警/错误，`POST` 限回环并使用 `withFileTx` 事务绑定/解绑 `worldview.pack`）；`lib/core/http.js` 的 `revealHandler` 同步放行 `"packs-dir"` 目录定位。
+  - Web UI 新增 `packs` 视图：支持按书下拉选择、直观展示内置/自定义与文化基准徽章、高亮显示被拒绝的不安全正则（`rejectedPatterns`）及损坏 JSON 告警，并提供一键绑定/解除绑定操作。
+- **「风格基线」分场景基线带卡片展示**：
+  - `lib/core/http.js` 的 `GET /api/dsh-novel-writer/baseline` 在严格只读（不写盘）前提下计算并返回 `sceneBaselines`（优先复用有效分析缓存并按需补齐场景分类，无缓存且章节数 `<= 25` 时现场测量）。
+  - Web UI `baseline` 视图在范围卡下方新增三列「分场景风格基线」网格（对话文戏 / 动作冲突 / 叙事过渡），清晰显示各场景章数、`>= 3` 章对照激活态或回退提示及六维均值与推荐容差（保持全页仅 1 个主操作按钮 `.nwBtnPrimary`）。
+
+### 体验优化
+
+- **主面板重设计为四标签工作台（`lib/client.js`、`tools/client-src/V6-components.css`）**：
+  - 顶部精简为「总开关 + 三项可点击概览条（书库/章节、已开工具、提示词模式）」，下方将原冗长纵向堆叠重组为 **「工作台 / AI 与工具 / 体检与报告 / 维护与高级」** 四个聚焦标签页，常用创作设置、工具开关、体检维护与 18+ / 删书低频操作各归其位（全部状态收口至 `controller`，不增加额外 React Hook，严格维持 `react.use* === 12`）。
+- **工具开关页重排与预设/搜索栏（`lib/client.js`）**：
+  - 将原先不均衡的三大分组重排为 **5 个工作流分组**（「书库与阅读」「创作与起草」「文风与改稿」「设定与连贯」「诊断与维护」，21 个可开关工具，配合永久防死锁的 `novel_sentence_config` 共 22 工具）。
+  - 顶部新增 **5 档场景预设按钮**（「全部开启」「写新章」「改稿」「审计」「建资料」，与 `mcp/server.mjs` `--preset` 保持同口径）及 **即时关键词搜索框 + 全部展开/收起按钮**，大幅降低定位和开关工具的成本。
+- **网站与文档同步**：
+  - 更新 `docs/index.html`、`docs/tools/index.html`、`README.md`、`README.en.md` 与 `mcp/README.md`，补齐 v7.4.2–v7.6.0 新特性（工具预设、`MIN_SCENE_BAND_CHAPTERS = 3` 分场景基线带、外置题材包、四标签工作台与独立/MCP/Antigravity Web UI），并明确独立 Web UI 的本机个人回环权限范围及高风险操作输入确认机制。
+- **高危销毁门禁加固（`lib/client.js`）**：
+  - 将回收站「彻底删除（`trashPurge`）」的不可逆操作从依赖宿主 `window.confirm` 的 `safeConfirm` 升级为面板内建 `DialogCard`（要求显式输入目标书名或无清单条目 ID 才可触发销毁，切出视图自动重置），避免在 Antigravity Aux Pane 等沙箱 webview 拦截原生确认框时被静默放行，同时保持 18+ 倒计时+承诺词输入与可逆移入回收站流程完整。
+
+### 验证与兼容性
+
+- 补全 `test/client-test.mjs` 对四标签首页、5 组工作流分类、场景预设/搜索、`packs` 视图与 `sceneBaselines` 卡片的单元测试，并新增第 42 套回归测试 [test/web-ui-v760-test.mjs](test/web-ui-v760-test.mjs)（覆盖 `/packs`、只读 `sceneBaselines`、`packs-dir` 放行、`lib/web-ui.js` 独立服务端与 Host 校验、`react-shim.js` 状态与卸载生命周期、`mcp/server.mjs --ui` `stdout` 纯净度以及 `antigravity/` 打包/安装预演）。
+- 通过离线浏览器实机端到端审查：验证浅色/深色、中文/英文切换、四标签页切换、预设/搜索实时过滤、规则包正则安全告警与绑定/解绑、`9` 章混合文本的三类场景分带显示，零控制台错误与布局溢出。
 
 ---
 

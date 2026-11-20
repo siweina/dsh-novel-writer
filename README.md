@@ -12,7 +12,7 @@
 
 **22 个本地工具，贯通「动笔前取材料 → 写完量化自检 → 按优先级改稿 → 跨章结构体检 → 诊断与清理」完整创作闭环。**
 随包附带 24 MB 中文语义模型（`bge-small-zh-v1.5`，WASM 本地推理）——**零 API 费用、正文不出本机、只测算与引导而不代写**。
-为 **DeepSeek Harness（DSH）** 打造（带侧边栏与主栏统一 UI 面板）；同一套能力亦通过内置 **stdio MCP 服务器**接入 Claude Desktop / Cursor。
+为 **DeepSeek Harness（DSH）** 打造（四标签侧栏与主栏统一 UI）；亦支持通过内置 **stdio MCP 服务器**接入 Claude Desktop / Cursor，或通过 **`--ui` 独立 Web UI / Antigravity 侧边辅栏插件**脱离 DSH 使用完整工作台。
 
 [官网](https://siweina.github.io/dsh-novel-writer/) · [技术文档（22 个工具）](https://siweina.github.io/dsh-novel-writer/tools/) · [核心能力](#核心能力) · [安装与快速上手](#安装与快速上手) · [22 个工具](#提供的工具22-个) · [MCP 服务器](#mcp-服务器非-dsh-用户) · [配置与安全边界](#配置数据目录与安全边界) · [更新日志](./CHANGELOG.md)
 
@@ -23,8 +23,8 @@
 - **动笔前防漏读（开写包 & 创作资料）**：`novel_chapter_brief` 一次只读调用取齐 16 项写作输入——上章结尾承接、钩子、本章大纲方向、相关人物卡、待回收伏笔及埋设跨度、世界观语用禁词、必用词表、六维风格基线、原著锚段与开写清单；缺项会在 `degraded` 中明示原因与补全方式。配合 `novel_outline`、五张设定表（`novel_settings`）与书级/全局双层必用词表（`novel_lexicon`）统一管住设定。
 - **文风量化防漂移（六维基线 & 场景分带对照）**：以句法复杂度、修饰密度、抽象度、动作密度、不确定性与留白指数刻画原著 `μ±σ` 基线，辅以九类句式节奏、情感波动曲线与 12 轴氛围光谱；支持按「对话文戏 / 动作冲突 / 叙事过渡」**场景分带基线对照**（以引号占比与独立冲突词/短句节奏划分，避免日常叙事动词误判；同带 ≥ 3 章优先按同带均值校验、不足自动回退全基线），并可在面板按书勾选标杆章节，避免 AI 续写把基准带偏，仅在偏离明显或读着别扭时才建议修改。
 - **改稿按优先级推进（改稿台 & 严格对账）**：`novel_fix_plan` 把诊断问题转为按「严重度 → 难度 → 行号」排序的可执行待办（默认上限 12 条），每条附带原句行号、现状与目标区间、改写方向及原著对照锚段（只给方向不代写正文），支持分批修改后走 `plan` / `verify` / `mark` 三态复测闭环。
-- **外置 JSON 题材包与长篇体检（5 套内置 + 热加载 / 结构体检 / 语义检索）**：随包提供 `western-fantasy` / `eastern-xianxia` / `modern-urban` / `mystery-thriller` / `scifi-cyberpunk` 5 套内置题材包，并支持 `<书库根>/.novel-writer/packs/*.json` 热加载自定义包（含最多 2 层继承、防 ReDoS 与防符号链接逃逸校验），可通过 `novel_settings`（`action: "packs"` / `worldview.pack`）查看与绑定，联动禁词、语用规范与套话豁免。`novel_plot { action: "graph" }`、`novel_continuity_check` 与 `novel_semantic_search` 协同覆盖伏笔跨度、三路哨兵与本地离线语义检索。
-- **可视化面板与可控维护（草稿镜像 / 按书清理 / 脱敏诊断）**：DSH 面板统一管理总开关、工具/功能开关、风格容差、基线选章、场景化提示词（`general` / `writing` / `revising` / `auditing` / `setup` + 精简工作流）与报告历史；内置按字数阈值停顿提问的实时聊天草稿镜像（`novel_draft`）、非净化直白模式（`rawWriting`）、覆盖 13 处按书资料且带回收站恢复（按前缀边界匹配、不误伤他书）的 `novel_delete_book`，以及剥离自由文本后可安全贴进 Issue 的 `novel_diagnose`。
+- **外置 JSON 题材包与可视化工作室（5 套内置 / 可视化编辑 / `[DSH-PACK v1]` 分享导入）**：随包提供 `western-fantasy` / `eastern-xianxia` / `modern-urban` / `mystery-thriller` / `scifi-cyberpunk` 5 套内置题材包，并支持 `<书库根>/.novel-writer/packs/*.json` 热加载自定义包（含最多 2 层继承、防 ReDoS 与防符号链接逃逸校验）；可在 Web UI 题材包工作室新建、从内置包「派生微调」或编辑自定义包，复制可读 `[DSH-PACK v1]` 分享信封、一键导出 `.json` 文件，以及通过粘贴文本或选择 `.json` 文件安全导入（导入前展示进提示词字段审阅、ReDoS 正则与重名/内置 ID 冲突预检，插件本身全程保持零联网）。`novel_settings`（`action: "packs"` / `worldview.pack`）、`novel_plot { action: "graph" }`、`novel_continuity_check` 与 `novel_semantic_search` 协同覆盖伏笔跨度、三路哨兵与本地离线语义检索。
+- **重构四标签工作台与可控维护（工具预设 / 题材包 / 场景基线视图）**：Web UI 收敛为 `工作台` / `AI 与工具` / `体检与报告` / `维护与高级` 四大标签页，支持工具搜索、5 大功能分组过滤与一键场景预设（`all` / `writing` / `revising` / `auditing` / `setup`，按需裁剪上下文且 `novel_sentence_config` 防死锁常驻）、题材包管理视图（内置与自定义 JSON 包查看/绑定）、场景分带基线视图（三带对照与标杆选章），以及场景化提示词、按字数阈值停顿提问的草稿镜像（`novel_draft`）、`rawWriting` 模式、覆盖 13 处按书资料带回收站恢复的 `novel_delete_book` 和脱敏诊断 `novel_diagnose`。
 
 > **语言范围说明**：词表、语用规范、句式规则与随包中文语义模型均面向中文小说语料构建与调优，目前不支持英文等非中文作品分析。
 
@@ -121,7 +121,18 @@ dsh plugin add github:siweina/dsh-novel-writer#main # 方式二：GitHub
 
 - 包名（`dsh-novel-writer`）与可执行名（`dsh-novel-writer-mcp`）不同，请保留 `-p` 参数；
 - 书库根目录优先级：`--root` > `DSH_NOVEL_WRITER_ROOT` > 当前工作目录；
+- 可加 `--preset <all|writing|revising|auditing|setup>` 按场景裁剪 `tools/list`（与 `state.json` 取交集，始终保留 `novel_sentence_config` 防死锁）；
 - 参数中的 `root` 与 `novel_import.src` 默认限制在书库根内（确需导入库外目录时传 `--allow-external-src`）。细节见 [mcp/README.md](./mcp/README.md)。
+
+**独立 Web UI 与 Antigravity 侧栏（无需 DSH）**：
+
+```sh
+npm run ui                                                      # 仓库内一键启动独立四标签 Web UI
+node mcp/server.mjs --ui --ui-port 3789 --root /你的小说库路径   # 指定端口启动（--ui-port 可选）
+node tools/install-antigravity-ui.mjs --apply                   # 安装 Antigravity Sidecar Aux Pane 侧栏插件
+```
+
+- **权限范围与防误操作**：独立 Web UI / Antigravity 侧栏面向**本机个人单人使用**（严格绑定 `127.0.0.1` 回环并校验 `Host` / `Origin`，请勿反代或暴露给他人）；面板可直接调节全量开关、18+ 模式与按书删除/回收站，其中 18+ 模式（倒计时 + 输入承诺词）与回收站「彻底删除」（输入书名/条目名）均走面板内显式文字确认门禁，不依赖沙箱 webview 可能拦截的 `window.confirm`。
 
 ---
 
@@ -138,12 +149,12 @@ dsh plugin add github:siweina/dsh-novel-writer#main # 方式二：GitHub
 
 **目录布局**：
 - `novels/<书名>/` 存放章节正文，`novels/创作资料/<书名>/` 存放大纲、人物卡与钩子等 Markdown；
-- `<书库根>/.novel-writer/` 存放伏笔（`plots`）、设定（`settings`）、摘要（`summaries`）、分析缓存（`analysis`）、审计与改稿清单（`audits`）、语义索引（`embedding`）、风格画像（`style-reports`）、基线范围（`baseline`）、必用词表（`lexicon`）、草稿镜像（`drafts`）与回收站（`trash`——内容仍占磁盘直至显式 `purge`）；
+- `<书库根>/.novel-writer/` 存放伏笔（`plots`）、设定（`settings`）、题材包（`packs`）、摘要（`summaries`）、分析缓存（`analysis`）、审计与改稿清单（`audits`）、语义索引（`embedding`）、风格画像（`style-reports`）、基线范围（`baseline`）、必用词表（`lexicon`）、草稿镜像（`drafts`）与回收站（`trash`——内容仍占磁盘直至显式 `purge`）；
 - `~/.dsh/dsh-novel-writer/` 存放开关状态 `state.json`（可通过 `DSH_NOVEL_WRITER_STATE` 覆盖）与本地日志 `logs/events.jsonl`（512 KB 轮转，保留 3 份）。
 
 **依赖、权限与边界**：
 - **运行时依赖**：`onnxruntime-web`、`@huggingface/tokenizers`，浏览器端复用宿主 `react`（peerDependency）；无生命周期脚本。
-- **网络与子进程**：唯一外呼为 GitHub Releases API 版本检查（3 秒超时、24 小时缓存、不含任何书库信息）；唯一外部调用为数组直调系统文件管理器（不经 shell）；DSH Web UI 注册 12 条回环保护路由。
+- **网络与子进程**：唯一外呼为 GitHub Releases API 版本检查（3 秒超时、24 小时缓存、不含任何书库信息）；唯一外部调用为数组直调系统文件管理器（不经 shell）；Web UI 注册 13 条回环保护路由（DSH 宿主与独立 Web UI 共用）。
 - **日志隐私双层隔离**：本机 `events.jsonl` 仅驻留本地（自由文本至多保留收敛后的单句 `≤160` 字）；通过 `novel_diagnose` 或面板「复制诊断包」导出的分享内容会整体剔除自由文本并将错误归一为固定 `code`，可安全贴入公开 Issue。
 - **容错降级**：语义引擎不可用时自动退回纯规则模式；缓存/状态损坏只影响当前只读重算或回退默认，绝不以「未初始化」误导；已知约束：若将某章 `.md`/`.markdown`/`.txt` 文件替换为同名目录，`scanChapters` 会跳过它并记 `silent_skip` 日志，但不进 `degraded`。
 

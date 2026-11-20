@@ -3,7 +3,7 @@
 > 设计负责人：Claude（总设计 / 合并 / 终审）。实现可由子代理分工完成。
 > 用户反馈三条，本次改版只解决这三条：**① 不好看 ② 太杂、功能难找 ③ 描述看得半懂不懂**。
 > 不改：后端路由、`lib/core.js` / `lib/index.js`、controller 的数据加载与写入语义、任何功能行为。
-> 只改：`lib/client.js` 的渲染层（PanelView 及其组件）、CSS（含 `tools/client-src/*` 后 build）、zh/en 文案、必要时相应测试断言。
+> 只改：`tools/client-src/*` 下的客户端模块化源码（原 `lib/client.js` 的渲染层、CSS、`i18n/`、`controller/`、`host/` 等全部源模块现均位于 `tools/client-src/*`，`lib/client.js` 为 `node tools/build-client.mjs` 的构建产物，切勿直接手改），以及必要时相应测试断言。
 
 ---
 

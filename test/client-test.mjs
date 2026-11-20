@@ -821,7 +821,21 @@ controller.set({ delAck: false, delResult: { action: "apply", book: "试书", mo
 const pageDone = renderLog[renderLog.length - 1];
 if (!pageDone.stats.text.includes("已移入回收站")) fail("页面结果态应显示「已移入回收站」");
 if (!pageDone.stats.text.includes("试书-20261022-163631")) fail("页面结果态应给出回收站条目");
-controller.set({ view: "main", delBook: "", delPlan: null, delResult: null, trashList: null, trashNote: "" }, { silent: true });
+
+// v7.6.0：回收站「彻底删除」内建书名输入确认框渲染与启用门禁
+controller.set({ purgeOpen: true, purgeId: "t1", purgeBook: "试书", purgeText: "", purgeOk: false }, { silent: true });
+const purgeModalEmpty = renderLog[renderLog.length - 1].stats;
+if (!purgeModalEmpty.text.includes("彻底删除回收站条目")) fail("彻底删除确认弹窗标题缺失");
+if (purgeModalEmpty.inputs.length < 1) fail("彻底删除确认弹窗缺少书名输入框");
+const purgeConfirmDisabled = purgeModalEmpty.buttons.find((b) => vnodeText(b).trim() === "确认彻底删除");
+if (!purgeConfirmDisabled || !purgeConfirmDisabled.props.disabled) fail("未输入匹配书名时「确认彻底删除」按钮必须禁用");
+controller.set({ purgeText: "试书", purgeOk: true }, { silent: true });
+const purgeModalReady = renderLog[renderLog.length - 1].stats;
+const purgeConfirmEnabled = purgeModalReady.buttons.find((b) => vnodeText(b).trim() === "确认彻底删除");
+if (!purgeConfirmEnabled || purgeConfirmEnabled.props.disabled) fail("输入匹配书名后「确认彻底删除」按钮应启用");
+if (!String(purgeConfirmEnabled.props.className || "").includes("nwBtnDanger")) fail("确认按钮启用后应带 nwBtnDanger 类名");
+
+controller.set({ view: "main", delBook: "", delPlan: null, delResult: null, trashList: null, trashNote: "", purgeOpen: false, purgeId: "", purgeBook: "", purgeText: "", purgeOk: false }, { silent: true });
 
 console.log("视图/弹窗分支渲染: 共 " + renderLog.length + " 次渲染（main/features/tools/baseline/creation/reports/model/trash/rawModal/rawPromiseOpen/delOpen/delResult）✓");
 
@@ -835,19 +849,20 @@ console.log("设置卡片渲染: 组件数 " + cardRender.components + " | vnode
 // 这是 IA 规格替代 v5.1.1 的“非 full 场景恒可点”，不是删除行为覆盖。
 const segButtonsOf = (stats) => (stats.buttons || []).filter((b) => {
   const cls = String(b.props.className || "");
+  if (cls.includes("nwHomeTab")) return false;
   return cls.includes("nwSegBtn") || b.props.role === "tab";
 });
 const SCENE_LABELS = ["通用", "写新章", "改稿", "审计", "建资料"];
 const MODE_LABELS = ["关闭", "精简", "完整"];
 for (const mode of ["off", "brief"]) {
-  controller.set({ view: "main", loading: false, systemPromptMode: mode, promptScene: "general" }, { silent: true });
+  controller.set({ view: "main", homeTab: "ai", loading: false, systemPromptMode: mode, promptScene: "general" }, { silent: true });
   const rendered = renderLog[renderLog.length - 1].stats;
   const btns = segButtonsOf(rendered);
   if (btns.length !== 3) fail("非完整档只应显示 3 个档位按钮：" + mode + " / " + btns.length);
   if (rendered.text.includes("提示词场景")) fail("非完整档不应渲染场景行：" + mode);
   for (const b of btns) if (b.props.disabled === true) fail("非加载态档位按钮不可禁用");
 }
-controller.set({ view: "main", systemPromptMode: "full", promptScene: "general", loading: false }, { silent: true });
+controller.set({ view: "main", homeTab: "ai", systemPromptMode: "full", promptScene: "general", loading: false }, { silent: true });
 const fullRender = renderLog[renderLog.length - 1].stats;
 const fullBtns = segButtonsOf(fullRender);
 if (fullBtns.length !== 8) fail("完整档应显示 3+5 个分段按钮");
@@ -880,9 +895,9 @@ for (const b of segButtonsOf(renderLog[renderLog.length - 1].stats)) {
 controller.set({ loading: false }, { silent: true });
 console.log("v7 提示词场景：off/brief 隐藏 | full 8 个可用按钮 | 写新章提交原 promptScene | loading 禁用 ✓");
 
-// 主页 IA 与共享外壳：真实入口保留，纯 UI 折叠不增加 controller 状态/hook。
-const homeStats = renderLog[renderLog.length - 1].stats;
-const navButtons = homeStats.buttons.filter((b) => String(b.props.className || "").split(/\s+/).includes("nwNavEntry"));
+// 主页 IA 与共享外壳：v7.6.0 4 标签工作区分组，真实入口保留，纯 UI 折叠不增加 controller 写状态。
+const navEntriesOf = (stats) => stats.buttons.filter((b) => String(b.props.className || "").split(/\s+/).includes("nwNavEntry"));
+const homeTabsOf = (stats) => stats.buttons.filter((b) => b.props.role === "tab" && String(b.props.className || "").split(/\s+/).includes("nwHomeTab"));
 /** 子页标题栏的「‹ 写作助手」返回：主页入口断言之间需要先回主页 */
 const headerBackToMain = () => {
   const stats = renderLog[renderLog.length - 1].stats;
@@ -891,37 +906,62 @@ const headerBackToMain = () => {
   back.props.onClick();
   if (controller.getSnapshot().view !== "main") fail("标题栏返回应回到主页");
 };
-const expectedNav = ["原创设定", "必用词表", "风格基线", "删除整本书", "功能开关", "工具开关", "语义模型", "报告历史", "诊断报告", "体验演示"];
-if (navButtons.length !== expectedNav.length) fail("主页应有 " + expectedNav.length + " 个导航/操作行（v6.8.1 起删书入口提到第一分区「删除整本书」）");
-for (let i = 0; i < expectedNav.length; i++) {
-  if (!vnodeText(navButtons[i]).startsWith(expectedNav[i])) fail("主页入口顺序错误：" + i + " / " + vnodeText(navButtons[i]));
+const expectedTabs = [
+  { id: "workspace", label: "工作台", nav: ["原创设定", "题材规则包", "必用词表", "风格基线"] },
+  { id: "ai", label: "AI 与工具", nav: ["功能开关", "工具开关", "语义模型"] },
+  { id: "health", label: "体检与报告", nav: ["报告历史", "诊断报告", "体验演示"] },
+  { id: "manage", label: "维护与高级", nav: ["删除整本书"] }
+];
+for (const tabSpec of expectedTabs) {
+  controller.set({ view: "main", homeTab: tabSpec.id }, { silent: true });
+  const tabStats = renderLog[renderLog.length - 1].stats;
+  const tabBtns = homeTabsOf(tabStats);
+  if (tabBtns.length !== 4) fail("主页工作区应有 4 个 tab，实际 " + tabBtns.length);
+  for (let i = 0; i < expectedTabs.length; i++) {
+    if (vnodeText(tabBtns[i]).trim() !== expectedTabs[i].label) fail("主页 tab 文案错误：" + i + " / " + vnodeText(tabBtns[i]));
+    const shouldOn = expectedTabs[i].id === tabSpec.id;
+    const isOn = String(tabBtns[i].props.className || "").includes("nwHomeTabOn");
+    if (isOn !== shouldOn || Boolean(tabBtns[i].props["aria-selected"]) !== shouldOn) {
+      fail("主页 tab 选中态错误：" + expectedTabs[i].id + " when active=" + tabSpec.id);
+    }
+  }
+  if (tabStats.classes.has("nwHero") || tabStats.classes.has("nwSwitchWrap")) fail("主页仍有 Hero 或开关状态徽章容器：" + tabSpec.id);
+  const tabNavs = navEntriesOf(tabStats);
+  if (tabNavs.length !== tabSpec.nav.length) fail("主页 tab「" + tabSpec.id + "」应有 " + tabSpec.nav.length + " 个导航/操作行，实际 " + tabNavs.length);
+  for (let i = 0; i < tabSpec.nav.length; i++) {
+    if (!vnodeText(tabNavs[i]).startsWith(tabSpec.nav[i])) fail("主页 tab「" + tabSpec.id + "」入口顺序错误：" + i + " / " + vnodeText(tabNavs[i]));
+  }
+  if (tabSpec.id === "workspace") {
+    if (!tabStats.classes.has("nwLibrary")) fail("工作台 tab 缺少书库折叠区");
+  } else if (tabSpec.id === "ai") {
+    const navModel = tabNavs.find((b) => vnodeText(b).startsWith("语义模型"));
+    navModel.props.onClick();
+    if (controller.getSnapshot().view !== "model") fail("主页语义模型入口未打开 model");
+    const modelRender = renderLog[renderLog.length - 1].stats;
+    if (modelRender.classes.has("nwHero") || modelRender.classes.has("nwSectionTitle")) fail("子页仍有 Hero/重复胶囊标题");
+    const headerBack = modelRender.buttons.filter((b) => String(b.props.className || "").includes("nwBackBtn"));
+    if (headerBack.length !== 1 || !vnodeText(headerBack[0]).includes("写作助手")) fail("子页必须仅有一个标题栏返回入口");
+    headerBack[0].props.onClick();
+    if (controller.getSnapshot().view !== "main") fail("标题栏返回应回到主页");
+  } else if (tabSpec.id === "manage") {
+    if (!tabStats.classes.has("nwStorage")) fail("维护与高级 tab 缺少存储位置折叠区");
+    if (!tabStats.text.includes("18+")) fail("危险行必须有文字 18+ 标签");
+    const trashNav = tabNavs.find((b) => vnodeText(b).startsWith("删除整本书"));
+    if (!trashNav) fail("维护与高级 tab 缺少「删除整本书」入口");
+    trashNav.props.onClick();
+    if (controller.getSnapshot().view !== "trash") fail("「删除整本书」入口未打开 trash 视图");
+    headerBackToMain();
+  }
 }
-if (homeStats.classes.has("nwHero") || homeStats.classes.has("nwSwitchWrap")) fail("主页仍有 Hero 或开关状态徽章容器");
-if (!homeStats.classes.has("nwStorage") || !homeStats.classes.has("nwLibrary")) fail("主页缺少存储位置/书库折叠区");
-if (!homeStats.text.includes("18+")) fail("危险行必须有文字 18+ 标签");
-// v6.8.1：删书入口必须在**第一分区**（用户实测原来藏在书库折叠区里找不到）
-const trashNav = navButtons.find((b) => vnodeText(b).startsWith("删除整本书"));
-if (!trashNav) fail("主页第一分区缺少「删除整本书」入口");
-trashNav.props.onClick();
-if (controller.getSnapshot().view !== "trash") fail("「删除整本书」入口未打开 trash 视图");
-headerBackToMain();  // 回到主页再做下面的入口断言
-const navModel = navButtons.find((b) => vnodeText(b).startsWith("语义模型"));
-navModel.props.onClick();
-if (controller.getSnapshot().view !== "model") fail("主页语义模型入口未打开 model");
-const modelRender = renderLog[renderLog.length - 1].stats;
-if (modelRender.classes.has("nwHero") || modelRender.classes.has("nwSectionTitle")) fail("子页仍有 Hero/重复胶囊标题");
-const headerBack = modelRender.buttons.filter((b) => String(b.props.className || "").includes("nwBackBtn"));
-if (headerBack.length !== 1 || !vnodeText(headerBack[0]).includes("写作助手")) fail("子页必须仅有一个标题栏返回入口");
-headerBack[0].props.onClick();
-if (controller.getSnapshot().view !== "main") fail("标题栏返回应回到主页");
-console.log("v7 主页：" + expectedNav.length + " 入口顺序/语义模型直达/存储与书库折叠/18+ 标签/子页标题栏返回 ✓");
+controller.set({ view: "main", homeTab: "workspace" }, { silent: true });
+console.log("v7.6.0 主页：4 标签工作区（工作台/AI 与工具/体检与报告/维护与高级）/语义模型与删书直达/存储与书库折叠/18+ 标签/子页标题栏返回 ✓");
 
 // ---------------------------------------------------------------------------
 // StorageDisclosure 只转发 controller 既有方法，不另建剪贴板或打开目录路径。
 const storageCalls = [];
 const storageController = Object.assign({}, controller, {
   subscribe: () => () => {},
-  getSnapshot: () => Object.assign({}, controller.getSnapshot(), { view: "main", dirs: { dataDir: "/tmp/data", stateFile: "/tmp/state.json" }, revealing: false }),
+  getSnapshot: () => Object.assign({}, controller.getSnapshot(), { view: "main", homeTab: "manage", dirs: { dataDir: "/tmp/data", stateFile: "/tmp/state.json" }, revealing: false }),
   openDir: (key) => storageCalls.push(["open", key]),
   copyPath: (path) => storageCalls.push(["copy", path])
 });
@@ -935,24 +975,34 @@ const unknownStorageRender = runRender(reactStub.createElement(panelRender.eleme
 if (unknownStorageRender.buttons.filter((b) => String(b.props.className || "").includes("nwStorageBtn")).some((b) => !b.props.disabled)) fail("路径未知时存储操作必须禁用");
 console.log("v7 存储位置：打开/复制调用既有 controller | 两条路径映射正确 | 未知路径禁用 ✓");
 
-// v7-A：只改呈现，不改默认开启、批量开关、loading 与导航行为。
+// v7-A + v7.6.0：5 工作流分类（21 工具 + 5 组全部 = 26 开关）、场景预设、工具搜索、批量开关、loading 与导航行为。
 const aTools = {
-  analyze: ["novel_books", "novel_chapters", "novel_read", "novel_keywords", "novel_sentence_analysis", "novel_style_check", "novel_fix_plan", "novel_style_report", "novel_semantic_search", "novel_continuity_check", "novel_diagnose"],
-  settings: ["novel_settings", "novel_plot", "novel_summary", "novel_import", "novel_delete_book"],
-  create: ["novel_chapter_brief", "novel_lexicon", "novel_new_chapter", "novel_draft", "novel_outline"]
+  library: ["novel_books", "novel_chapters", "novel_read", "novel_import"],
+  writing: ["novel_chapter_brief", "novel_new_chapter", "novel_draft", "novel_outline"],
+  style: ["novel_sentence_analysis", "novel_style_check", "novel_style_report", "novel_fix_plan", "novel_keywords"],
+  story: ["novel_settings", "novel_lexicon", "novel_plot", "novel_summary", "novel_continuity_check", "novel_semantic_search"],
+  system: ["novel_diagnose", "novel_delete_book"]
 };
-const aGroupLabels = { analyze: "分析作品", settings: "整理资料", create: "开始创作" };
+const aGroupLabels = {
+  library: "书库与阅读",
+  writing: "创作与起草",
+  style: "文风与改稿",
+  story: "设定与连贯",
+  system: "诊断与维护"
+};
 const aPatches = [], aActions = [];
 let aSnapshot = Object.assign({}, controller.getSnapshot(), {
-  view: "tools", loading: false, tools: {}, features: {},
+  view: "tools", loading: false, tools: {}, features: {}, toolQuery: "",
   rawModal: false, rawPromiseOpen: false,
-  toolGroupOpen: { analyze: true, settings: true, create: true },
+  toolGroupOpen: { library: true, writing: true, style: true, story: true, system: true },
   dirs: { dataDir: "/tmp/data", analysisDir: "/tmp/data", auditsDir: "/tmp/audits", settingsDir: "/tmp/settings", plotsDir: "/tmp/plots", summariesDir: "/tmp/summaries", lexiconDir: "/tmp/lexicon", embeddingDir: "/tmp/embedding" }
 });
 const aController = Object.assign({}, controller, {
   subscribe: () => () => {}, getSnapshot: () => aSnapshot,
   openView: (view) => aActions.push(["view", view]),
-  setToolGroupOpen: (patch) => aActions.push(["groups", patch])
+  setToolGroupOpen: (patch) => aActions.push(["groups", patch]),
+  setToolQuery: (q) => aActions.push(["query", q]),
+  setAllToolGroupsOpen: (open) => aActions.push(["allGroups", open])
 });
 const aRender = (patch = {}) => {
   aSnapshot = Object.assign({}, aSnapshot, patch);
@@ -962,15 +1012,15 @@ const aSwitches = (stats) => stats.buttons.filter((b) => b.props.role === "switc
 const aSwitch = (stats, label) => aSwitches(stats).find((b) => b.props["aria-label"] === label);
 const aChecked = (button) => String(button.props["aria-checked"]) === "true";
 let aStats = aRender();
-// v7.3.1 修（#81）：工具页 20 → 21 行（补 novel_draft；= 22 个工具减去有意无 UI 的 novel_sentence_config）
-if (aSwitches(aStats).length !== 24) fail("工具页应有 21 个工具开关 + 3 个全部开关（v7.3.1 起补 novel_draft）");
+// v7.3.1 修（#81）+ v7.6.0：21 个工具 + 5 个工作流分类全部开关 = 26 个开关
+if (aSwitches(aStats).length !== 26) fail("工具页应有 21 个工具开关 + 5 个全部开关，实际 " + aSwitches(aStats).length);
 // v7.3.1 修（#81）：首页「工具开关」计数分母必须同步变成 21，且与工具页行数同源（TOOL_GROUPS 现算）。
 {
-  const aHome = aRender({ view: "main", tools: {} });
+  const aHome = aRender({ view: "main", homeTab: "ai", tools: {} });
   const toolsNav = aHome.buttons.find((b) => String(b.props.className || "").includes("nwNavEntry") && vnodeText(b).startsWith("工具开关"));
   const toolsCount = toolsNav ? String((vnodeText(toolsNav).match(/(\d+)\/(\d+)/) || [])[0]) : "";
   if (toolsCount !== "21/21") fail("首页「工具开关」计数应为 21/21（分母 = 21 行），实际 " + JSON.stringify(toolsCount));
-  console.log("v7.3.1 #81：工具页工具行 " + (aSwitches(aStats).length - 3) + " 行（另含 3 个分类全部开关）；首页工具计数 " + toolsCount + " ✓");
+  console.log("v7.3.1 #81：工具页工具行 " + (aSwitches(aStats).length - 5) + " 行（另含 5 个分类全部开关）；首页工具计数 " + toolsCount + " ✓");
   aStats = aRender({ view: "tools", tools: {} });
 }
 if (aSwitches(aStats).some((b) => !aChecked(b))) fail("未配置的工具必须默认开启");
@@ -995,7 +1045,49 @@ if (JSON.stringify(aPatches.at(-1)) !== JSON.stringify({ tools: { novel_diagnose
 const aFold = aStats.buttons.find((b) => String(b.props.className || "").includes("nwToolGroupHeadBtn"));
 if (aFold.props["aria-expanded"] !== true) fail("分类折叠按钮缺少展开状态");
 aFold.props.onClick();
-if (aActions.at(-1)[1].analyze !== false || aActions.at(-1)[1].settings !== true) fail("分类展开动作不应修改其它分类");
+if (aActions.at(-1)[1].library !== false || aActions.at(-1)[1].writing !== true) fail("分类展开动作不应修改其它分类");
+
+// v7.6.0：工具场景预设（写新章 / 全部开启）与搜索过滤
+{
+  const presetBtns = (stats) => stats.buttons.filter((b) => String(b.props.className || "").split(/\s+/).includes("nwPresetBtn"));
+  const writePresetBtn = presetBtns(aStats).find((b) => vnodeText(b).trim() === "写新章");
+  if (!writePresetBtn) fail("工具页缺少「写新章」预设按钮");
+  writePresetBtn.props.onClick();
+  const writingTools = new Set(["novel_books", "novel_chapters", "novel_read", "novel_chapter_brief", "novel_new_chapter", "novel_draft", "novel_style_check", "novel_lexicon"]);
+  const lastPresetPatch = aPatches.at(-1) && aPatches.at(-1).tools;
+  if (!lastPresetPatch || Object.keys(lastPresetPatch).length !== 21) fail("「写新章」预设应提交全部 21 个工具的开关状态");
+  const enabledInPreset = Object.keys(lastPresetPatch).filter((k) => lastPresetPatch[k] === true);
+  const disabledInPreset = Object.keys(lastPresetPatch).filter((k) => lastPresetPatch[k] === false);
+  if (enabledInPreset.length !== 8 || disabledInPreset.length !== 13 || enabledInPreset.some((k) => !writingTools.has(k))) {
+    fail("「写新章」预设应开启 8 个写作工具并关闭其余 13 个，实际开启：" + JSON.stringify(enabledInPreset));
+  }
+  const presetOnStats = aRender({ tools: lastPresetPatch, toolQuery: "" });
+  const activePresets = presetBtns(presetOnStats).filter((b) => String(b.props.className || "").split(/\s+/).includes("nwPresetBtnOn"));
+  if (activePresets.length !== 1 || vnodeText(activePresets[0]).trim() !== "写新章") {
+    fail("「写新章」预设高亮错误：" + activePresets.map((b) => vnodeText(b).trim()).join(","));
+  }
+  const allPresetBtn = presetBtns(presetOnStats).find((b) => vnodeText(b).trim() === "全部开启");
+  if (!allPresetBtn) fail("工具页缺少「全部开启」预设按钮");
+  allPresetBtn.props.onClick();
+  const allOnPatch = aPatches.at(-1) && aPatches.at(-1).tools;
+  if (!allOnPatch || Object.keys(allOnPatch).length !== 21 || Object.values(allOnPatch).some((v) => v !== true)) {
+    fail("「全部开启」预设应将全部 21 个工具设为 true");
+  }
+
+  const searchDiag = aRender({ tools: {}, toolQuery: "诊断" });
+  if (!aSwitch(searchDiag, "诊断报告") || !aSwitch(searchDiag, "诊断与维护 · 全部") || aSwitches(searchDiag).length !== 2) {
+    fail("搜索「诊断」应仅展示诊断与维护组及诊断报告开关，实际开关数：" + aSwitches(searchDiag).length);
+  }
+  if (searchDiag.text.includes("书库与阅读") || searchDiag.text.includes("创作与起草")) {
+    fail("搜索无匹配工具的分类必须隐藏");
+  }
+  const searchEmpty = aRender({ toolQuery: "不存在的神秘工具名xyz" });
+  if (!searchEmpty.text.includes("没有匹配的工具") || aSwitches(searchEmpty).length !== 0) {
+    fail("搜索无匹配时应显示空态提示「没有匹配的工具」");
+  }
+  aStats = aRender({ toolQuery: "", tools: {} });
+}
+
 aStats = aRender({ loading: true });
 if (aSwitches(aStats).some((b) => !b.props.disabled)) fail("loading 时工具和全部开关必须禁用");
 aStats = aRender({ view: "features", loading: false, features: { semanticEmbedding: false } });
@@ -1580,13 +1672,13 @@ globalThis.fetch = (url) => {
   return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve(String(url).endsWith("/reports") ? { groups: [{ book: "测试书", files: [{ file: "r.json" }] }] } : { ok: true, report: "演示报告" }) });
 };
 try {
-  controller.set({ view: "main", demoLoading: false, reportsGroups: null }, { silent: true });
+  controller.set({ view: "main", homeTab: "health", demoLoading: false, reportsGroups: null }, { silent: true });
   let currentHome = renderLog[renderLog.length - 1].stats;
   currentHome.buttons.find((b) => String(b.props.className || "").includes("nwNavEntry") && vnodeText(b).startsWith("报告历史")).props.onClick();
   if (controller.getSnapshot().view !== "reports") fail("报告历史入口未进入 reports");
   await new Promise((resolve) => setImmediate(resolve));
   if (!controller.getSnapshot().reportsGroups || controller.getSnapshot().reportsGroups.length !== 1) fail("报告历史入口未保存读取结果");
-  controller.set({ view: "main" }, { silent: true });
+  controller.set({ view: "main", homeTab: "health" }, { silent: true });
   currentHome = renderLog[renderLog.length - 1].stats;
   currentHome.buttons.find((b) => String(b.props.className || "").includes("nwNavEntry") && vnodeText(b).startsWith("体验演示")).props.onClick();
   if (!controller.getSnapshot().demoLoading) fail("演示入口未设置加载状态");
@@ -1595,6 +1687,364 @@ try {
   if (JSON.stringify(homeRequests) !== JSON.stringify(["/api/dsh-novel-writer/reports", "/api/dsh-novel-writer/demo"])) fail("主页入口请求发生变化或增加了计数请求：" + JSON.stringify(homeRequests));
 } finally { globalThis.fetch = homeFetch; }
 console.log("v7 主页加载：报告真实入口读取 | 演示结果与 loading 复位 | 不新增计数请求 ✓");
+
+// v7.6.0：packs 规则包视图（内置 + 自定义 steampunk-noir / rejectedPatterns / 告警与错误 / 绑定与解绑回调）
+{
+  const packsCalls = [];
+  const mockPacksData = {
+    book: "测试书",
+    books: ["测试书", "第二本"],
+    boundPackId: "eastern-xuanhuan",
+    activePack: { id: "eastern-xuanhuan", name: "东方玄幻", description: "仙侠修真常见词库" },
+    packsDir: "/tmp/packs",
+    errors: [{ file: "broken.json", reason: "JSON 语法错误" }],
+    warnings: [{ id: "steampunk-noir", reason: "已跳过 1 条高危正则" }],
+    packs: [
+      {
+        id: "eastern-xuanhuan",
+        name: "东方玄幻",
+        source: "builtin",
+        baseCulture: "eastern",
+        description: "仙侠修真常见词库",
+        bannedWords: ["系统", "面板"],
+        allowWords: ["灵气"],
+        rejectedPatterns: []
+      },
+      {
+        id: "steampunk-noir",
+        name: "蒸汽暗黑",
+        source: "custom",
+        baseCulture: "western",
+        description: "维多利亚机械暗黑风格",
+        bannedWords: ["手机"],
+        allowWords: ["齿轮", "蒸汽"],
+        rejectedPatterns: [{ pattern: "(a+)+", reason: "catastrophic backtracking" }]
+      }
+    ]
+  };
+  let packsSnapshot = Object.assign({}, controller.getSnapshot(), {
+    view: "packs",
+    loading: false,
+    packsBook: "测试书",
+    packsBusy: false,
+    packsErr: false,
+    packsMsg: "",
+    packsData: mockPacksData,
+    books: ["测试书", "第二本"],
+    dirs: { dataDir: "/tmp/data", packsDir: "/tmp/packs" }
+  });
+  const packsController = Object.assign({}, controller, {
+    subscribe: () => () => {},
+    getSnapshot: () => packsSnapshot,
+    setPacksBook: (book) => packsCalls.push(["setBook", book]),
+    bindPack: (packId) => packsCalls.push(["bind", packId])
+  });
+  const packsStats = runRender(reactStub.createElement(panelRender.element.type, { controller: packsController, toggle: () => {} }));
+  if (!packsStats.classes.has("nwPackTag") || !packsStats.classes.has("nwPackTagWarn") || !packsStats.classes.has("nwPacksWarn")) {
+    fail("packs 视图缺少规则包标签或告警横幅类名");
+  }
+  for (const expectedText of [
+    "内置", "自定义", "东方", "西方", "禁用词 2", "放行词 1", "剔除正则 1",
+    "规则包加载告警 / 错误", "[broken.json] JSON 语法错误",
+    "[steampunk-noir] 已跳过 1 条高危正则", "[steampunk-noir] (a+)+ (catastrophic backtracking)"
+  ]) {
+    if (!packsStats.text.includes(expectedText)) fail("packs 视图缺少预期文案：" + expectedText);
+  }
+  const boundBtn = packsStats.buttons.find((b) => vnodeText(b).trim() === "已绑定");
+  const unbindBtn = packsStats.buttons.find((b) => vnodeText(b).trim() === "解除绑定");
+  const bindBtn = packsStats.buttons.find((b) => vnodeText(b).trim() === "绑定");
+  if (!boundBtn || boundBtn.props.disabled !== true) fail("已绑定规则包按钮应禁用并显示「已绑定」");
+  if (!unbindBtn || unbindBtn.props.disabled) fail("「解除绑定」按钮应可点击");
+  if (!bindBtn || bindBtn.props.disabled) fail("未绑定规则包的「绑定」按钮应可点击");
+  unbindBtn.props.onClick();
+  bindBtn.props.onClick();
+  packsController.setPacksBook("第二本");
+  if (JSON.stringify(packsCalls) !== JSON.stringify([["bind", ""], ["bind", "steampunk-noir"], ["setBook", "第二本"]])) {
+    fail("packs 视图回调调用异常：" + JSON.stringify(packsCalls));
+  }
+
+  // 真实 controller.setPacksBook / bindPack 请求链路检查
+  const packsSavedFetch = globalThis.fetch;
+  const packsReqs = [];
+  globalThis.fetch = (url, init = {}) => {
+    packsReqs.push({ url: String(url), method: init.method || "GET", body: init.body || null });
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve(Object.assign({}, mockPacksData, {
+        book: "第二本",
+        boundPackId: init.method === "POST" ? "steampunk-noir" : ""
+      }))
+    });
+  };
+  try {
+    await controller.setPacksBook("第二本");
+    await controller.bindPack("steampunk-noir");
+    if (packsReqs.length !== 2 || !packsReqs[0].url.includes("/api/dsh-novel-writer/packs?book=") || packsReqs[1].method !== "POST") {
+      fail("controller setPacksBook/bindPack 请求异常：" + JSON.stringify(packsReqs));
+    }
+    if (JSON.parse(packsReqs[1].body).pack !== "steampunk-noir" || controller.getSnapshot().packsMsg !== "已绑定规则包") {
+      fail("controller.bindPack 状态未正确更新：" + controller.getSnapshot().packsMsg);
+    }
+  } finally {
+    globalThis.fetch = packsSavedFetch;
+    controller.set({ view: "main", homeTab: "workspace", packsData: null, packsBook: "", packsMsg: "", packsErr: false }, { silent: true });
+  }
+}
+console.log("v7.6.0 packs 规则包：内置与自定义标签/rejectedPatterns 告警/绑定与解绑按钮与 controller 回调 ✓");
+
+// v7.7.0：规则包工作室 UI（工具栏、行动作、新建/派生/编辑子页、粘贴/导入与安全体检子页、分享与删除弹窗）
+{
+  const studioPacksData = {
+    book: "测试书",
+    books: ["测试书"],
+    boundPackId: "",
+    activePack: null,
+    packsDir: "/tmp/packs",
+    errors: [],
+    warnings: [],
+    slopCategories: { eye_cliche: "眼神/五官类陈词", stat_numeric: "数值播报类" },
+    rawPacks: {
+      "eastern-xianxia": {
+        schema: "dsh-novel-writer-pack/v1",
+        id: "eastern-xianxia",
+        name: "东方仙侠",
+        description: "内置仙侠基准",
+        baseCulture: "eastern",
+        bannedWords: ["Miss"],
+        recommended: {},
+        allowWords: ["修士"],
+        slopMuteCategories: []
+      },
+      "custom-wuxia": {
+        schema: "dsh-novel-writer-pack/v1",
+        id: "custom-wuxia",
+        name: "自定义武侠",
+        description: "江湖用语",
+        baseCulture: "eastern",
+        extends: "eastern-xianxia",
+        aliases: ["武侠"],
+        bannedWords: ["筑基", "元婴"],
+        recommended: { "筑基": "内功初成" },
+        allowWords: ["内力"],
+        speechStyle: {
+          titleGuideline: "用大侠/少侠",
+          toneGuideline: "武侠腔",
+          honorBad: ["Miss"],
+          honorGood: { Miss: "姑娘" },
+          ritualBadPatterns: ["点蜡烛"],
+          ritualGoodNote: "上香敬拜"
+        },
+        slopMuteCategories: ["stat_numeric"]
+      }
+    },
+    packs: [
+      { id: "eastern-xianxia", name: "东方仙侠", source: "builtin", baseCulture: "eastern", description: "内置仙侠基准", bannedWords: ["Miss"], allowWords: ["修士"], rejectedPatterns: [] },
+      { id: "custom-wuxia", name: "自定义武侠", source: "custom", baseCulture: "eastern", extends: "eastern-xianxia", description: "江湖用语", bannedWords: ["Miss", "筑基", "元婴"], allowWords: ["修士", "内力"], rejectedPatterns: [] }
+    ]
+  };
+
+  const savedFetchStudio = globalThis.fetch;
+  const studioReqs = [];
+  globalThis.fetch = (url, init = {}) => {
+    const parsedBody = init && init.body ? JSON.parse(String(init.body)) : null;
+    studioReqs.push({ url: String(url), method: init.method || "GET", body: parsedBody });
+    if (parsedBody && parsedBody.action === "preview") {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({
+          ok: true,
+          preview: {
+            pack: { id: "eastern-xianxia", name: "社区分享包", baseCulture: "eastern", extends: "eastern-xianxia", bannedWords: ["系统"], allowWords: [] },
+            rejectedPatterns: [{ pattern: "(a+)+", reason: "ReDoS" }],
+            promptTexts: { description: "社区简介", toneGuideline: "口语引导样本" },
+            conflict: { isBuiltinId: true, existsCustom: false },
+            extendsInfo: { target: "eastern-xianxia", missing: false }
+          }
+        })
+      });
+    }
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve(Object.assign({}, studioPacksData, {
+        saved: (parsedBody && (parsedBody.idOverride || (parsedBody.pack && parsedBody.pack.id))) || "custom-wuxia",
+        deleted: parsedBody && parsedBody.action === "delete" ? parsedBody.id : void 0,
+        warnings: [],
+        rejectedPatterns: []
+      }))
+    });
+  };
+
+  try {
+    controller.set({ view: "packs", packsData: studioPacksData, packsBook: "测试书", packsBusy: false, packsErr: false, packsMsg: "" }, { silent: true });
+    const listStats = renderLog[renderLog.length - 1].stats;
+    const countBtn = (stats, label) => stats.buttons.filter((b) => vnodeText(b).trim() === label).length;
+    for (const label of ["＋ 新建规则包", "↓ 导入规则包", "编辑", "派生微调", "复制分享", "导出 JSON", "删除"]) {
+      if (countBtn(listStats, label) === 0) fail("packs 视图缺少工作室按钮：" + label);
+    }
+    if (countBtn(listStats, "派生微调") !== 2) fail("内置包与自定义包均应展示「派生微调」：" + countBtn(listStats, "派生微调"));
+    for (const customOnlyLabel of ["编辑", "复制分享", "导出 JSON", "删除"]) {
+      if (countBtn(listStats, customOnlyLabel) !== 1) fail("仅自定义包应展示「" + customOnlyLabel + "」（内置包不得显示），实际数量=" + countBtn(listStats, customOnlyLabel));
+    }
+    if (!listStats.text.includes("继承自 eastern-xianxia")) fail("packs 视图缺少 extends 继承标签");
+
+    // 仅渲染内置包时，不得出现 复制分享 / 导出 JSON / 编辑 / 删除 按钮
+    controller.set({ packsData: Object.assign({}, studioPacksData, { packs: [studioPacksData.packs[0]] }) }, { silent: true });
+    const builtinOnlyStats = renderLog[renderLog.length - 1].stats;
+    if (countBtn(builtinOnlyStats, "派生微调") !== 1) fail("仅内置包视图应保留「派生微调」");
+    for (const forbiddenLabel of ["编辑", "复制分享", "导出 JSON", "删除"]) {
+      if (countBtn(builtinOnlyStats, forbiddenLabel) !== 0) fail("内置包卡片不得显示「" + forbiddenLabel + "」");
+    }
+    controller.set({ packsData: studioPacksData }, { silent: true });
+
+    // 派生微调 → packs-form，编辑字段并保存
+    controller.openPackEditor({ mode: "fork", packId: "eastern-xianxia" });
+    let snap = controller.getSnapshot();
+    if (snap.view !== "packs-form" || !snap.packsForm || snap.packsForm.extends !== "eastern-xianxia" || snap.packsForm.id !== "eastern-xianxia-custom") {
+      fail("派生微调初始化异常：" + JSON.stringify(snap.packsForm));
+    }
+    controller.setPackForm({ description: "测试派生", bannedLines: "手机 -> 传音符\n面板" });
+    controller.togglePackFormSlop("stat_numeric");
+    const formStats = renderLog[renderLog.length - 1].stats;
+    if (!formStats.classes.has("nwPackCheckGrid") || !formStats.text.includes("禁用词与推荐替代")) {
+      fail("packs-form 视图缺少表单分段或勾选网格");
+    }
+    await controller.savePackForm();
+    snap = controller.getSnapshot();
+    if (snap.view !== "packs" || snap.packsForm !== null || !String(snap.packsMsg).includes("eastern-xianxia-custom")) {
+      fail("savePackForm 未正确保存并跳回 packs：" + JSON.stringify({ view: snap.view, msg: snap.packsMsg }));
+    }
+    const saveCall = studioReqs.find((r) => r.body && r.body.action === "save");
+    if (!saveCall || saveCall.body.pack.recommended["手机"] !== "传音符" || !saveCall.body.pack.slopMuteCategories.includes("stat_numeric")) {
+      fail("savePackForm 提交内容解析错误：" + JSON.stringify(saveCall));
+    }
+
+    // 编辑自定义包：应读取 rawPacks 未合并增量（筑基 -> 内功初成），而不是父包 Miss
+    controller.openPackEditor({ mode: "edit", packId: "custom-wuxia" });
+    snap = controller.getSnapshot();
+    if (!snap.packsForm || snap.packsForm.editing !== true || !String(snap.packsForm.bannedLines).includes("筑基 -> 内功初成") || String(snap.packsForm.bannedLines).includes("Miss")) {
+      fail("编辑模式未读取 rawPacks 增量：" + JSON.stringify(snap.packsForm));
+    }
+
+    // 无剪贴板环境下 sharePack / exportPackJson 回退到可复制分享弹窗
+    removeClipboard();
+    controller.sharePack(snap.packsForm);
+    snap = controller.getSnapshot();
+    if (!snap.packShareOpen || !String(snap.packShareText).includes("[DSH-PACK v1]") || !String(snap.packShareText).includes("custom-wuxia")) {
+      fail("无剪贴板环境 sharePack 未降级到分享弹窗：" + JSON.stringify({ open: snap.packShareOpen, text: snap.packShareText }));
+    }
+    const shareModalStats = renderLog[renderLog.length - 1].stats;
+    if (!shareModalStats.text.includes("分享 / 导出规则包")) fail("分享弹窗未渲染标题");
+    controller.closePackShare();
+
+    // 导入流：粘贴 -> preview（内置 ID 冲突禁用确认 + 提示词安全检视） -> 改 ID 启用确认 -> 保存
+    controller.openPackImport();
+    controller.setPackImportText("[DSH-PACK v1] 社区分享包 (eastern-xianxia)\n```json\n{\"id\":\"eastern-xianxia\"}\n```");
+    await controller.previewPackImport();
+    const impStatsConflict = renderLog[renderLog.length - 1].stats;
+    if (!impStatsConflict.text.includes("口语引导样本") || !impStatsConflict.classes.has("nwPackPromptCheck")) {
+      fail("导入预览未展示 promptTexts 提示词自检框");
+    }
+    // Note: previewPackImport 会自动为 builtin ID 建议后缀 -custom，验证此时若改回 builtin ID 应禁用确认按钮
+    controller.set({ packsImportId: "eastern-xianxia" }, { silent: true });
+    const impBtnBlocked = renderLog[renderLog.length - 1].stats.buttons.find((b) => vnodeText(b).trim() === "确认导入保存");
+    if (!impBtnBlocked || impBtnBlocked.props.disabled !== true) fail("导入 ID 为内置包保留名时必须禁用确认按钮");
+    controller.set({ packsImportId: "imported-community-pack" }, { silent: true });
+    await controller.confirmPackImport();
+    snap = controller.getSnapshot();
+    if (snap.view !== "packs" || !String(snap.packsMsg).includes("imported-community-pack")) {
+      fail("confirmPackImport 未正确完成导入：" + JSON.stringify({ view: snap.view, msg: snap.packsMsg }));
+    }
+
+    // 删除自定义包弹窗确认
+    controller.openPackDelete("custom-wuxia", "自定义武侠");
+    const delModalStats = renderLog[renderLog.length - 1].stats;
+    if (!delModalStats.text.includes("删除自定义规则包")) fail("删除自定义包弹窗未渲染");
+    await controller.confirmPackDelete();
+    if (!studioReqs.some((r) => r.body && r.body.action === "delete" && r.body.id === "custom-wuxia")) {
+      fail("confirmPackDelete 未发送 delete 请求");
+    }
+  } finally {
+    globalThis.fetch = savedFetchStudio;
+    removeClipboard();
+    controller.set({
+      view: "main", homeTab: "workspace", packsData: null, packsBook: "", packsMsg: "", packsErr: false,
+      packsForm: null, packsFormDirty: false, packsFormBind: false,
+      packsImportText: "", packsImportFileName: "", packsImportPreview: null, packsImportId: "", packsImportOverwrite: false,
+      packShareOpen: false, packDeleteOpen: false
+    }, { silent: true });
+  }
+}
+console.log("v7.7.0 packs 规则包工作室：新建/派生/编辑/导入体检/分享弹窗/删除确认 ✓");
+
+// v7.6.0：baseline 分场景风格基线（全三带 >= 3 章激活 + 不足 3 章回退，且唯一主按钮不变）
+{
+  const makeBandBaseline = (mu) => ({
+    complexity: { mu, recTol: 20 },
+    modifierDensity: { mu: 0.12, recTol: 15 },
+    abstractDensity: { mu: 0.08, recTol: 18 },
+    actionDensity: { mu: 0.25, recTol: 22 },
+    hedgeDensity: { mu: 0.05, recTol: 25 },
+    gapIndex: { mu: 0.3, recTol: 16 }
+  });
+  let sceneSnapshot = Object.assign({}, controller.getSnapshot(), {
+    view: "baseline",
+    loading: false,
+    baselineBook: "测试书",
+    baselineErr: false,
+    books: ["测试书"],
+    baseline: {
+      book: "测试书",
+      sceneBaselines: {
+        minPeerChapters: 3,
+        measuredChapters: 10,
+        counts: { dialogue: 4, action: 3, narrative: 3 },
+        bands: {
+          dialogue: { baseline: makeBandBaseline(12.34) },
+          action: { baseline: makeBandBaseline(9.87) },
+          narrative: { baseline: makeBandBaseline(15.6) }
+        }
+      }
+    },
+    dirs: { dataDir: "/tmp/data", stateFile: "/tmp/state.json", analysisDir: "/tmp/analysis" }
+  });
+  const sceneController = Object.assign({}, controller, { subscribe: () => () => {}, getSnapshot: () => sceneSnapshot });
+  const activeStats = runRender(reactStub.createElement(panelRender.element.type, { controller: sceneController, toggle: () => {} }));
+  if (!activeStats.classes.has("nwBandGrid") || !activeStats.classes.has("nwBandCard") || !activeStats.classes.has("nwBandBadgeOn")) {
+    fail("baseline 分场景基线缺少 .nwBandGrid / .nwBandCard / .nwBandBadgeOn");
+  }
+  for (const label of ["分场景风格基线", "对话文戏", "动作冲突", "叙事过渡", "4 章", "3 章", "已启用分带", "句长与结构", "12.34 ±20%"]) {
+    if (!activeStats.text.includes(label)) fail("baseline 分场景基线缺少内容：" + label);
+  }
+  if (activeStats.buttons.filter((b) => /nwBtnPrimary/.test(b.props.className || "")).length !== 1) {
+    fail("baseline 分场景基线激活态必须保持只有一个主按钮");
+  }
+
+  sceneSnapshot = Object.assign({}, sceneSnapshot, {
+    baseline: {
+      book: "测试书",
+      sceneBaselines: {
+        minPeerChapters: 3,
+        measuredChapters: 3,
+        counts: { dialogue: 2, action: 1, narrative: 0 },
+        bands: { dialogue: { baseline: makeBandBaseline(11.11) } }
+      }
+    }
+  });
+  const fallbackStats = runRender(reactStub.createElement(panelRender.element.type, { controller: sceneController, toggle: () => {} }));
+  if (!fallbackStats.classes.has("nwBandGrid") || !fallbackStats.classes.has("nwBandCard") || fallbackStats.classes.has("nwBandBadgeOn")) {
+    fail("baseline 分场景回退态不应渲染 .nwBandBadgeOn");
+  }
+  for (const label of ["2 章", "1 章", "0 章", "不足 3 章·回退"]) {
+    if (!fallbackStats.text.includes(label)) fail("baseline 分场景回退态缺少文案：" + label);
+  }
+  if (fallbackStats.buttons.filter((b) => /nwBtnPrimary/.test(b.props.className || "")).length !== 1) {
+    fail("baseline 分场景回退态必须保持只有一个主按钮");
+  }
+}
+console.log("v7.6.0 baseline 分场景基线：三带卡片与指标/不足 3 章回退/唯一主按钮 ✓");
 
 // ---------------------------------------------------------------------------
 // v5.2.0：官方席位 = 侧栏一行（sidebar.panellist）+ 主栏页面（main，同一个 id）
@@ -1866,35 +2316,76 @@ if (typeof navigator !== "undefined" && navigator !== null) {
 }
 console.log("#62 copyPath：clipboard 缺失 / 访问抛错均不冒泡并如实提示 ✓");
 
-// #30 无 confirm 环境（沙箱 iframe / 无头测试）下破坏性路径不得抛错，且按「用户已确认」继续。
+// #30 无 confirm 环境（沙箱 iframe / 无头测试）下其余走 safeConfirm 的破坏性路径不得抛错，且按「用户已确认」继续。
 const savedConfirm30 = globalThis.confirm;
 const savedFetch30 = globalThis.fetch;
 const deleteRequests30 = [];
-globalThis.fetch = (url) => {
-  deleteRequests30.push(String(url));
+globalThis.fetch = (url, opts) => {
+  deleteRequests30.push({ url: String(url), body: opts && opts.body ? String(opts.body) : "" });
   return Promise.resolve({ ok: true, status: 200, json: () => Promise.resolve({ ok: true, trash: [], groups: [] }) });
 };
 let confirmPathThrew = false;
 try {
   globalThis.confirm = undefined;
   try {
-    await controller.trashPurge("trash-id-30");
     await controller.deleteReport("probe-report.json");
   } catch (err) { confirmPathThrew = true; }
-  if (confirmPathThrew) fail("#30 window.confirm 缺失时删除路径抛错（safeConfirm 应视为已确认）");
-  if (!deleteRequests30.some((u) => u.includes("/delete-book"))) {
-    fail("#30 无 confirm 环境应继续执行删除请求，实际请求：" + JSON.stringify(deleteRequests30));
+  if (confirmPathThrew) fail("#30 window.confirm 缺失时 deleteReport 路径抛错（safeConfirm 应视为已确认）");
+  if (!deleteRequests30.some((r) => r.url.includes("/reports"))) {
+    fail("#30 无 confirm 环境应继续执行报告删除请求，实际请求：" + JSON.stringify(deleteRequests30));
   }
   // 有 confirm 且用户取消时仍必须中止（统一口径后不能把「取消」变成「继续」）
   globalThis.confirm = () => false;
   const requestsBeforeCancel = deleteRequests30.length;
-  await controller.trashPurge("trash-id-30-cancel");
-  if (deleteRequests30.length !== requestsBeforeCancel) fail("#30 confirm 返回 false 时不得发出删除请求");
+  await controller.deleteReport("probe-report-cancel.json");
+  if (deleteRequests30.length !== requestsBeforeCancel) fail("#30 confirm 返回 false 时不得发出报告删除请求");
+
+  // v7.6.0：回收站「彻底删除」改走内建书名输入确认框（不依赖沙箱 webview 可能拦截/绕过的 window.confirm）
+  globalThis.confirm = undefined;
+  const purgeReqStart = deleteRequests30.length;
+  await controller.trashPurge("trash-gate-1", "试书A");
+  if (deleteRequests30.length !== purgeReqStart) fail("v7.6.0 trashPurge 仅应打开输入确认框，不得直接发 /delete-book 请求");
+  let pgSnap = controller.getSnapshot();
+  if (!pgSnap.purgeOpen || pgSnap.purgeId !== "trash-gate-1" || pgSnap.purgeBook !== "试书A" || pgSnap.purgeOk !== false) {
+    fail("v7.6.0 trashPurge 弹窗状态未正确打开：" + JSON.stringify({ purgeOpen: pgSnap.purgeOpen, purgeId: pgSnap.purgeId, purgeBook: pgSnap.purgeBook, purgeOk: pgSnap.purgeOk }));
+  }
+  await controller.trashPurgeConfirm();
+  controller.trashPurgeSetText("错书名");
+  await controller.trashPurgeConfirm();
+  pgSnap = controller.getSnapshot();
+  if (pgSnap.purgeOk !== false || deleteRequests30.length !== purgeReqStart) {
+    fail("v7.6.0 未输入精确书名前 trashPurgeConfirm 不得放行销毁请求");
+  }
+  controller.trashPurgeSetText(" 试书A ");
+  if (controller.getSnapshot().purgeOk !== true) fail("v7.6.0 trim 后匹配书名应激活确认按钮");
+  await controller.trashPurgeConfirm();
+  pgSnap = controller.getSnapshot();
+  if (pgSnap.purgeOpen !== false) fail("v7.6.0 确认销毁后应关闭弹窗");
+  const sentPurge = deleteRequests30.slice(purgeReqStart).filter((r) => r.url.includes("/delete-book"));
+  if (sentPurge.length < 1 || !sentPurge.some((r) => r.body.includes("\"purge\"") && r.body.includes("trash-gate-1"))) {
+    fail("v7.6.0 输入书名确认后未发出 purge 请求：" + JSON.stringify(sentPurge));
+  }
+  // 无 manifest 条目（book 为空）回退到输入条目 ID；取消与切走视图均需关闭清空状态
+  await controller.trashPurge("orphan-99", "");
+  pgSnap = controller.getSnapshot();
+  if (!pgSnap.purgeOpen || pgSnap.purgeBook !== "orphan-99") fail("v7.6.0 无书名条目应回退要求输入条目 ID");
+  controller.trashPurgeCancel();
+  pgSnap = controller.getSnapshot();
+  if (pgSnap.purgeOpen || pgSnap.purgeId !== "" || pgSnap.purgeBook !== "" || pgSnap.purgeText !== "" || pgSnap.purgeOk) {
+    fail("v7.6.0 trashPurgeCancel 未完整清理弹窗状态");
+  }
+  await controller.trashPurge("orphan-100", "离开前测试");
+  controller.openView("main");
+  pgSnap = controller.getSnapshot();
+  if (pgSnap.purgeOpen || pgSnap.purgeId !== "" || pgSnap.purgeBook !== "") {
+    fail("v7.6.0 切换视图后应自动复位 purgeOpen，避免残存弹窗");
+  }
 } finally {
   if (savedConfirm30 === undefined) delete globalThis.confirm; else globalThis.confirm = savedConfirm30;
   globalThis.fetch = savedFetch30;
+  controller.set({ purgeOpen: false, purgeId: "", purgeBook: "", purgeText: "", purgeOk: false, trashNote: "", trashError: "", trashBusyId: "", trashLoading: false }, { silent: true });
 }
-console.log("#30 safeConfirm：无 confirm 按已确认继续 / 用户取消仍中止 ✓");
+console.log("#30 safeConfirm（报告删除）与 v7.6.0 回收站「彻底删除」内建书名输入门禁 ✓");
 
 // v5.5.0 收尾：hook 数量必须跨渲染稳定（否则真机 = 面板白屏）
 if (hookViolations.length > 0) {
@@ -2158,14 +2649,11 @@ controller.set({ view: "main", auditMsg: "", auditErr: false, auditResult: null,
     }
     if (s2.trashLoading !== false) fail("N4 场景②加载态必须落定，实际 " + JSON.stringify(s2.trashLoading));
 
-    // 场景③：彻底删除（purge 分支，代码与恢复分支对称）同样受本条修复覆盖
+    // 场景③：彻底删除（purge 分支，走内建书名确认门禁，代码与恢复分支对称）同样受本条修复覆盖
     pending.length = 0;
-    const savedConfirmN4 = globalThis.confirm;
-    globalThis.confirm = () => true;
-    let purge;
-    try { purge = controller.trashPurge("id-purge"); } finally {
-      if (savedConfirmN4 === undefined) delete globalThis.confirm; else globalThis.confirm = savedConfirmN4;
-    }
+    controller.trashPurge("id-purge", "待销毁书");
+    controller.trashPurgeSetText("待销毁书");
+    const purge = controller.trashPurgeConfirm();
     if (pending.length !== 1) fail("N4 场景③彻底删除应先发 1 个请求，实际 " + pending.length);
     pending[0].resolve(okResponse({ ok: true, purged: true }));
     await settle();                                            // → pending[1] = 重列

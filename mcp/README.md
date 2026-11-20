@@ -113,6 +113,28 @@ printf '%s\n' \
 - 不写 `--root` 时，依次回退到环境变量 `DSH_NOVEL_WRITER_ROOT`、`process.cwd()`。
 - 客户端配置里的 `env` 会与父进程环境合并后传给服务器，可用于固定状态文件或书库路径。
 
+### Web UI 与 Antigravity 侧栏面板
+
+除 MCP stdio 工具外，还可以直接运行独立 Web UI，或将其安装为 Antigravity 右侧辅栏（Aux Pane）Sidecar 插件：
+
+```bash
+# 1) 独立启动 Web UI（默认监听 127.0.0.1:3847）
+npm run ui -- --root /abs/path/to/novels-workspace --port 3847
+
+# 2) 启动 MCP 服务器时附带启动 Web UI（端口写 0 或省略即自动分配）
+node mcp/server.mjs --root /abs/path/to/novels-workspace --ui --ui-port 3847
+
+# 3) 安装到 Antigravity 侧栏插件目录（先 dry-run 预览，再加 --apply 写入）
+node tools/install-antigravity-ui.mjs --root /abs/path/to/novels-workspace
+node tools/install-antigravity-ui.mjs --apply --root /abs/path/to/novels-workspace
+```
+
+`install-antigravity-ui.mjs --apply` 仅将面板包与 `sidecars/panel/config.json` 写入 `<GEMINI_CONFIG_DIR || ~/.gemini/config>/plugins/dsh-novel-writer-ui`，不会修改 `~/.gemini/config/config.json`；安装后在 Antigravity Customizations 中启用 **Novel Writer Studio** 即可在右侧辅栏打开。
+
+> **权限范围与单人本机约定**：`npm run ui` / `--ui` / Antigravity 侧栏让非 DSH 用户可直接操作完整本地控制面板（含全量功能开关、18+ 非净化模式及按书删除 / 回收站彻底销毁），仅面向**本机个人使用**——默认严格绑定 `127.0.0.1` 回环并校验 `Host` / `Origin`，请勿将其反代或暴露给局域网/他人；其中 18+ 模式与回收站「彻底删除」均内置面板内显式文字输入确认门禁（18+ 需倒计时 + 输入承诺词，彻底删除需输入书名/条目名），不依赖沙箱 webview 可能拦截的原生 `window.confirm`。
+
+> **题材规则包分享与离线导入**：面板内的「题材规则包」页面支持可视化新建 / 基于内置包派生微调 / 编辑自定义包，复制人类可读的 `[DSH-PACK v1]` 分享文本或直接导出 `.json` 文件，并通过粘贴分享文本 / 选择 `.json` 文件安全导入官方社区仓库或作者分享的规则包；导入前先只读体检并显式展示所有会进入 AI 提示词的文本，全程完全离线，不发起远程抓取。
+
 ---
 
 ## 3. 命令行参数与环境变量
@@ -123,9 +145,13 @@ printf '%s\n' \
 | `--preset <name>` / `--preset=<name>` | 命令行 | 工具暴露预设（`all` / `writing` / `revising` / `auditing` / `setup`，默认 `all`）。**优先级高于环境变量**。 |
 | `--allow-external-src` | 命令行 | 放开 `novel_import` 的 `src` 限制，允许导入书库根之外的目录（`tools/call` 里 `root` 的限制不受影响）。 |
 | `--ignore-plugin-load-error` | 命令行 | 插件 `apply()` 失败时不 `exit(1)`，改为照常应答 `initialize`、其余请求回 `-32603`（见第 5 节"启动失败"）。 |
+| `--ui` | 命令行 | 启动 MCP 服务器的同时在本地回环地址拉起独立 Web UI（URL 仅写 stderr，绝不污染 stdout JSON-RPC 通道；启动失败不影响 MCP 服务）。 |
+| `--ui-port <n>` / `--ui-port=<n>` | 命令行 | 指定 `--ui` 的监听端口（`0..65535`，默认 `0` 自动分配空闲端口；非法值会在 stderr 告警并回退 `0`）。 |
 | `DEBUG=1` | 环境变量 | stderr 输出完整错误堆栈（默认只输出一行摘要）。 |
 | `DSH_NOVEL_WRITER_ROOT` | 环境变量 | 书库根目录。优先级低于 `--root`，高于 `process.cwd()`。 |
 | `DSH_NOVEL_WRITER_PRESET` | 环境变量 | 工具暴露预设（同 `--preset`）。优先级低于 `--preset`，缺省为 `all`。 |
+| `DSH_NOVEL_WRITER_UI` | 环境变量 | 设为 `1` 等价于 `--ui`。 |
+| `DSH_NOVEL_WRITER_UI_PORT` | 环境变量 | 指定 Web UI 端口（MCP 侧优先级低于 `--ui-port`，缺省 `0`；独立 Web UI 默认 `3847`）。 |
 | `DSH_NOVEL_WRITER_STATE` | 环境变量 | 插件状态文件路径。默认 `~/.dsh/dsh-novel-writer/state.json`。 |
 | `DSH_HOME` | 环境变量 | 插件 UI 配置目录基准（`<DSH_HOME>/novel-writer.json`），默认 `~/.dsh`。 |
 

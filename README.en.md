@@ -12,7 +12,7 @@ English | [中文](./README.md)
 
 **22 on-device tools covering the whole fiction loop: gather context before writing → quantify & self-check → work a prioritised fix list → audit cross-chapter health → diagnose and clean up.**
 Ships with a bundled 24 MB Chinese semantic model (`bge-small-zh-v1.5`, local WASM inference) — **zero API cost, manuscripts never leave the machine, measures & guides without ghostwriting**.
-Built for **DeepSeek Harness (DSH)** (with a unified sidebar & main-column UI panel); the same engine also runs as a built-in **stdio MCP server** for Claude Desktop / Cursor.
+Built for **DeepSeek Harness (DSH)** (with a unified 4-tab sidebar & main-column UI); the engine also runs as a built-in **stdio MCP server** for Claude Desktop / Cursor, or launches the **standalone Web UI (`--ui`) / Antigravity Sidecar Aux Pane plugin** outside DSH.
 
 [Website](https://siweina.github.io/dsh-novel-writer/) · [Technical docs (22 tools)](https://siweina.github.io/dsh-novel-writer/tools/) · [Core capabilities](#core-capabilities) · [Install & quick start](#install--quick-start) · [22 tools](#provided-tools-22) · [MCP server](#mcp-server-outside-dsh) · [Config & security bounds](#configuration-data-layout--security-bounds) · [Changelog](./CHANGELOG.md)
 
@@ -23,8 +23,8 @@ Built for **DeepSeek Harness (DSH)** (with a unified sidebar & main-column UI pa
 - **Pre-writing context assembly (`novel_chapter_brief` & creation files)**: gathers 16 inputs in one read-only call — previous-chapter hand-off, hook, chapter outline direction, relevant character cards, open plot threads with chapter spans, worldview wording/banned-word rules, required lexicon, six-metric style baseline, reference passages, and writing checklist — reporting anything missing in `degraded`. Paired with `novel_outline`, five settings tables (`novel_settings`), and the book + global required lexicon (`novel_lexicon`).
 - **Quantified style anti-drift (6-metric baseline & scene-band comparison)**: tracks syntactic complexity, modifier density, abstraction, action density, hedging, and gap index (`μ±σ`), alongside 9 sentence patterns, emotion quantification, and a 12-axis vibe spectrum. Supports **scene-band baseline comparison** (`dialogue` / `action` / `narrative` bands classified via quote ratio plus dedicated conflict/pacing signals decoupled from everyday verbs, comparing against same-band peers when ≥ 3 chapters exist and automatically falling back to the full baseline otherwise) plus per-book yardstick chapter selection so AI continuations cannot drag the baseline.
 - **Prioritised revision (`novel_fix_plan` & strict reconciliation)**: converts diagnostics into to-dos sorted by severity → effort → line (capped at 12 by default), with line-anchored quotes, current vs. target band, rewrite direction, and original reference anchors (direction only, never ghostwrites prose), plus `plan` / `verify` / `mark` re-checking.
-- **External JSON genre packs & cross-chapter health (5 built-in + hot-reload / graph / semantic search)**: ships 5 built-in JSON genre packs (`western-fantasy`, `eastern-xianxia`, `modern-urban`, `mystery-thriller`, `scifi-cyberpunk`) and hot-reloads custom packs from `<library-root>/.novel-writer/packs/*.json` (up to 2-level `extends`, ReDoS validation, and symlink escape guards), inspectable via `novel_settings` (`action: "packs"` / `worldview.pack`) to coordinate banned words and slop exemptions. `novel_plot { action: "graph" }`, `novel_continuity_check`, and `novel_semantic_search` cover cross-chapter structure, 3 sentinels, and offline passage search.
-- **Unified UI panel & safe maintenance (draft mirror / book cleanup / redacted diagnostics)**: the DSH panel centralises global/tool/feature toggles, tolerances, baseline scopes, scene-scoped prompts (`general` / `writing` / `revising` / `auditing` / `setup` + lean workflow), and report history; includes threshold-paced live-chat draft mirroring (`novel_draft`), unpurified `rawWriting` mode, 13-location per-book cleanup with recycle-bin restore (`novel_delete_book`, prefix-boundary matched), and share-safe redacted diagnostics (`novel_diagnose`).
+- **External JSON genre packs & visual Pack Studio (5 built-in / editor / `[DSH-PACK v1]` share & `.json` import/export)**: ships 5 built-in JSON genre packs (`western-fantasy`, `eastern-xianxia`, `modern-urban`, `mystery-thriller`, `scifi-cyberpunk`) and hot-reloads custom packs from `<library-root>/.novel-writer/packs/*.json` (up to 2-level `extends`, ReDoS validation, and symlink escape guards). The Web UI Pack Studio lets you create, fork, or edit custom packs, copy readable `[DSH-PACK v1]` share envelopes, export `.json` files directly, and safely import via paste or `.json` file with a dry-run preview inspecting prompt-facing fields, rejected regexes, and ID conflicts (remaining 100% offline). Coordinates with `novel_settings`, `novel_plot { action: "graph" }`, `novel_continuity_check`, and `novel_semantic_search`.
+- **Redesigned 4-tab Web UI workbench & safe maintenance (presets / genre packs / scene-band views)**: consolidates the UI into four tabs (`Workbench` / `AI & Tools` / `Health & Reports` / `Maintenance & Advanced`) with tool search, 5-group filtering + 1-click scenario presets (`all` / `writing` / `revising` / `auditing` / `setup`, keeping `novel_sentence_config` permanently visible to prevent lockout), a Genre Packs manager view, and a Scene-band baseline view alongside yardstick selection, scene-scoped prompts, threshold-paced live-chat draft mirroring (`novel_draft`), `rawWriting` mode, 13-location per-book cleanup with recycle-bin restore (`novel_delete_book`), and share-safe redacted diagnostics (`novel_diagnose`).
 
 > **Scope note for non-Chinese users**: lexicons, pragmatics rules, sentence-pattern heuristics, report text, and the bundled semantic model are tuned specifically for Chinese fiction; non-Chinese prose is not supported.
 
@@ -122,7 +122,18 @@ The package ships a local **stdio MCP server** (`mcp/server.mjs`) for Claude Des
 
 - Because the package name (`dsh-novel-writer`) differs from the binary (`dsh-novel-writer-mcp`), keep `-p dsh-novel-writer`;
 - Root resolution priority: `--root` > `DSH_NOVEL_WRITER_ROOT` > current working directory;
+- Pass `--preset <all|writing|revising|auditing|setup>` to filter `tools/list` by scenario (intersected with `state.json`, keeping `novel_sentence_config` always visible);
 - Both `root` arguments and `novel_import.src` are confined to the configured root by default (pass `--allow-external-src` to import outside it). See [mcp/README.md](./mcp/README.md).
+
+**Standalone Web UI & Antigravity Sidecar Plugin (outside DSH)**:
+
+```sh
+npm run ui                                                          # Launch standalone 4-tab Web UI from repo
+node mcp/server.mjs --ui --ui-port 3789 --root /path/to/your/novels # Launch with optional --ui-port
+node tools/install-antigravity-ui.mjs --apply                       # Install Antigravity Sidecar Aux Pane plugin
+```
+
+- **Audience & guardrails**: Standalone Web UI / Antigravity Aux Pane exposes the full local control panel (including all switches, 18+ mode, and book deletion / recycle-bin purge) for **single-user personal loopback use** (`127.0.0.1` + `Host`/`Origin` checks — do not reverse-proxy or expose it to a LAN or other users). Both 18+ mode (countdown + typed pledge) and irreversible recycle-bin purge (typed book/entry name) enforce in-panel explicit text confirmation rather than relying on `window.confirm`, which sandboxed webviews may block.
 
 ---
 
@@ -139,12 +150,12 @@ The package ships a local **stdio MCP server** (`mcp/server.mjs`) for Claude Des
 
 **Directory layout**:
 - `novels/<book>/` stores chapter manuscripts alongside per-book creation markdown files (bible, character cards, outline, hooks, status card — managed via `novel_outline`);
-- `<library-root>/.novel-writer/` holds `plots`, `settings`, `summaries`, `analysis`, `audits` (`fix-plan-*.json`), `embedding`, `style-reports`, `baseline`, `lexicon` (`_global.json` is global), `drafts`, and `trash` (recycle-bin entries occupy disk until explicitly `purge`d);
+- `<library-root>/.novel-writer/` holds `plots`, `settings`, `packs` (custom JSON genre rule packs), `summaries`, `analysis`, `audits` (`fix-plan-*.json`), `embedding`, `style-reports`, `baseline`, `lexicon` (`_global.json` is global), `drafts`, and `trash` (recycle-bin entries occupy disk until explicitly `purge`d);
 - `~/.dsh/dsh-novel-writer/` holds `state.json` (overridable via `DSH_NOVEL_WRITER_STATE`) and rotated local event logs `logs/events.jsonl` (512 KB × 3 files).
 
 **Dependencies, permissions & bounds**:
 - **Runtime dependencies**: `onnxruntime-web` and `@huggingface/tokenizers`; browser UI reuses host `react` (`peerDependencies`). Zero lifecycle scripts.
-- **Network & subprocesses**: sole outbound request is GitHub Releases API update checking (3 s timeout, 24 h cache, sends no library data); sole subprocess call opens the OS file manager via direct argv (no shell); registers 12 loopback-protected HTTP routes inside DSH.
+- **Network & subprocesses**: sole outbound request is GitHub Releases API update checking (3 s timeout, 24 h cache, sends no library data); sole subprocess call opens the OS file manager via direct argv (no shell); registers 13 loopback-protected HTTP routes (shared by DSH host and standalone Web UI).
 - **Two-tier log privacy**: `events.jsonl` stays strictly on the local machine (free-text fields clamped to `≤160` chars); share output from `novel_diagnose` or the UI "copy diagnostic bundle" button strips all free text wholesale and maps errors to fixed codes so it can be pasted safely into public issues.
 - **Failure bounds**: falls back cleanly to rule-only mode if the semantic engine is unavailable; corrupt caches/state never claim "uninitialized". Known caveat: replacing a chapter `.md`/`.markdown`/`.txt` file with a directory of the same name makes `scanChapters` skip it (recording a `silent_skip` log entry rather than surfacing it in `degraded`).
 

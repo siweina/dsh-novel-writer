@@ -1,0 +1,7 @@
+{
+  "name": "dsh-novel-writer-ui",
+  "display_name": "Novel Writer Studio",
+  "description": "Web UI studio for dsh-novel-writer: workbench, genre packs, scene baselines, tool presets, lexicon, reports and diagnostics.",
+  "version": "7.8.0",
+  "logo": "assets/logo.svg"
+}

@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="技术文档总览｜dsh-novel-writer">
 <meta name="twitter:description" content="dsh-novel-writer 的 22 个工具实现细节：参数契约、计算原理、约束边界与源码位置。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","name":"技术文档总览｜dsh-novel-writer","description":"dsh-novel-writer 的 22 个工具实现细节：参数契约、计算原理、约束边界与源码位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/index.html","inLanguage":"zh-CN","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.5.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer","url":"https://siweina.github.io/dsh-novel-writer/"}}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"CollectionPage","name":"技术文档总览｜dsh-novel-writer","description":"dsh-novel-writer 的 22 个工具实现细节：参数契约、计算原理、约束边界与源码位置。","url":"https://siweina.github.io/dsh-novel-writer/tools/index.html","inLanguage":"zh-CN","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.8.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer","url":"https://siweina.github.io/dsh-novel-writer/"}}</script>
 </head>
 <body class="docs">
 
@@ -33,7 +33,7 @@
   <main class="docs__main">
     <article class="doc">
       <h1>技术文档</h1>
-      <p class="doc__version">当前版本 <code>7.5.0</code> · 更新记录见 <a href="https://github.com/siweina/dsh-novel-writer/blob/main/CHANGELOG.md">CHANGELOG</a>（下方「版本说明」）</p>
+      <p class="doc__version">当前版本 <code>7.8.0</code> · 更新记录见 <a href="https://github.com/siweina/dsh-novel-writer/blob/main/CHANGELOG.md">CHANGELOG</a>（下方「版本说明」）</p>
       <p class="doc__lead">
         <code>dsh-novel-writer</code> 的 22 个工具全部在本地运行，<strong>不使用在线大模型</strong>：所有指标由规则统计与本地 ONNX 推理得出。本组页面面向二次开发与集成方，逐工具说明参数契约、计算原理、约束边界与源码位置。
       </p>
@@ -218,6 +218,17 @@
         </li>
       </ul>
 
+      <h2>近期工作流与运行方式（v7.4.2–v7.7.0）</h2>
+      <div class="note">
+        <b>工作流总览。</b>22 个工具总契约与数量保持不变，围绕「按需暴露降上下文税、场景分带基线、外置 JSON 题材包工作室、四标签独立/侧栏 Web UI」完成协同演进：
+      </div>
+      <ul>
+        <li><strong>五组工具组织与 <code>--preset</code> 场景预设</strong>：工具按 <b>书库与阅读</b> / <b>开写与改稿</b> / <b>文风与语义</b> / <b>设定与伏笔</b> / <b>系统维护</b> 五组归类；DSH 宿主通过 <code>{ when }</code> 按模型步隐藏已关闭工具，MCP 服务器支持 <code>--preset &lt;all|writing|revising|auditing|setup&gt;</code>（或 <code>DSH_NOVEL_WRITER_PRESET</code>）并与 <code>state.json</code> 取交集过滤 <code>tools/list</code>。<b>防死锁常驻：</b><code>novel_sentence_config</code> 受 <code>ALWAYS_VISIBLE_TOOLS</code> 豁免，无论预设或开关如何配置均常驻可见与可调用。</li>
+        <li><strong>分场景六维基线带</strong>：自动识别章节为 <code>dialogue</code>（对话文戏）/ <code>action</code>（动作冲突）/ <code>narrative</code>（叙事过渡）三带（冲突信号与日常叙事动词解耦）；当同带对照样本满足 <code>MIN_SCENE_BAND_CHAPTERS = 3</code>（除本章外同带 ≥ 3 章）时，在 <a href="novel-style-check.html"><code>novel_style_check</code></a>、<a href="novel-style-report.html"><code>novel_style_report</code></a>、<a href="novel-chapter-brief.html"><code>novel_chapter_brief</code></a> 与 <a href="novel-fix-plan.html"><code>novel_fix_plan</code></a> 中自动启用分带对照，不足则安全回退全基线。</li>
+        <li><strong>外置 JSON 题材规则包与可视化工作室</strong>：随包提供 5 套内置包（<code>western-fantasy</code> / <code>eastern-xianxia</code> / <code>modern-urban</code> / <code>mystery-thriller</code> / <code>scifi-cyberpunk</code>）及 <code>&lt;书库根&gt;/.novel-writer/packs/*.json</code> 热加载扩展，支持在 Web UI 新建、从内置包派生微调、编辑与删除自定义包，一键复制可读 <code>[DSH-PACK v1]</code> 分享信封、导出 <code>.json</code> 文件，以及通过粘贴文本或选择 <code>.json</code> 文件先体检（提示词披露 + ReDoS 检验 + ID 冲突处理）再导入，完全离线运行并与 <a href="novel-settings.html"><code>novel_settings</code></a>（<code>packs</code> / <code>worldview.pack</code>）联动。</li>
+        <li><strong>独立 MCP Web UI 与 Antigravity 侧栏</strong>：重构四标签工作台（<code>工作台</code> / <code>AI 与工具</code> / <code>体检与报告</code> / <code>维护与高级</code>）支持工具搜索、5 组过滤、一键预设、题材包管理与场景分带可视化；MCP 侧通过 <code>--ui</code>（可选 <code>--ui-port &lt;端口&gt;</code>）或 <code>npm run ui</code> 启动独立面板，Antigravity 侧栏插件通过 <code>npm run install:antigravity-ui</code> 安装。</li>
+      </ul>
+
       <h2>工具总览</h2>
 
       <h3>章节与文稿</h3>
@@ -289,7 +300,7 @@
       <p>语义检索、语义风格距离与语义隐性情感依赖随包分发的 <code>bge-small-zh-v1.5</code> 量化模型（约 24MB）与 <code>onnxruntime-web</code>（WASM）。引擎不可用时这些能力自动降级为纯规则模式，其余功能不受影响；返回体会以 <code>skippedDims</code> 或专用文案说明降级原因，而非返回空结果。引擎相关的降级同样会记入事件日志，可由 <a href="novel-diagnose.html">novel_diagnose</a> 聚合查看（本工具只聚合已记录到的事件，<strong>不会主动跑一次推理去探测</strong>）。</p>
 
       <h3>MCP 形态的边界</h3>
-      <p>包内 <code>mcp/server.mjs</code> 把同样 22 个工具暴露为 stdio MCP 服务器（可用 Streamable HTTP 传输）。协议侧：未知工具返回 <code>-32602</code>（Protocol Error）；支持 2025-11-25 / 2025-06-18 / 2025-03-26 / 2024-11-05 版本协商并原样回显；JSON-RPC 批量请求自 2025-06-18 起按规范拒绝；单行报文上限 4 MiB；<code>novel_import</code> 的 <code>src</code> 默认限制在书库根内，需显式加 <code>--allow-external-src</code> 才能放开。</p>
+      <p>包内 <code>mcp/server.mjs</code> 把同样 22 个工具暴露为 stdio MCP 服务器（可用 Streamable HTTP 传输）。协议侧：未知工具返回 <code>-32602</code>（Protocol Error）；支持 2025-11-25 / 2025-06-18 / 2025-03-26 / 2024-11-05 版本协商并原样回显；JSON-RPC 批量请求自 2025-06-18 起按规范拒绝；单行报文上限 4 MiB；<code>novel_import</code> 的 <code>src</code> 默认限制在书库根内，需显式加 <code>--allow-external-src</code> 才能放开。支持 <code>--preset &lt;all|writing|revising|auditing|setup&gt;</code> 按场景裁剪 <code>tools/list</code>（保留 <code>novel_sentence_config</code> 防死锁常驻），并可通过 <code>--ui</code> / <code>--ui-port &lt;端口&gt;</code> 拉起独立四标签 Web UI。</p>
     </article>
 
     <nav class="docs__pager" id="docsPager"></nav>

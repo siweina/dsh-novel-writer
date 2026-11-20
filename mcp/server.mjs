@@ -13,9 +13,10 @@
  * 协议：换行分隔的 JSON-RPC 2.0（stdio），stdout 只走协议帧，日志一律写 stderr。
  * 依赖：仅 Node 内置模块（不依赖 @modelcontextprotocol/sdk）。
  *
- * 用法：node mcp/server.mjs [--root <书库根目录>] [--preset <all|writing|revising|auditing|setup>] [--allow-external-src] [--ignore-plugin-load-error]
+ * 用法：node mcp/server.mjs [--root <书库根目录>] [--preset <all|writing|revising|auditing|setup>] [--allow-external-src] [--ignore-plugin-load-error] [--ui] [--ui-port <端口>]
  *   --root 缺省时读环境变量 DSH_NOVEL_WRITER_ROOT，再缺省用 process.cwd()。
  *   --preset 缺省时读环境变量 DSH_NOVEL_WRITER_PRESET，再缺省用 all；控制暴露的工具预设子集。
+ *   --ui / DSH_NOVEL_WRITER_UI=1：同时启动独立 Web UI（URL 只写 stderr，绝不污染 stdout）；可用 --ui-port / DSH_NOVEL_WRITER_UI_PORT 指定端口（默认 0 自动分配）。
  *   v4.3.0：工具参数里的 root 必须落在 --root 之内；novel_import 的 src 同样默认限根内，
  *           确需导入外部目录时加 --allow-external-src。
  *   --ignore-plugin-load-error：插件 apply() 失败时不再直接 exit(1)，改为照常应答 initialize，
@@ -297,6 +298,59 @@ function resolveToolPreset(argv) {
   return { name: "all", set: null, source: "fallback(all)" };
 }
 
+function parseCliUiPort(argv) {
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg === "--ui-port") {
+      const value = argv[i + 1];
+      const trimmed = typeof value === "string" ? value.trim() : "";
+      if (trimmed === "" || (trimmed.startsWith("-") && !/^-\d+$/.test(trimmed))) {
+        log(trimmed.startsWith("-")
+          ? `警告：--ui-port 缺少端口号（下一个参数 "${trimmed}" 是开关，不是端口），忽略该参数`
+          : "警告：--ui-port 缺少端口号，忽略该参数");
+        return null;
+      }
+      return trimmed;
+    }
+    if (arg.startsWith("--ui-port=")) {
+      const value = arg.slice("--ui-port=".length).trim();
+      if (value === "" || (value.startsWith("-") && !/^-\d+$/.test(value))) {
+        log(value === ""
+          ? "警告：--ui-port= 缺少端口号，忽略该参数"
+          : `警告：--ui-port= 的取值 "${value}" 以 - 开头（疑似把开关写成了端口），忽略该参数`);
+        return null;
+      }
+      return value;
+    }
+  }
+  return null;
+}
+
+function resolveUiPort(argv) {
+  const cliPort = parseCliUiPort(argv);
+  const envPort = process.env.DSH_NOVEL_WRITER_UI_PORT;
+  let raw = null;
+  let source = null;
+  if (cliPort !== null) {
+    raw = cliPort;
+    source = "命令行 --ui-port";
+  } else if (typeof envPort === "string" && envPort.trim() !== "") {
+    raw = envPort.trim();
+    source = "环境变量 DSH_NOVEL_WRITER_UI_PORT";
+  }
+  if (raw === null) return 0;
+  if (!/^\d+$/.test(raw)) {
+    log(`警告：无效的 Web UI 端口 "${raw}"（来源：${source}），需要 0..65535 的整数；已回退到 0`);
+    return 0;
+  }
+  const port = Number(raw);
+  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+    log(`警告：Web UI 端口超出范围 "${raw}"（来源：${source}），需要 0..65535 的整数；已回退到 0`);
+    return 0;
+  }
+  return port;
+}
+
 /** 参数类错误的标记：由 buildArgs 的调用方转成 JSON-RPC -32602（Invalid params）。 */
 const INVALID_PARAMS = "INVALID_PARAMS";
 
@@ -313,8 +367,10 @@ REDACT_ROOTS = CANONICAL_LIBRARY_ROOT !== LIBRARY_ROOT
   ? [LIBRARY_ROOT, CANONICAL_LIBRARY_ROOT]
   : [LIBRARY_ROOT];
 // v4.3.0：默认禁止 novel_import 读取书库根之外的目录（防"文档注入 → 复制任意 .md/.txt 进书库再读出"）
-const ALLOW_EXTERNAL_SRC = process.argv.slice(2).includes("--allow-external-src");
-const { name: ACTIVE_PRESET_NAME, set: ACTIVE_PRESET_SET, source: PRESET_SOURCE } = resolveToolPreset(process.argv.slice(2));
+const CLI_ARGV = process.argv.slice(2);
+const ALLOW_EXTERNAL_SRC = CLI_ARGV.includes("--allow-external-src");
+const { name: ACTIVE_PRESET_NAME, set: ACTIVE_PRESET_SET, source: PRESET_SOURCE } = resolveToolPreset(CLI_ARGV);
+const UI_ENABLED = CLI_ARGV.includes("--ui") || process.env.DSH_NOVEL_WRITER_UI === "1";
 
 // ---------------------------------------------------------------------------
 // 用 stub ctx 启动插件，捕获全部工具定义
@@ -1020,6 +1076,18 @@ function onStdinData(chunk) {
   }
 }
 
+let uiServer = null;
+if (UI_ENABLED) {
+  const uiPort = resolveUiPort(CLI_ARGV);
+  try {
+    const { startWebUiServer } = await import("../lib/web-ui.js");
+    uiServer = await startWebUiServer({ root: LIBRARY_ROOT, port: uiPort });
+    log(`Web UI 已启动：${uiServer.url}`);
+  } catch (error) {
+    logError("Web UI 启动失败（MCP 工具仍可正常使用）：", error);
+  }
+}
+
 let ended = false;
 function onStdinEnd() {
   if (ended) return;
@@ -1038,7 +1106,8 @@ function onStdinEnd() {
   // 等队列清空并让 stdout 落盘后再退出，避免最后一条响应被截断；
   // 绝不在 stdin 关闭瞬间启动强退定时器，以免提前腰斩耗时 >5s 的在途请求。
   queue
-    .then(() => {
+    .then(async () => {
+      await uiServer?.close?.().catch(() => {});
       log("stdin 已关闭，服务器正常退出");
       // 队列已排空：先允许事件循环自然退出（stdout/stderr 完整刷盘），
       // 仅设短兜底定时器防范插件残留句柄卡住进程。
@@ -1049,7 +1118,10 @@ function onStdinEnd() {
       }, 1000);
       timer.unref();
     })
-    .catch(() => done());
+    .catch(async () => {
+      await uiServer?.close?.().catch(() => {});
+      done();
+    });
 }
 
 process.stdin.on("data", onStdinData);

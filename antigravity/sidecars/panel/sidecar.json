@@ -1,0 +1,15 @@
+{
+  "name": "panel",
+  "description": "dsh-novel-writer Web UI studio in Antigravity side pane",
+  "command": ["node", "main.mjs"],
+  "has_web_ui": true,
+  "ui_config": {
+    "views": [
+      {
+        "path": "/",
+        "entrypoint": "SIDECAR_UI_ENTRYPOINT_AUX_PANE",
+        "title": "Novel Writer"
+      }
+    ]
+  }
+}

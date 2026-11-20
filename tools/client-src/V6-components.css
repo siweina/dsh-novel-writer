@@ -219,4 +219,53 @@ details[open]>.nwDisclosureTitle .nwDisclosureArrow{transform:rotate(90deg)}
 .nwDelPath{margin-top:10px;font-family:monospace;font-size:11.5px;line-height:17px;overflow-wrap:anywhere;color:var(--dsw-alias-label-tertiary)}
 .nwDelAck{display:flex;align-items:flex-start;gap:8px;margin-top:14px;font-size:12.5px;line-height:18px;color:var(--dsw-alias-label-secondary)}
 .nwDelAck input{margin:2px 0 0;flex:none}
+/* ==== v7.5.0: Wave 2A (home tabs / quick telemetry / tools presets & search / packs / scene bands) ==== */
+.nwQuickStats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:12px 16px}
+.nwQuickStat{display:flex;flex-direction:column;align-items:flex-start;gap:2px;min-width:0;padding:10px 12px;border:0.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);text-align:left;cursor:pointer;font-family:inherit;transition:background .16s var(--nw-ease,cubic-bezier(.16,1,.3,1)),border-color .16s}
+.nwQuickStat:hover{background:var(--dsw-alias-interactive-bg-hover);border-color:var(--dsw-alias-border-l3)}
+.nwQuickStatVal{font-size:13px;line-height:18px;font-weight:600;color:var(--dsw-alias-label-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.nwQuickStatLabel{font-size:11.5px;line-height:16px;color:var(--dsw-alias-label-tertiary)}
+.nwHomeTabs{display:flex;flex-wrap:wrap;gap:6px;margin:14px 0 4px;padding:4px;border-radius:var(--dsw-radius-lg);background:var(--dsw-alias-bg-layer-2);border:0.5px solid var(--dsw-alias-border-l2)}
+.nwHomeTab{flex:1;min-width:max-content;padding:7px 12px;border:0;border-radius:var(--dsw-radius-md);background:transparent;color:var(--dsw-alias-label-secondary);font-family:inherit;font-size:13px;line-height:18px;font-weight:500;cursor:pointer;text-align:center;transition:background .16s var(--nw-ease,cubic-bezier(.16,1,.3,1)),color .16s}
+.nwHomeTab:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary)}
+.nwHomeTab.nwHomeTabOn{background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-weight:600;box-shadow:var(--dsw-elevation-soft)}
+.nwToolControls{margin-bottom:12px}
+.nwPresetBar{display:flex;flex-direction:column;gap:8px;padding:12px 16px}
+.nwPresetLabel{font-size:12px;line-height:18px;font-weight:600;color:var(--dsw-alias-label-tertiary)}
+.nwPresetPills{display:flex;flex-wrap:wrap;gap:6px}
+.nwPresetBtn{appearance:none;padding:5px 11px;border:0.5px solid var(--dsw-alias-border-l2);border-radius:999px;corner-shape:round;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-secondary);font-family:inherit;font-size:12px;line-height:18px;cursor:pointer;transition:background .15s,border-color .15s,color .15s}
+.nwPresetBtn:hover{background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-border-l3)}
+.nwPresetBtn.nwPresetBtnOn{background:var(--dsw-alias-state-business-tertiary);border-color:var(--dsw-alias-state-business-primary);color:var(--dsw-alias-state-business-primary);font-weight:600}
+.nwToolSearchBar{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:10px 16px;border-top:0.5px solid var(--dsw-alias-border-l2)}
+.nwToolSearchBar .nwTextInput{flex:1;min-width:160px;width:0}
+.nwPacksPage{min-width:0}
+.nwPacksWarn{margin:12px 0;display:flex;flex-direction:column;gap:4px}
+.nwPacksWarnTitle{font-size:13px;line-height:18px;font-weight:600}
+.nwPacksWarnItem{font-size:12px;line-height:18px;overflow-wrap:anywhere}
+.nwPackMeta{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.nwPackTag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;corner-shape:round;background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-secondary);font-size:11.5px;line-height:16px}
+.nwPackTag.nwPackTagWarn{background:var(--dsw-alias-state-warn-tertiary);color:var(--dsw-alias-state-warn-primary)}
+.nwPacksToolbar{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 4px}
+.nwPackRowActions{display:flex;flex-wrap:wrap;gap:12px;margin-top:6px}
+.nwPackCodeArea{font-family:monospace;font-size:12px;line-height:18px;min-height:140px}
+.nwPackPreviewBox{padding:12px 16px;display:flex;flex-direction:column;gap:8px}
+.nwPackPromptCheck{padding:10px 12px;border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-layer-2);border:0.5px solid var(--dsw-alias-border-l2);display:flex;flex-direction:column;gap:4px;font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary)}
+.nwPackCheckGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 12px}
+.nwPackCheckItem{display:flex;align-items:center;gap:6px;font-size:12.5px;line-height:18px;color:var(--dsw-alias-label-primary);cursor:pointer}
+.nwFileLabel{position:relative;overflow:hidden}
+.nwFileHidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.nwBandGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:0 0 12px}
+.nwBandCard{display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:var(--dsw-radius-lg);background:var(--dsw-alias-bg-layer-2);border:0.5px solid var(--dsw-alias-border-l2)}
+.nwBandHead{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+.nwBandName{font-size:13px;line-height:18px;font-weight:600;color:var(--dsw-alias-label-primary)}
+.nwBandCount{font-size:11.5px;line-height:16px;color:var(--dsw-alias-label-tertiary)}
+.nwBandBadge{margin-left:auto;padding:2px 7px;border-radius:999px;corner-shape:round;background:var(--dsw-alias-bg-layer-3);color:var(--dsw-alias-label-tertiary);font-size:11px;line-height:16px;white-space:nowrap}
+.nwBandBadge.nwBandBadgeOn{background:var(--dsw-alias-state-success-tertiary);color:var(--dsw-alias-state-success-primary);font-weight:600}
+.nwBandMetrics{display:flex;flex-direction:column;gap:4px;padding-top:6px;border-top:0.5px solid var(--dsw-alias-border-l2)}
+.nwBandMetricRow{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:11.5px;line-height:16px}
+.nwBandMetricName{color:var(--dsw-alias-label-secondary)}
+.nwBandMetricVal{font-variant-numeric:tabular-nums;color:var(--dsw-alias-label-primary);font-weight:500;white-space:nowrap}
+.nwBandEmptyHint{margin:0 0 12px;padding:0 4px}
+@media(max-width:480px){.nwQuickStats,.nwBandGrid,.nwPackCheckGrid{grid-template-columns:1fr}}
+@media(prefers-reduced-motion:reduce){.nwQuickStat,.nwHomeTab,.nwPresetBtn{transition:none!important}}
 

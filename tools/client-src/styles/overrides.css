@@ -1,0 +1,52 @@
+  /* ---- V6 挂载胶水样式（总负责人手管区） ---- */
+  .nwIconGlyph svg,.nwToolGroupIcon svg{width:20px;height:20px;display:block}
+  .nwIco{display:inline-flex;align-items:center;justify-content:center}
+  .nwPrefGlyph .nwIco{color:inherit}
+  /* ---- P2-1: .nwPref{background:none} 与 .nwRowOn 同特异性后写者胜 → 复合选择器放行 On 态底色（含 hover） ---- */
+  /* ---- 裸堆叠行距（不在卡内的 PreferenceRow 与遗留 nwRow 混排）；卡内行间由 RowDivider 分隔，分隔线打断相邻选择器故不叠加 ---- */
+  .nwPref+.nwPref,.nwRow+.nwPref,.nwPref+.nwRow,.nwPref+.nwPlotBox{margin-top:10px}
+  /* ---- 卡内元素拍平（导航卡/pill/路径收纳进 GroupCard 后的样式） ---- */
+  .nwGCardBody .nwNavEntry{box-shadow:none;background:none;margin:0;border-radius:0;transform:none;padding:14px 16px}
+  .nwGCardBody .nwNavEntry:hover{box-shadow:none;background:var(--dsw-alias-interactive-bg-hover);transform:none}
+  .nwGCardBody .nwPillRow{padding:14px 16px 4px}
+  .nwGCardBody .nwPlotBox{margin:8px 16px 4px}
+  .nwGCardBody .nwRow{box-shadow:none;background:none;margin:0;border-radius:0;transform:none}
+  .nwGCardBody .nwRow:hover{box-shadow:none;transform:none}
+  /* ---- v6 页面级过渡（HyperOS/MIUⅨ 式 push-pop；方向类由 nwViewDir 决定；no-preference 门内播放） ---- */
+  .nwView{min-width:0}
+  @keyframes nwViewInFwd{from{opacity:0;transform:translateX(26px)}to{opacity:1;transform:none}}
+  @keyframes nwViewInBack{from{opacity:0;transform:translateX(-26px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion: no-preference){
+    .nwViewFwd{animation:nwViewInFwd .3s var(--nw-ease)}
+    .nwViewBack{animation:nwViewInBack .3s var(--nw-ease)}
+  }
+  /* ---- v6.5.0 自建下拉 SelectMenu（替换原生 select；闭合态沿用 nwSelect 观感） ---- */
+  .nwSelWrap{position:relative;display:inline-block;min-width:0;max-width:100%}
+  .nwSelTrigger{display:inline-flex;align-items:center;justify-content:space-between;gap:8px;min-width:160px;max-width:100%;box-sizing:border-box;text-align:left;cursor:pointer}
+  .nwSelTrigger:hover:not(:disabled){background:var(--dsw-alias-bg-layer-2)}
+  .nwSelTrigger:disabled{opacity:.45;cursor:not-allowed}
+  .nwSelTriggerOpen{border-color:var(--dsw-alias-state-business-primary)}
+  .nwSelEmpty .nwSelTriggerText{color:var(--dsw-alias-label-tertiary)}
+  .nwSelTriggerText{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .nwSelChevron{flex-shrink:0;display:inline-flex;width:14px;height:14px;font-size:11px;line-height:1;color:var(--dsw-alias-label-tertiary);transition:transform .18s var(--nw-ease)}
+  .nwSelTriggerOpen .nwSelChevron{transform:rotate(180deg)}
+  .nwSelChevron svg{width:14px;height:14px;display:block}
+  .nwSelMenu{position:absolute;top:calc(100% + 4px);left:0;z-index:50;min-width:100%;max-width:min(360px,80vw);max-height:260px;overflow-y:auto;box-sizing:border-box;padding:4px;border-radius:var(--dsw-radius-md);background:var(--dsw-alias-bg-layer-2);box-shadow:var(--dsw-elevation-prominent);outline:none}
+  /* v6.4.0：fixed 变体——逃出祖先的 overflow 裁剪（词表卡片圆角需要 overflow:hidden，
+     绝对定位的弹层会被截断，实测菜单底部一项被切掉半个字）。
+     位置上由内联几何量决定，这里只把绝对定位那套坐标全部复位。 */
+  .nwSelMenuFixed{position:fixed;top:auto;left:auto;right:auto;bottom:auto;min-width:0;max-width:min(360px,calc(100vw - 24px))}
+  .nwSelOpt{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:30px;padding:0 10px;border-radius:var(--dsw-radius-sm);font-size:13px;line-height:20px;color:var(--dsw-alias-label-primary);cursor:pointer;user-select:none;white-space:nowrap}
+  .nwSelOptLabel{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .nwSelOptAct{background:var(--dsw-alias-interactive-bg-hover,var(--dsw-alias-bg-layer-3))}
+  .nwSelOptSel{font-weight:600}
+  .nwSelOptCheck{flex-shrink:0;font-size:12px;line-height:20px;color:var(--dsw-alias-state-business-primary)}
+  .nwSelTrigger:focus-visible,.nwSelMenu:focus-visible{outline:var(--dsw-focus-ring-width,2px) solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:1px}
+  /* ---- v6.5.0 书库根行（可直接改；输入 + 保存；rootSource=config 时禁用） ---- */
+  .nwRootRow{display:flex;flex-direction:column;gap:6px;padding:10px 12px;margin:8px 16px 4px;border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-2)}
+  .nwRootMeta{font-size:12px;line-height:18px;color:var(--dsw-alias-label-secondary,var(--dsw-alias-label-primary));word-break:break-all}
+  .nwRootSrc{display:inline-block;margin-left:6px;padding:0 6px;border-radius:999px;corner-shape:round;font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary);border:0.5px solid var(--dsw-alias-border-l2)}
+  .nwRootEdit{display:flex;align-items:center;gap:8px}
+  .nwRootInput{flex:1;min-width:0;height:30px;padding:0 10px;box-sizing:border-box;border:0.5px solid var(--dsw-alias-border-l2);border-radius:var(--dsw-radius-sm);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font-size:12px;line-height:18px;font-family:inherit}
+  .nwRootInput:disabled{opacity:.5;cursor:not-allowed}
+  .nwRootNote{font-size:11px;line-height:16px;color:var(--dsw-alias-label-tertiary)}
