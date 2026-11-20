@@ -19,6 +19,7 @@
 # 现在默认**从仓库的 package.json 读取版本**，人工同步这一环被彻底去掉；
 # ARG 只作为**可选覆盖**保留（若下游想钉某个具体版本，传 --build-arg 即可）。
 # 另：tools/check-release.mjs 会断言本文件不含写死的旧版本号（**只看非注释行**），防止旧写法复活。
+# 运行时要求（v8.0.0+）：Node.js >= 22.13.0（依赖内置 node:sqlite；node:22-slim 默认拉取最新 22.x LTS）。
 
 FROM node:22-slim
 

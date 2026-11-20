@@ -86,6 +86,30 @@ for (const method of ["log", "info", "debug"]) {
   };
 }
 
+// v8.0.0：在任何动态导入 lib/index.js（及 node:sqlite）之前校验 Node.js 版本（>= 22.13.0）。
+// 优先动态加载 ../lib/node-version.js；若测试仅单文件复制 server.mjs，则退回内置极简校验，保持单文件可运行。
+// 不支持时仅写 stderr 并 exit(1)，绝不向 stdout 写入任何非 JSON-RPC 内容。
+const { formatNodeVersionError, isNodeVersionSupported } = await import("../lib/node-version.js").catch(() => ({
+  isNodeVersionSupported(versionStr = process.versions?.node || process.version) {
+    const m = /^v?(\d+)\.(\d+)/.exec(String(versionStr || "").trim());
+    if (!m) return false;
+    const major = Number(m[1]);
+    const minor = Number(m[2]);
+    return major > 22 || (major === 22 && minor >= 13);
+  },
+  formatNodeVersionError(versionStr = process.versions?.node || process.version) {
+    return `[dsh-novel-writer] Unsupported Node.js ${versionStr}: requires >=22.13.0 for node:sqlite. Please upgrade Node.js or run inside DSH Desktop (bundled Node 24).`;
+  },
+}));
+if (!isNodeVersionSupported()) {
+  try {
+    process.stderr.write(formatNodeVersionError() + "\n");
+  } catch {
+    /* 忽略 */
+  }
+  process.exit(1);
+}
+
 /** 读插件 package.json 的 version（服务器版本随插件版本走）。 */
 function readPackageVersion() {
   try {
@@ -405,7 +429,7 @@ const ctx = {
 const IGNORE_PLUGIN_LOAD_ERROR = process.argv.slice(2).includes("--ignore-plugin-load-error");
 let INIT_FAILED = null;
 try {
-  const plugin = await import(pathToFileURL(join(PLUGIN_DIR, "lib", "index.js")).href);
+  const plugin = await import("../lib/index.js");
   await plugin.apply(ctx, { root: LIBRARY_ROOT });
 } catch (error) {
   if (!IGNORE_PLUGIN_LOAD_ERROR) {

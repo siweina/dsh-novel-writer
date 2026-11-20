@@ -5,7 +5,7 @@ English | [中文](./README.md)
 [![npm version](https://img.shields.io/npm/v/dsh-novel-writer.svg?style=flat-square&color=blue)](https://www.npmjs.com/package/dsh-novel-writer)
 [![npm downloads](https://img.shields.io/npm/dm/dsh-novel-writer.svg?style=flat-square&color=green)](https://www.npmjs.com/package/dsh-novel-writer)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%3E%3D22.3-339933.svg?style=flat-square)](https://nodejs.org)
+[![Node](https://img.shields.io/badge/node-%3E%3D22.13-339933.svg?style=flat-square)](https://nodejs.org)
 [![DSH](https://img.shields.io/badge/DSH-%E2%89%A50.1.1--rc.2-4b8bbe.svg?style=flat-square)](https://github.com/deepseek-ai/deepseek-harness)
 [![GitHub stars](https://img.shields.io/github/stars/siweina/dsh-novel-writer.svg?style=flat-square&color=orange)](https://github.com/siweina/dsh-novel-writer/stargazers)
 [![siweina/dsh-novel-writer MCP server](https://glama.ai/mcp/servers/siweina/dsh-novel-writer/badges/score.svg)](https://glama.ai/mcp/servers/siweina/dsh-novel-writer)
@@ -39,7 +39,7 @@ dsh plugin add dsh-novel-writer                     # Option 1: npm (recommended
 dsh plugin add github:siweina/dsh-novel-writer#main # Option 2: GitHub
 ```
 
-Requires **Node.js ≥ 22.3** and **DSH ≥ 0.1.1-rc.2**. Restart DSH after installing to see the **Writing Assistant** entry in the left sidebar (official DSH 0.2.0+ seats, with automatic fallback on older hosts). Without DSH, use the [MCP server](#mcp-server-outside-dsh).
+Requires **Node.js ≥ 22.13** (external MCP and standalone CLI require built-in `node:sqlite`; DSH Desktop bundles Node 24 and is unaffected) and **DSH ≥ 0.1.1-rc.2**. Restart DSH after installing to see the **Writing Assistant** entry in the left sidebar (official DSH 0.2.0+ seats, with automatic fallback on older hosts). Without DSH, use the [MCP server](#mcp-server-outside-dsh).
 
 ### 2. One complete chapter loop
 
@@ -150,8 +150,9 @@ node tools/install-antigravity-ui.mjs --apply                       # Install An
 
 **Directory layout**:
 - `novels/<book>/` stores chapter manuscripts alongside per-book creation markdown files (bible, character cards, outline, hooks, status card — managed via `novel_outline`);
-- `<library-root>/.novel-writer/` holds `plots`, `settings`, `packs` (custom JSON genre rule packs), `summaries`, `analysis`, `audits` (`fix-plan-*.json`), `embedding`, `style-reports`, `baseline`, `lexicon` (`_global.json` is global), `drafts`, and `trash` (recycle-bin entries occupy disk until explicitly `purge`d);
-- `~/.dsh/dsh-novel-writer/` holds `state.json` (overridable via `DSH_NOVEL_WRITER_STATE`) and rotated local event logs `logs/events.jsonl` (512 KB × 3 files).
+- `<library-root>/.novel-writer/cache.sqlite` (WAL mode) stores recomputable derived caches (`chapter_metrics`, `analysis_cache`, 128-dim `embedding_*` blobs, and the persistent 512-dim `audit_vectors` LRU) — **never stores prose**, self-heals on corruption, and is **safe to delete anytime** (recomputed on demand);
+- `<library-root>/.novel-writer/` keeps all core authoring data as plain human-readable JSON: `plots`, `settings/<book>.json` (holding both the five settings tables and book-local `creationProfile` to prevent cross-library collisions, synced with `novel_settings` / creation markdowns and transparently migrating/cleaning legacy `state.json` entries), `packs` (custom JSON genre rule packs), `summaries`, `audits` (`fix-plan-*.json`), `style-reports`, `baseline`, `lexicon` (`_global.json` is global), `drafts`, legacy cache fallback dirs (`analysis`, `embedding`), and `trash` (recycle-bin entries occupy disk until explicitly `purge`d);
+- `~/.dsh/dsh-novel-writer/` holds global toggle `state.json` (overridable via `DSH_NOVEL_WRITER_STATE`; concurrent file transactions use cross-process atomic `.lock` files) and rotated local event logs `logs/events.jsonl` (512 KB × 3 files).
 
 **Dependencies, permissions & bounds**:
 - **Runtime dependencies**: `onnxruntime-web` and `@huggingface/tokenizers`; browser UI reuses host `react` (`peerDependencies`). Zero lifecycle scripts.

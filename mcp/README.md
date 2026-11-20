@@ -11,7 +11,7 @@ Claude Desktop、Cursor 等任何 MCP 客户端。
 - **零外部依赖**：只使用 Node 内置模块，手写 JSON-RPC 2.0（不依赖 `@modelcontextprotocol/sdk`）。
 - **stdout 只走协议帧**，所有日志写 stderr，绝不污染协议通道。
 
-要求：Node.js **>= 22.3**（与插件 `engines.node` 一致）。
+要求：Node.js **>= 22.13.0**（使用内置 `node:sqlite`，与插件 `engines.node` `>=22.13` 一致；启动时会先于插件加载校验版本，低于该版本时仅写 `stderr` 并以退出码 `1` 退出，绝不污染 `stdout` 协议流。DSH Desktop 内置 Node 24，不受影响）。
 
 ---
 
@@ -179,6 +179,8 @@ node tools/install-antigravity-ui.mjs --apply --root /abs/path/to/novels-workspa
 每次 `tools/list` 调用都会在 `--preset` 过滤的基础上实时检查 `state.json` 的 `tools` 开关：已关闭的工具会从返回清单中隐藏，从而减小上下文占用；无论是通过 `novel_sentence_config` 还是外部 DSH 界面修改了开关，都会在**下一次 `tools/list` 调用**立即生效（服务器不主动发送未请求的 `notifications/tools/list_changed`）。为防止关闭所有工具后无法恢复，`novel_sentence_config` 在 `tools/list` 中**始终保持可见**；若 `state.json` 不存在、损坏或不可读，服务器会 fail-open（不做额外隐藏）以保证列表可用。若客户端在旧清单下仍调用了在面板中关闭的工具，MCP 侧会返回
 `错误：工具 novel_xxx（…）当前已在「写作助手功能」UI 中关闭。…`——用 `novel_sentence_config` 或 GUI 重新开启即可。
 
+**派生缓存与书库局部设定（v8.0.0 起）**：可重算的逐章度量、全书分析、128 维语义索引与 512 维向量审计 LRU 统一缓存在 `<书库根>/.novel-writer/cache.sqlite`（WAL 模式，绝不存放正文，损坏自动重建，随时可安全删除）；按书原创设定 `creationProfile` 统一存于 `<书库根>/.novel-writer/settings/<书名>.json`（避免多书库同名书碰撞，并透明兼容/清理旧版 `state.json` 遗留条目）。
+
 ---
 
 ## 4. 工具清单（22 个）
@@ -311,6 +313,7 @@ render 精修文本（非 JSON 兜底）、`novel_import` 的 src 越界拦截�
 
 | 现象 | 处理 |
 |---|---|
+| 启动即退出且 stderr 报 `Unsupported Node.js version ... requires >=22.13.0` | 外部 MCP / 独立 CLI 自 v8.0.0 起依赖内置 `node:sqlite`，需 Node.js **>= 22.13.0**（推荐 Node 22.13+ 或 24 LTS）；升级后重启客户端即可（`stdout` 保持为空以免破坏 JSON-RPC 帧）。DSH Desktop 内置 Node 24，无此限制。 |
 | 工具返回空书库 | 用 `novel_books` 看返回的 `root` 字段是否为目标书库；检查 `--root` 是否写成了 `novels/` 子目录。 |
 | `错误：src 必须位于书库根…内` | `novel_import` 的 `src` 默认限根内；确认来源后加 `--allow-external-src` 重启服务器。 |
 | 调用方传的 `root` 被忽略、结果回到另一个书库 | 越界 `root` 会被拒绝并回退（v4.3.0 起），stderr 有 `拒绝越界 root：…` 日志；把 `root` 指到 `--root` 之内。 |

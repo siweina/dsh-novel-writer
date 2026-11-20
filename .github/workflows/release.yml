@@ -33,8 +33,31 @@ jobs:
       - run: npm ci
       - run: npm run check
 
+  node-version-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22.12.0'
+          package-manager-cache: false
+      - name: Verify Node.js >=22.13.0 startup gate
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          set +e
+          node mcp/server.mjs </dev/null >"$tmp/stdout.log" 2>"$tmp/stderr.log"
+          rc=$?
+          set -e
+          echo "exit_code=$rc"
+          cat "$tmp/stderr.log"
+          test "$rc" -ne 0
+          test ! -s "$tmp/stdout.log"
+          grep -Fq ">=22.13.0" "$tmp/stderr.log"
+
   package:
-    needs: test
+    needs: [test, node-version-gate]
     # 手动执行只生成测试产物；只有推送版本 tag 才发布。
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest

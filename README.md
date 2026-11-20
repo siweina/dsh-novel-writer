@@ -5,7 +5,7 @@
 [![npm version](https://img.shields.io/npm/v/dsh-novel-writer.svg?style=flat-square&color=blue)](https://www.npmjs.com/package/dsh-novel-writer)
 [![npm downloads](https://img.shields.io/npm/dm/dsh-novel-writer.svg?style=flat-square&color=green)](https://www.npmjs.com/package/dsh-novel-writer)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)](LICENSE)
-[![Node](https://img.shields.io/badge/node-%3E%3D22.3-339933.svg?style=flat-square)](https://nodejs.org)
+[![Node](https://img.shields.io/badge/node-%3E%3D22.13-339933.svg?style=flat-square)](https://nodejs.org)
 [![DSH](https://img.shields.io/badge/DSH-%E2%89%A50.1.1--rc.2-4b8bbe.svg?style=flat-square)](https://github.com/deepseek-ai/deepseek-harness)
 [![GitHub stars](https://img.shields.io/github/stars/siweina/dsh-novel-writer.svg?style=flat-square&color=orange)](https://github.com/siweina/dsh-novel-writer/stargazers)
 [![siweina/dsh-novel-writer MCP server](https://glama.ai/mcp/servers/siweina/dsh-novel-writer/badges/score.svg)](https://glama.ai/mcp/servers/siweina/dsh-novel-writer)
@@ -39,7 +39,7 @@ dsh plugin add dsh-novel-writer                     # 方式一：npm（推荐�
 dsh plugin add github:siweina/dsh-novel-writer#main # 方式二：GitHub
 ```
 
-要求 **Node.js ≥ 22.3**、**DSH ≥ 0.1.1-rc.2**。安装后重启 DSH，左栏主导航会出现「写作助手功能」入口（DSH 0.2.0+ 走官方席位，老版本自动回退兼容挂载）。不用 DSH 可直接走 [MCP 服务器](#mcp-服务器非-dsh-用户)。
+要求 **Node.js ≥ 22.13**（外部 MCP / 独立 CLI 使用内置 `node:sqlite`；DSH 桌面端内置 Node 24，不受影响）、**DSH ≥ 0.1.1-rc.2**。安装后重启 DSH，左栏主导航会出现「写作助手功能」入口（DSH 0.2.0+ 走官方席位，老版本自动回退兼容挂载）。不用 DSH 可直接走 [MCP 服务器](#mcp-服务器非-dsh-用户)。
 
 ### 2. 一章完整闭环
 
@@ -149,8 +149,9 @@ node tools/install-antigravity-ui.mjs --apply                   # 安装 Antigra
 
 **目录布局**：
 - `novels/<书名>/` 存放章节正文，`novels/创作资料/<书名>/` 存放大纲、人物卡与钩子等 Markdown；
-- `<书库根>/.novel-writer/` 存放伏笔（`plots`）、设定（`settings`）、题材包（`packs`）、摘要（`summaries`）、分析缓存（`analysis`）、审计与改稿清单（`audits`）、语义索引（`embedding`）、风格画像（`style-reports`）、基线范围（`baseline`）、必用词表（`lexicon`）、草稿镜像（`drafts`）与回收站（`trash`——内容仍占磁盘直至显式 `purge`）；
-- `~/.dsh/dsh-novel-writer/` 存放开关状态 `state.json`（可通过 `DSH_NOVEL_WRITER_STATE` 覆盖）与本地日志 `logs/events.jsonl`（512 KB 轮转，保留 3 份）。
+- `<书库根>/.novel-writer/cache.sqlite`（WAL 模式）：集中存储可重算的派生缓存（逐章六维 `chapter_metrics`、全书/原型分析 `analysis_cache`、128 维语义索引 `embedding_*` 与 512 维审计向量 LRU `audit_vectors`）；**绝不存放正文**，损坏自动重建，**随时可安全删除**；
+- `<书库根>/.novel-writer/` 其余文件继续保持可读 JSON：伏笔（`plots`）、五张设定表与按书原创设定 `creationProfile`（`settings/<书名>.json`，避免跨书库同名冲突并与创作资料同步，透明兼容/清理旧版 `state.json` 遗留）、题材包（`packs`）、摘要（`summaries`）、审计与改稿清单（`audits`）、风格画像（`style-reports`）、基线范围（`baseline`）、必用词表（`lexicon`）、草稿镜像（`drafts`）、旧版兼容缓存目录（`analysis` / `embedding`）与回收站（`trash`——内容仍占磁盘直至显式 `purge`）；
+- `~/.dsh/dsh-novel-writer/` 存放全局开关状态 `state.json`（可通过 `DSH_NOVEL_WRITER_STATE` 覆盖；多线程/多进程写入通过 `<file>.lock` 原子文件锁串行化）与本地日志 `logs/events.jsonl`（512 KB 轮转，保留 3 份）。
 
 **依赖、权限与边界**：
 - **运行时依赖**：`onnxruntime-web`、`@huggingface/tokenizers`，浏览器端复用宿主 `react`（peerDependency）；无生命周期脚本。

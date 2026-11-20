@@ -34,7 +34,11 @@ function renderHomeView(vc) {
   var knownReportCount = Array.isArray(state.reportsGroups) ? state.reportsGroups.reduce(function (n, group) { return n + (Array.isArray(group.files) ? group.files.length : 0); }, 0) : null;
   var stats = state.booksStats;
   var statsTotal = (stats || []).reduce(function (acc, book) { acc.chapters += Number(book.chapters) || 0; acc.chars += Number(book.chars) || 0; return acc; }, { chapters: 0, chars: 0 });
-  var statsSummary = stats === null ? t("stats.pending") : t("home.librarySummary").replace("{books}", (stats || []).length).replace("{chapters}", statsTotal.chapters).replace("{chars}", fmtChars(statsTotal.chars));
+  var bookCount = (stats || []).length;
+  var statsSummary = stats === null ? t("stats.pending") : t("home.librarySummary")
+    .replace(isEn && bookCount === 1 ? "{books} books" : "{books}", isEn && bookCount === 1 ? "1 book" : bookCount)
+    .replace(isEn && statsTotal.chapters === 1 ? "{chapters} chapters" : "{chapters}", isEn && statsTotal.chapters === 1 ? "1 chapter" : statsTotal.chapters)
+    .replace(isEn && statsTotal.chars === 1 ? "{chars} characters" : "{chars}", isEn && statsTotal.chars === 1 ? "1 character" : fmtChars(statsTotal.chars));
   var openReports = function () {
     reportReqId += 1;
     props.controller.set({ reportsGroups: null, reportsError: false, reportContent: null }, { silent: true });

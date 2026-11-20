@@ -135,7 +135,7 @@ python -m http.server 8080
 
 ## 数据来源
 
-页面数字与链接取自**本地源码的实际状态**：22 个工具、`bge-small-zh-v1.5` 量化模型约 24MB、Node ≥ 22.3。**外部平台的数字可能滞后**——Glama 的收录与 npm `latest` 反映的是**已发布版本**。发新版后需同步首屏版本号与胶囊链接、`#trust` 区块、页脚链接。
+页面数字与链接取自**本地源码的实际状态**：22 个工具、`bge-small-zh-v1.5` 量化模型约 24MB、Node ≥ 22.13。**外部平台的数字可能滞后**——Glama 的收录与 npm `latest` 反映的是**已发布版本**。发新版后需同步首屏版本号与胶囊链接、`#trust` 区块、页脚链接。
 
 技术文档子页面的参数与公式均取自插件源码（`lib/index.js`、`lib/analysis.js`、`lib/style-metrics.js`、`lib/embedding.js`、`lib/core.js`、`lib/brief.js`、`lib/fixplan.js`、`lib/graph.js`、`lib/prompts.js`、`lib/log.js`、`lib/diagnose.js`、`mcp/server.mjs`），改动实现后请同步更新对应页面。
 

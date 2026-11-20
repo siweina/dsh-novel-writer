@@ -14,6 +14,7 @@
 
 | 版本 | 日期 | 摘要 |
 | --- | --- | --- |
+| 8.0.0 | 2026-11-20 | 升级运行环境要求与书库存储底座：外部 MCP / 独立 CLI 最低要求 Node.js `>=22.13.0`（启用内置 `node:sqlite`，`mcp/server.mjs` 启动前校验并仅写 `stderr` 退出；DSH 桌面端内置 Node 24 不受影响）；新增 WAL 模式 `<书库>/.novel-writer/cache.sqlite`（`lib/db.js`）持久化可重算派生缓存与向量 BLOB（`chapter_metrics` / `analysis_cache` / 128 维 `embedding_*` / 512 维 `audit_vectors` LRU），正文、设定与创作文件仍保持纯文本并支持损坏自愈、只读不建库、`/api/dsh-novel-writer/metric-caliber` 与只含元数据的 `sqliteCache` 诊断；`withFileTx`（`lib/core/state.js`）叠加 `<file>.lock` 跨进程原子锁（30s 陈旧回收 / 5s 抖动等待）；按书 `creationProfile` 统一存入 `<书库>/.novel-writer/settings/<book>.json` 并透明兼容/清理旧版 `state.json`；同步去除 Web UI 文案字面 `**` 星号并修正首页英文单复数（`1 book · 1 chapter`） |
 | 7.8.0 | 2026-11-20 | 完成 Web UI 前端单文件模块化重构：将原 8,000+ 行单文件 [lib/client.js](lib/client.js) 拆分为 `tools/client-src/` 下 7 个职责目录（`core/` / `styles/` / `i18n/` / `controller/` / `components/` / `views/` / `host/`，保留既有 `V6-*` 源不变），由升级后的零依赖构建脚本 [tools/build-client.mjs](tools/build-client.mjs)（新增单模块语法、孤立文件、CSS 禁区、`zh/en` 键对称与整包不变量七重构建前检查）确定性装配为单一运行时产物 [lib/client.js](lib/client.js)；界面视觉、工具契约（22 工具 / 13 路由）与运行行为零变化，新增第 44 套回归测试 [test/client-build-test.mjs](test/client-build-test.mjs) |
 | 7.7.0 | 2026-11-20 | 上线「题材规则包工作室」：支持在 Web UI 可视化新建、从内置包派生微调（`extends`）与编辑/删除自定义规则包；新增人类可读的 `[DSH-PACK v1]` 剪贴板分享信封与 `.json` 文件一键导出，以及「粘贴分享文本或选择 `.json` 文件 → 只读安全体检预览（披露进提示词字段 / ReDoS 剔除报告 / 重名与内置 ID 冲突处理）→ 确认落盘」安全导入闭环；后端扩展 `lib/packs.js`（`toSerializablePack` / `formatPackEnvelope` / `parsePackInput` / `saveCustomPack` / `deleteCustomPack` / `getRawPack` / `invalidatePackCache`）并复用 `/api/dsh-novel-writer/packs`（保持 13 条路由与 22 工具不变），新增第 43 套回归测试 [test/packs-studio-test.mjs](test/packs-studio-test.mjs) |
 | 7.6.0 | 2026-11-20 | 重构 Web UI 信息架构并打通独立 / MCP / Antigravity 运行时：`lib/client.js` 首页重组为「工作台 / AI 与工具 / 体检与报告 / 维护与高级」四标签工作台，工具开关重排为 5 个工作流分组并加入 5 档场景预设按钮与即时搜索，新增「题材规则包」视图（按书绑定/解绑与 ReDoS 正则告警）并在「风格基线」页展示对话/动作/叙事分场景基线；后端抽取 `buildUiRoutes(config)` 并新增 `/api/dsh-novel-writer/packs` 与只读 `sceneBaselines`；新增零依赖独立宿主 `lib/web-ui.js`（含轻量 React 18 兼容层与浅深双主题）、`mcp/server.mjs --ui` 与 `antigravity/` 侧栏插件包，更新 `docs/` 首页与工具总览并新增第 42 套测试 |
@@ -88,11 +89,90 @@
 
 ---
 
-## [7.8.0] - 2026-11-20
+## [8.0.0] - 2026-11-20（含 7.6.0 / 7.7.0 / 7.8.0 累计变更）
+
+从 `7.6.0` 到 `8.0.0` 的四次连续迭代沿着四条演进主线推进：**先完成 Web UI 四标签信息架构重组与多端独立/MCP/Antigravity 宿主适配（`7.6.0`），再上线「题材规则包工作室」打通可视化编排与离线安全分享导入（`7.7.0`），随后将单文件客户端拆分为 40 模块 + 7 重门禁确立前端工程底座（`7.8.0`），最终在 `8.0.0` 升级大书库 `node:sqlite` WAL 派生缓存与向量持久化、补齐跨进程 `<file>.lock` 文件锁并收敛按书局部 `creationProfile` 存储（`8.0.0`）**。全程保持 **22 个 MCP/DSH 工具契约、13 条 Web UI HTTP 路由、零 npm `devDependencies` 与既有书库纯文本正文/设定格式完全兼容**；仅 `v8.0.0` 将外部 MCP / 独立 CLI 运行时最低版本升至 **Node.js `>=22.13.0`**（DSH Desktop 内置 Node `24.21.0`，桌面端用户无感知升级）。
+
+### 版本演进总览
+
+| 版本 | 日期 | 核心定位 | 主要变化 | 测试与兼容 |
+| --- | --- | --- | --- | --- |
+| **v7.6.0** | 2026-11-20 | Web UI 重构与多端独立运行 | 首页重组为「工作台 / AI 与工具 / 体检与报告 / 维护与高级」四标签、5 组工作流开关 + 5 档预设/搜索；上线「题材规则包」视图与分场景基线展示；新增零依赖独立宿主 `lib/web-ui.js`（`npm run ui`）、`mcp/server.mjs --ui` 与 `antigravity/` 侧栏插件；回收站彻底删除升级为防误触书名输入确认 | 新增第 42 套回归测试 `test/web-ui-v760-test.mjs`；全量 42 套测试、22 工具、13 条 HTTP 路由与离线浏览器审校通过 |
+| **v7.7.0** | 2026-11-20 | 题材规则包工作室 | 支持 Web UI 新建、派生微调（`extends`）与编辑自定义规则包；新增 `[DSH-PACK v1]` 剪贴板信封与 `.json` 导出、双通道安全导入预检（披露进提示词字段、ReDoS 剔除、冲突处理）；`lib/packs.js` 引入 `O(n)` 栈式 JSON 抽取（50 ms 预算）与 256 KB 守卫 | 新增第 43 套回归测试 `test/packs-studio-test.mjs`；43 套测试与 `client-test` / 浏览器深浅色实拍全通过 |
+| **v7.8.0** | 2026-11-20 | 客户端源码模块化重构 | 将原 `8,028` 行单文件 `lib/client.js` 拆分为 `tools/client-src/` 下 **40 个 JS 模块 + 4 个 CSS 片段**；升级 `tools/build-client.mjs` 为七重构建前检查确定性装配器；非词典模块全部控制在 `< 600` 行，界面像素与交互行为零变化 | 新增第 44 套回归测试 `test/client-build-test.mjs`；44 套测试与 7.7.0 vs 7.8.0 视觉零差异验收通过 |
+| **v8.0.0** | 2026-11-20 | 大书库 SQLite 底座、跨进程锁与运行时升级 | 外部 MCP/CLI 升至 Node `>=22.13.0`（`lib/node-version.js` + `mcp/server.mjs` 仅写 `stderr` 启动门禁）；新增 WAL `<书库>/.novel-writer/cache.sqlite`（`lib/db.js`）收口 5 类可重算缓存与 BLOB 向量并支持坏库自愈与严格只读；`withFileTx` 叠加 `<file>.lock` 跨进程锁；`creationProfile` 迁入按书 `settings/<book>.json`；清理 UI 与诊断文本 `**` 星号、英文单复数与 WAL 0 字节误报 | 新增第 45 / 46 套测试 `sqlite-storage-test.mjs` 与 `creation-profile-unify-test.mjs`；全量 **46 套测试**、`5/5` 变异测试与隔离浏览器复验全通过 |
+
+---
+
+### v7.6.0 - 2026-11-20
+
+围绕「解决 Web UI 臃肿杂乱、在界面上接通 v7.5.0 新能力、让外部 MCP 与 Antigravity 用户也能直接打开 Web UI」三条目标完成全面升级。全插件 22 个工具语义、测量口径与 DSH 宿主扩展契约保持兼容，可直接升级使用。
+
+#### 新增功能
+
+- **独立零依赖 Web UI 宿主（`lib/web-ui.js`）与 CLI 入口（`npm run ui`）**：
+  - 不依赖 DSH 客户端宿主即可通过内置 HTTP 服务器（仅绑定回环地址 `127.0.0.1`，严格校验 `Host`/`Origin`）直接运行完整 `lib/client.js` 面板。
+  - 内置零依赖 React 18 兼容渲染/Hook 运行时（`/assets/react-shim.js`，支持就地 DOM 更新以保留输入框焦点与 `useState` / `useEffect` / `useRef` / `useId`）、完整的 `--dsw-*` 浅色/深色双主题令牌表（`/assets/theme.css`），以及顶部即时切换浅深色与中/英文的工具栏。
+- **MCP `--ui` 参数直连与 Antigravity 侧栏插件支持**：
+  - `mcp/server.mjs` 新增 `--ui`（或 `DSH_NOVEL_WRITER_UI=1`）与 `--ui-port <端口>` 参数：在拉起 stdio MCP 服务的同时附带启动本地 Web UI，启动 URL 仅写入 `stderr`，确保 `stdout` JSON-RPC 帧流纯净并在关闭 `stdin` 后自动清理退出。
+  - 新增 `antigravity/` 侧栏插件包（`antigravity/plugin.json`、`antigravity/assets/logo.svg`、`antigravity/sidecars/panel/sidecar.json` 与 `main.mjs`，复用 `invokeRouteInMemory` 对接 `SidecarApp` 与 `SIDECAR_UI_ENTRYPOINT_AUX_PANE` 辅助侧栏视图）及安全安装脚本 `tools/install-antigravity-ui.mjs`（默认预演，`--apply` 安装到插件目录且不改动用户全局配置文件）。
+- **「题材规则包」Web UI 视图与 `/api/dsh-novel-writer/packs` 路由**：
+  - `lib/tools/system.js` 抽出共用路由表构建器 `buildUiRoutes(config)`（统一供 DSH `webServer` 与独立 `lib/web-ui.js` 消费，共 13 条精确路由），新增 `GET/POST /api/dsh-novel-writer/packs` 路由（支持按书查询激活包、列出 5 套内置 + `.novel-writer/packs/*.json` 自定义包与告警/错误，`POST` 限回环并使用 `withFileTx` 事务绑定/解绑 `worldview.pack`）；`lib/core/http.js` 的 `revealHandler` 同步放行 `"packs-dir"` 目录定位。
+  - Web UI 新增 `packs` 视图：支持按书下拉选择、直观展示内置/自定义与文化基准徽章、高亮显示被拒绝的不安全正则（`rejectedPatterns`）及损坏 JSON 告警，并提供一键绑定/解除绑定操作。
+- **「风格基线」分场景基线带卡片展示**：
+  - `lib/core/http.js` 的 `GET /api/dsh-novel-writer/baseline` 在严格只读（不写盘）前提下计算并返回 `sceneBaselines`（优先复用有效分析缓存并按需补齐场景分类，无缓存且章节数 `<= 25` 时现场测量）。
+  - Web UI `baseline` 视图在范围卡下方新增三列「分场景风格基线」网格（对话文戏 / 动作冲突 / 叙事过渡），清晰显示各场景章数、`>= 3` 章对照激活态或回退提示及六维均值与推荐容差（保持全页仅 1 个主操作按钮 `.nwBtnPrimary`）。
+
+#### 体验优化
+
+- **主面板重设计为四标签工作台（`lib/client.js`、`tools/client-src/V6-components.css`）**：
+  - 顶部精简为「总开关 + 三项可点击概览条（书库/章节、已开工具、提示词模式）」，下方将原冗长纵向堆叠重组为 **「工作台 / AI 与工具 / 体检与报告 / 维护与高级」** 四个聚焦标签页，常用创作设置、工具开关、体检维护与 18+ / 删书低频操作各归其位（全部状态收口至 `controller`，不增加额外 React Hook，严格维持 `react.use* === 12`）。
+- **工具开关页重排与预设/搜索栏（`lib/client.js`）**：
+  - 将原先不均衡的三大分组重排为 **5 个工作流分组**（「书库与阅读」「创作与起草」「文风与改稿」「设定与连贯」「诊断与维护」，21 个可开关工具，配合永久防死锁的 `novel_sentence_config` 共 22 工具）。
+  - 顶部新增 **5 档场景预设按钮**（「全部开启」「写新章」「改稿」「审计」「建资料」，与 `mcp/server.mjs` `--preset` 保持同口径）及 **即时关键词搜索框 + 全部展开/收起按钮**，大幅降低定位和开关工具的成本。
+- **网站与文档同步**：
+  - 更新 `docs/index.html`、`docs/tools/index.html`、`README.md`、`README.en.md` 与 `mcp/README.md`，补齐 v7.4.2–v7.6.0 新特性（工具预设、`MIN_SCENE_BAND_CHAPTERS = 3` 分场景基线带、外置题材包、四标签工作台与独立/MCP/Antigravity Web UI），并明确独立 Web UI 的本机个人回环权限范围及高风险操作输入确认机制。
+- **高危销毁门禁加固（`lib/client.js`）**：
+  - 将回收站「彻底删除（`trashPurge`）」的不可逆操作从依赖宿主 `window.confirm` 的 `safeConfirm` 升级为面板内建 `DialogCard`（要求显式输入目标书名或无清单条目 ID 才可触发销毁，切出视图自动重置），避免在 Antigravity Aux Pane 等沙箱 webview 拦截原生确认框时被静默放行，同时保持 18+ 倒计时+承诺词输入与可逆移入回收站流程完整。
+
+#### 验证与兼容性
+
+- 补全 `test/client-test.mjs` 对四标签首页、5 组工作流分类、场景预设/搜索、`packs` 视图与 `sceneBaselines` 卡片的单元测试，并新增第 42 套回归测试 [test/web-ui-v760-test.mjs](test/web-ui-v760-test.mjs)（覆盖 `/packs`、只读 `sceneBaselines`、`packs-dir` 放行、`lib/web-ui.js` 独立服务端与 Host 校验、`react-shim.js` 状态与卸载生命周期、`mcp/server.mjs --ui` `stdout` 纯净度以及 `antigravity/` 打包/安装预演）。
+- 通过离线浏览器实机端到端审查：验证浅色/深色、中文/英文切换、四标签页切换、预设/搜索实时过滤、规则包正则安全告警与绑定/解绑、`9` 章混合文本的三类场景分带显示，零控制台错误与布局溢出。
+
+---
+
+### v7.7.0 - 2026-11-20
+
+上线「题材规则包工作室（Pack Studio）」，让作者可在 Web UI 中直接新建、基于内置包派生微调（`extends`）与编辑自定义规则包，通过可读的 `[DSH-PACK v1]` 剪贴板分享信封或 `.json` 文件实现跨用户/社区仓库的一键导出与先体检后导入，插件全程保持离线零联网。全插件 22 个工具语义、13 条 Web UI HTTP 路由数量及 DSH/MCP/Antigravity 运行时契约保持向后兼容。
+
+#### 新增功能
+
+- **可视化题材规则包工作室（`lib/client.js`、`tools/client-src/V6-components.css`）**：
+  - 「题材规则包」列表页顶部新增「＋ 新建规则包」「↓ 导入规则包」工具栏：内置规则包卡片提供「派生微调」，自定义规则包卡片提供「编辑」「派生微调」「复制分享」「导出 JSON」「删除（内建 `DialogCard` 确认）」，并在元数据标签区展示 `继承自 {id}`。
+  - 新增 `packs-form` 编辑子页：按「基础信息（ID / 名称 / 说明 / 文化基准 / 继承源 / 别名）」「词表与套话静音（逐行 `禁用词 -> 推荐替代` 解析、放行词列表、8 类套话静音勾选框）」「高级折叠区（称谓规范 / 语气规范 / 仪式说明 / 错位称呼替代 / 忌用仪式正则）」组织表单；支持保存后顺便绑定到当前书、直接分享或导出，未保存离开自动提醒，保持 `react.use* === 12` 零新增 Hook。
+- **人类可读 `[DSH-PACK v1]` 分享信封与 `.json` 文件一键导出**：
+  - 新增可读分享文本格式 `[DSH-PACK v1] <名称> (<id>)` 包裹格式化 JSON 代码块（既方便在群聊与社区仓库直接审阅规则差异，又兼容单行/裸 JSON）；「复制分享」优先写入剪贴板，若运行环境剪贴板不可用/被拒则自动弹出带全文的只读 `DialogCard` 供全选复制或直接转存 `.json`。
+  - 「导出 JSON」通过浏览器标准文件下载直接产出 `<id>.json`（兼容未保存编辑器草稿导出），彻底避免超长词表在聊天平台被截断的问题；环境受限时自动回退到分享弹窗。
+- **双通道安全导入与只读预检（`packs-import`）**：
+  - 支持「粘贴 `[DSH-PACK v1]` / ````json 代码块 / 纯 JSON / 聊天前缀噪点文本」与「选择本地 `.json` 文件（限 256 KB）」双通道导入。
+  - 导入前必须通过只读预检：展示词数统计、**强制明文披露所有会拼入 AI 提示词的自由文本**（`description`、`titleGuideline`、`toneGuideline`、`ritualGoodNote`）、列出被安全门禁剔除的 ReDoS/非法正则（`rejectedPatterns`）及缺失父包提醒，并对内置保留 ID 强制改名、对本机重名自定义包提供「覆盖确认或改名另存」。
+- **后端序列化、解析器与原子读写扩展（`lib/packs.js`、`lib/tools/system.js`）**：
+  - `lib/packs.js` 新增 `PACK_SCHEMA_V1`、`PACK_ENVELOPE_HEADER`、`getRawPack`（返回未展开 `extends` 的原始增量定义）、`invalidatePackCache`（写入/删除同毫秒缓存立即失效）、`toSerializablePack`、`formatPackJson`、`formatPackEnvelope`、`parsePackInput`（支持 UTF-8 BOM、线性多围栏扫描与单遍 `O(n)` 字符串/转义感知栈式 `{...}` 配平抽取，配合 50 次尝试上限与 50 ms 时间预算防止 200 KB+ 畸形输入阻塞事件循环，严守 256 KB 上限且绝不泄漏解析原文片段）、`saveCustomPack` 与 `deleteCustomPack`（原子写入/删除、内置 ID 保护、符号链接防逃逸与 409 重名保护）。
+  - `lib/tools/system.js` 复用既有 `/api/dsh-novel-writer/packs` 路由（路由总数仍为 13 条）：`GET` 增补 `rawPacks` 与 `slopCategories`；`POST`（严格限本机回环）新增 `action: "preview" | "save" | "delete"`，省略 `action` 时保持原按书绑定/解绑语义完全兼容（`preview` 与 `save` 均复用抗阻塞 `parsePackInput`）。
+
+#### 验证与兼容性
+
+- 新增第 43 套回归测试 [test/packs-studio-test.mjs](test/packs-studio-test.mjs)（覆盖序列化、多格式 `[DSH-PACK v1]` 信封解析、`>256 KB` 与金丝雀不泄漏、`200,000` 个未闭合 `{` 与大量围栏/深度嵌套退化输入的 `O(n)` 抗事件循环阻塞回归、`saveCustomPack`/`deleteCustomPack` 409/symlink/缓存失效、`/api/dsh-novel-writer/packs` 全动作与非回环 403 拦截），并补全 [test/client-test.mjs](test/client-test.mjs) 规则包工作室渲染/交互测试（含内置包隐藏分享/导出校验及回退与官方原语双路径通过）。
+- 通过隔离临时书库下的无头浏览器端到端视觉审计，验证列表工具栏、内置派生、编辑保存、分享弹窗、带 ReDoS 正则与提示词披露的导入预检及自定义包删除弹窗（浅色与深色模式零控制台错误与布局溢出）。
+
+---
+
+### v7.8.0 - 2026-11-20
 
 完成 Web UI 前端单文件模块化重构：将原 `8,028` 行单文件 [lib/client.js](lib/client.js) 按职责拆分为 `tools/client-src/` 下的模块化源码，并由升级后的零依赖构建脚本 [tools/build-client.mjs](tools/build-client.mjs) 确定性装配为单一运行时产物 [lib/client.js](lib/client.js)。本次发布为纯内部架构与工程化升级，界面视觉、交互体验、13 条 Web UI HTTP 路由、22 个 MCP/DSH 工具契约及零 npm `devDependencies` 依赖策略均保持完全不变，可无感平滑升级。
 
-### 内部架构优化
+#### 内部架构优化
 
 - **客户端源码模块化拆分（`tools/client-src/`）**：
   - 将原 `8,028` 行单文件 `lib/client.js` 拆分为 `tools/client-src/` 下 7 个职责子目录，连同保留不变的既有 `V6-*` 源区块，共计 **40 个 JS 模块 + 4 个 CSS 片段**（`3` 份 `.css` + `V6-slider-css.txt`），且所有非词典 JS 模块均控制在 **`< 600` 行**（实测最大 `476` 行）：
@@ -117,74 +197,55 @@
 - **工程文档同步更新**：
   - 更新 [tools/client-src/README.md](tools/client-src/README.md) 说明目录结构、装配顺序与构建门禁，并同步更新 [tools/UI-REDESIGN.md](tools/UI-REDESIGN.md) 明确所有 `lib/client.js` 渲染/CSS/`i18n`/controller/host 源模块现均位于 `tools/client-src/*`（`lib/client.js` 为 `node tools/build-client.mjs` 的构建产物）。
 
-### 验证与兼容性
+#### 验证与兼容性
 
 - **零界面与零契约变更**：前端视觉样式、用户体验、13 条 Web UI HTTP 路由、22 个 MCP/DSH 工具契约、运行时导出（`apply` / `inject` / `__internals.NW_UI`）及零 npm `devDependencies` 约束全部保持不变。
 - **新增第 44 套回归测试（[test/client-build-test.mjs](test/client-build-test.mjs)）**：验证全部 40 个 `.js` 模块独立 `vm.Script` 语法解析、`build-client.mjs --check` 零孤儿源一致性、`zh.js`/`en.js` 键对称与非空值、所有非词典 `.js` 模块 `< 600` 行，以及 `lib/client.js` 完整 `V6:*` 标记、Hook/CSS/安全不变量与 `window.__ModuleLoader__.load` 模块导出。
 
 ---
 
-## [7.7.0] - 2026-11-20
+### v8.0.0 - 2026-11-20
 
-上线「题材规则包工作室（Pack Studio）」，让作者可在 Web UI 中直接新建、基于内置包派生微调（`extends`）与编辑自定义规则包，通过可读的 `[DSH-PACK v1]` 剪贴板分享信封或 `.json` 文件实现跨用户/社区仓库的一键导出与先体检后导入，插件全程保持离线零联网。全插件 22 个工具语义、13 条 Web UI HTTP 路由数量及 DSH/MCP/Antigravity 运行时契约保持向后兼容。
+大版本存储与运行时底座升级：面向长篇大书库引入基于 Node 内置 `node:sqlite` 的 WAL 本地派生缓存与向量持久化（[lib/db.js](lib/db.js)），为多进程并发读写补齐跨进程 `<file>.lock` 原子文件锁，将按书原创设定 `creationProfile` 收敛到书库局部 `settings/<book>.json` 以彻底避免跨库碰撞，并将外部 MCP / 独立 CLI 的 Node.js 最低版本门槛提升至 `>=22.13.0`（DSH Desktop 内置 Node 24 不受影响）。全插件 22 个工具契约、13 条 Web UI HTTP 路由及既有书库正文格式保持完全兼容。
 
-### 新增功能
+#### 运行时与不兼容变更
 
-- **可视化题材规则包工作室（`lib/client.js`、`tools/client-src/V6-components.css`）**：
-  - 「题材规则包」列表页顶部新增「＋ 新建规则包」「↓ 导入规则包」工具栏：内置规则包卡片提供「派生微调」，自定义规则包卡片提供「编辑」「派生微调」「复制分享」「导出 JSON」「删除（内建 `DialogCard` 确认）」，并在元数据标签区展示 `继承自 {id}`。
-  - 新增 `packs-form` 编辑子页：按「基础信息（ID / 名称 / 说明 / 文化基准 / 继承源 / 别名）」「词表与套话静音（逐行 `禁用词 -> 推荐替代` 解析、放行词列表、8 类套话静音勾选框）」「高级折叠区（称谓规范 / 语气规范 / 仪式说明 / 错位称呼替代 / 忌用仪式正则）」组织表单；支持保存后顺便绑定到当前书、直接分享或导出，未保存离开自动提醒，保持 `react.use* === 12` 零新增 Hook。
-- **人类可读 `[DSH-PACK v1]` 分享信封与 `.json` 文件一键导出**：
-  - 新增可读分享文本格式 `[DSH-PACK v1] <名称> (<id>)` 包裹格式化 JSON 代码块（既方便在群聊与社区仓库直接审阅规则差异，又兼容单行/裸 JSON）；「复制分享」优先写入剪贴板，若运行环境剪贴板不可用/被拒则自动弹出带全文的只读 `DialogCard` 供全选复制或直接转存 `.json`。
-  - 「导出 JSON」通过浏览器标准文件下载直接产出 `<id>.json`（兼容未保存编辑器草稿导出），彻底避免超长词表在聊天平台被截断的问题；环境受限时自动回退到分享弹窗。
-- **双通道安全导入与只读预检（`packs-import`）**：
-  - 支持「粘贴 `[DSH-PACK v1]` / ````json 代码块 / 纯 JSON / 聊天前缀噪点文本」与「选择本地 `.json` 文件（限 256 KB）」双通道导入。
-  - 导入前必须通过只读预检：展示词数统计、**强制明文披露所有会拼入 AI 提示词的自由文本**（`description`、`titleGuideline`、`toneGuideline`、`ritualGoodNote`）、列出被安全门禁剔除的 ReDoS/非法正则（`rejectedPatterns`）及缺失父包提醒，并对内置保留 ID 强制改名、对本机重名自定义包提供「覆盖确认或改名另存」。
-- **后端序列化、解析器与原子读写扩展（`lib/packs.js`、`lib/tools/system.js`）**：
-  - `lib/packs.js` 新增 `PACK_SCHEMA_V1`、`PACK_ENVELOPE_HEADER`、`getRawPack`（返回未展开 `extends` 的原始增量定义）、`invalidatePackCache`（写入/删除同毫秒缓存立即失效）、`toSerializablePack`、`formatPackJson`、`formatPackEnvelope`、`parsePackInput`（支持 UTF-8 BOM、线性多围栏扫描与单遍 `O(n)` 字符串/转义感知栈式 `{...}` 配平抽取，配合 50 次尝试上限与 50 ms 时间预算防止 200 KB+ 畸形输入阻塞事件循环，严守 256 KB 上限且绝不泄漏解析原文片段）、`saveCustomPack` 与 `deleteCustomPack`（原子写入/删除、内置 ID 保护、符号链接防逃逸与 409 重名保护）。
-  - `lib/tools/system.js` 复用既有 `/api/dsh-novel-writer/packs` 路由（路由总数仍为 13 条）：`GET` 增补 `rawPacks` 与 `slopCategories`；`POST`（严格限本机回环）新增 `action: "preview" | "save" | "delete"`，省略 `action` 时保持原按书绑定/解绑语义完全兼容（`preview` 与 `save` 均复用抗阻塞 `parsePackInput`）。
+- **外部 Node.js 最低版本要求升级至 `>=22.13.0`（`package.json`、`package-lock.json`、`lib/node-version.js`、`mcp/server.mjs`）**：
+  - 将 `engines.node` 由 `>=22.3` 升级为 `">=22.13"`，以无实验参数（flag-free）启用 Node.js 内置 `node:sqlite`（`DatabaseSync`）。
+  - 新增零依赖版本检查模块 [lib/node-version.js](lib/node-version.js)；`mcp/server.mjs` 在任何动态加载 `lib/index.js` 或 `node:sqlite` 之前先行校验运行时版本（若仅单文件部署则走内置极简校验回退），遇到低于 `22.13.0` 的 Node.js 时向 `stderr` 输出含 `>=22.13.0` 要求与升级指引的诊断文本并直接非零退出（`exit 1`），**绝不污染 `stdout` JSON-RPC 协议流**。
+  - **DSH Desktop 用户不受影响**：Electron 44 桌面端内置 Node `24.21.0`，无需手动升级本机 Node。
+  - CI 工作流（`.github/workflows/release.yml`）新增 `node-version-gate` 边界验证作业，在 Node `22.12.0` 下实测确认启动门禁非零退出、`stdout` 完全为空且 `stderr` 包含 `>=22.13.0`。
 
-### 验证与兼容性
+#### 存储底座与性能架构
 
-- 新增第 43 套回归测试 [test/packs-studio-test.mjs](test/packs-studio-test.mjs)（覆盖序列化、多格式 `[DSH-PACK v1]` 信封解析、`>256 KB` 与金丝雀不泄漏、`200,000` 个未闭合 `{` 与大量围栏/深度嵌套退化输入的 `O(n)` 抗事件循环阻塞回归、`saveCustomPack`/`deleteCustomPack` 409/symlink/缓存失效、`/api/dsh-novel-writer/packs` 全动作与非回环 403 拦截），并补全 [test/client-test.mjs](test/client-test.mjs) 规则包工作室渲染/交互测试（含内置包隐藏分享/导出校验及回退与官方原语双路径通过）。
-- 通过隔离临时书库下的无头浏览器端到端视觉审计，验证列表工具栏、内置派生、编辑保存、分享弹窗、带 ReDoS 正则与提示词披露的导入预检及自定义包删除弹窗（浅色与深色模式零控制台错误与布局溢出）。
+- **SQLite 大书库派生缓存与向量持久化（[lib/db.js](lib/db.js)）**：
+  - 在 `<书库>/.novel-writer/cache.sqlite` 建立 WAL 模式本地缓存库（`PRAGMA busy_timeout = 5000`、`PRAGMA journal_mode = WAL`、`PRAGMA synchronous = NORMAL`，schema v1），集中收口 5 类**可随时重算**的派生缓存表：
+    - `chapter_metrics`：逐章六维指标与场景分类缓存（`lib/core/domain.js` `metricChaptersCached`、只读基线 `lib/core/http.js`），兼容读取旧版 `analysis/<book>-chapters-metrics.json`；
+    - `analysis_cache`：全书分析缓存 `book_full` 与风格原型缓存 `styleproto`（`lib/core/domain.js`、`lib/vibe.js`），按口径 `METRIC_CALIBER` 与内容指纹隔离并保留旧版 JSON/zstd 回退；
+    - `embedding_meta` 与 `embedding_chunks`：128 维 `Float32Array` BLOB 本地语义检索索引（`encodeFloat32Blob` / `decodeFloat32Blob`，`lib/embedding.js`），支持 `metaOnly: true` 快速指纹核对，兼容旧版 `<book>.json` / `<book>.emb.json` 回退；
+    - `audit_vectors`：512 维向量审计持久化缓存（`lib/vector-audit.js`），按 `last_used` 维护跨会话 LRU 淘汰（默认保留最近 `2000` 条），消除重启或跨工具调用时的重复推理耗时。
+  - **正文与核心资料保持人类可读纯文本**：章节正文（`novels/<书名>/`）、创作资料（`novels/创作资料/<书名>/*.md`）、设定表（`settings/<书名>.json`）、题材规则包（`packs/*.json`）、必用词表（`lexicon/`）、伏笔（`plots/`）、摘要（`summaries/`）、基线范围（`baseline/`）、审计报告与改稿清单（`audits/`）、草稿镜像（`drafts/`）及本机事件日志（`logs/events.jsonl`）均保留原 Markdown / JSON / JSONL 格式；`cache.sqlite` 永不存储正文，删除后下次查询自动按需重建。
+  - **损坏自愈、严格只读与度量口径/诊断集成**：
+    - 读写模式下捕获 `SQLITE_CORRUPT` / `SQLITE_NOTADB` 时自动清理损坏库及 `-wal`/`-shm` 伴随文件，通过 `logEvent("cache", { action: "sqlite_recover", ... })` 记录脱敏恢复日志并重建后重试一次；
+    - 严格遵守 `readOnly: true` 不建库语义：库文件不存在时绝不创建 `.novel-writer/` 目录或空库文件，损坏时安全返回空/`null`；
+    - `/api/dsh-novel-writer/metric-caliber`（`lib/tools/system.js`）新增 `inspectCaliberCache` / `rebuildCaliberCache` 支持，同时统计与清理 SQLite 过期口径行和遗留 JSON；
+    - `novel_diagnose`（`lib/diagnose.js`）输出只含元数据的 `dataDir.sqliteCache` 体检信息（文件大小、schema 版本、journal 模式与各表计数，绝不暴露书名或正文），并将 SQLite WAL 模式检查点关闭后合法归零的 `cache.sqlite-wal` / `cache.sqlite-shm` / `cache.sqlite-journal` 排除出「0 字节损坏文件」误报；
+    - `novel_delete_book`（`lib/bookdelete.js`）删除整书或清理章节/分析/嵌入缓存时同步调用 `purgeBookCache` 清理对应 SQLite 记录。
+- **跨进程 `withFileTx` 原子文件锁（[lib/core/state.js](lib/core/state.js)）**：
+  - 在进程内串行队列 `txQueues` 之外新增跨进程 `<file>.lock` 原子文件锁（`open(lockPath, "wx")`，即 `O_CREAT | O_EXCL` 写入 `{ pid, ts }`），具备 `30s`（`LOCK_STALE_MS`）陈旧锁自动清理（含 `50ms` 空锁写入宽限）、`5s`（`LOCK_TIMEOUT_MS`）带 `10..35ms` 抖动的重试等待、锁载荷归属校验防误删以及只读/受限目录安全回退，避免 DSH 与外部 MCP / 独立 Web UI 并发修改状态/设定文件时互相覆盖。
+- **按书 `creationProfile` 书库本地化统一存储（[lib/core/domain.js](lib/core/domain.js)、[lib/core/http.js](lib/core/http.js)、[lib/tools/system.js](lib/tools/system.js)、[lib/brief.js](lib/brief.js)、[lib/bookdelete.js](lib/bookdelete.js)）**：
+  - 将按书原创设定 `creationProfile` 从全局 `~/.dsh/dsh-novel-writer/state.json` 迁入书库局部 `<书库>/.novel-writer/settings/<book>.json`，消除不同书库同名书籍之间的设定覆盖碰撞。
+  - `writeSettings` 更新 `novel_settings` 五张表时自动保留既有 `creationProfile`，并与 `syncCreationProfileFiles` 协同保持 `novels/创作资料/<book>/*.md` 同步；读取侧透明回退兼容旧版 `state.json` 的 `creationProfiles` 与全局 `creationProfile`，写入或清除时通过 `clearLegacyCreationProfileKeys` 自动清理 `state.json` 遗留条目。
 
----
+#### 体验优化与质量验证
 
-## [7.6.0] - 2026-11-20
-
-围绕「解决 Web UI 臃肿杂乱、在界面上接通 v7.5.0 新能力、让外部 MCP 与 Antigravity 用户也能直接打开 Web UI」三条目标完成全面升级。全插件 22 个工具语义、测量口径与 DSH 宿主扩展契约保持兼容，可直接升级使用。
-
-### 新增功能
-
-- **独立零依赖 Web UI 宿主（`lib/web-ui.js`）与 CLI 入口（`npm run ui`）**：
-  - 不依赖 DSH 客户端宿主即可通过内置 HTTP 服务器（仅绑定回环地址 `127.0.0.1`，严格校验 `Host`/`Origin`）直接运行完整 `lib/client.js` 面板。
-  - 内置零依赖 React 18 兼容渲染/Hook 运行时（`/assets/react-shim.js`，支持就地 DOM 更新以保留输入框焦点与 `useState` / `useEffect` / `useRef` / `useId`）、完整的 `--dsw-*` 浅色/深色双主题令牌表（`/assets/theme.css`），以及顶部即时切换浅深色与中/英文的工具栏。
-- **MCP `--ui` 参数直连与 Antigravity 侧栏插件支持**：
-  - `mcp/server.mjs` 新增 `--ui`（或 `DSH_NOVEL_WRITER_UI=1`）与 `--ui-port <端口>` 参数：在拉起 stdio MCP 服务的同时附带启动本地 Web UI，启动 URL 仅写入 `stderr`，确保 `stdout` JSON-RPC 帧流纯净并在关闭 `stdin` 后自动清理退出。
-  - 新增 `antigravity/` 侧栏插件包（`antigravity/plugin.json`、`antigravity/assets/logo.svg`、`antigravity/sidecars/panel/sidecar.json` 与 `main.mjs`，复用 `invokeRouteInMemory` 对接 `SidecarApp` 与 `SIDECAR_UI_ENTRYPOINT_AUX_PANE` 辅助侧栏视图）及安全安装脚本 `tools/install-antigravity-ui.mjs`（默认预演，`--apply` 安装到插件目录且不改动用户全局配置文件）。
-- **「题材规则包」Web UI 视图与 `/api/dsh-novel-writer/packs` 路由**：
-  - `lib/tools/system.js` 抽出共用路由表构建器 `buildUiRoutes(config)`（统一供 DSH `webServer` 与独立 `lib/web-ui.js` 消费，共 13 条精确路由），新增 `GET/POST /api/dsh-novel-writer/packs` 路由（支持按书查询激活包、列出 5 套内置 + `.novel-writer/packs/*.json` 自定义包与告警/错误，`POST` 限回环并使用 `withFileTx` 事务绑定/解绑 `worldview.pack`）；`lib/core/http.js` 的 `revealHandler` 同步放行 `"packs-dir"` 目录定位。
-  - Web UI 新增 `packs` 视图：支持按书下拉选择、直观展示内置/自定义与文化基准徽章、高亮显示被拒绝的不安全正则（`rejectedPatterns`）及损坏 JSON 告警，并提供一键绑定/解除绑定操作。
-- **「风格基线」分场景基线带卡片展示**：
-  - `lib/core/http.js` 的 `GET /api/dsh-novel-writer/baseline` 在严格只读（不写盘）前提下计算并返回 `sceneBaselines`（优先复用有效分析缓存并按需补齐场景分类，无缓存且章节数 `<= 25` 时现场测量）。
-  - Web UI `baseline` 视图在范围卡下方新增三列「分场景风格基线」网格（对话文戏 / 动作冲突 / 叙事过渡），清晰显示各场景章数、`>= 3` 章对照激活态或回退提示及六维均值与推荐容差（保持全页仅 1 个主操作按钮 `.nwBtnPrimary`）。
-
-### 体验优化
-
-- **主面板重设计为四标签工作台（`lib/client.js`、`tools/client-src/V6-components.css`）**：
-  - 顶部精简为「总开关 + 三项可点击概览条（书库/章节、已开工具、提示词模式）」，下方将原冗长纵向堆叠重组为 **「工作台 / AI 与工具 / 体检与报告 / 维护与高级」** 四个聚焦标签页，常用创作设置、工具开关、体检维护与 18+ / 删书低频操作各归其位（全部状态收口至 `controller`，不增加额外 React Hook，严格维持 `react.use* === 12`）。
-- **工具开关页重排与预设/搜索栏（`lib/client.js`）**：
-  - 将原先不均衡的三大分组重排为 **5 个工作流分组**（「书库与阅读」「创作与起草」「文风与改稿」「设定与连贯」「诊断与维护」，21 个可开关工具，配合永久防死锁的 `novel_sentence_config` 共 22 工具）。
-  - 顶部新增 **5 档场景预设按钮**（「全部开启」「写新章」「改稿」「审计」「建资料」，与 `mcp/server.mjs` `--preset` 保持同口径）及 **即时关键词搜索框 + 全部展开/收起按钮**，大幅降低定位和开关工具的成本。
-- **网站与文档同步**：
-  - 更新 `docs/index.html`、`docs/tools/index.html`、`README.md`、`README.en.md` 与 `mcp/README.md`，补齐 v7.4.2–v7.6.0 新特性（工具预设、`MIN_SCENE_BAND_CHAPTERS = 3` 分场景基线带、外置题材包、四标签工作台与独立/MCP/Antigravity Web UI），并明确独立 Web UI 的本机个人回环权限范围及高风险操作输入确认机制。
-- **高危销毁门禁加固（`lib/client.js`）**：
-  - 将回收站「彻底删除（`trashPurge`）」的不可逆操作从依赖宿主 `window.confirm` 的 `safeConfirm` 升级为面板内建 `DialogCard`（要求显式输入目标书名或无清单条目 ID 才可触发销毁，切出视图自动重置），避免在 Antigravity Aux Pane 等沙箱 webview 拦截原生确认框时被静默放行，同时保持 18+ 倒计时+承诺词输入与可逆移入回收站流程完整。
-
-### 验证与兼容性
-
-- 补全 `test/client-test.mjs` 对四标签首页、5 组工作流分类、场景预设/搜索、`packs` 视图与 `sceneBaselines` 卡片的单元测试，并新增第 42 套回归测试 [test/web-ui-v760-test.mjs](test/web-ui-v760-test.mjs)（覆盖 `/packs`、只读 `sceneBaselines`、`packs-dir` 放行、`lib/web-ui.js` 独立服务端与 Host 校验、`react-shim.js` 状态与卸载生命周期、`mcp/server.mjs --ui` `stdout` 纯净度以及 `antigravity/` 打包/安装预演）。
-- 通过离线浏览器实机端到端审查：验证浅色/深色、中文/英文切换、四标签页切换、预设/搜索实时过滤、规则包正则安全告警与绑定/解绑、`9` 章混合文本的三类场景分带显示，零控制台错误与布局溢出。
+- **Web UI 与诊断报告纯文本修整（`tools/client-src/i18n/`、`tools/client-src/views/home.js`、`lib/client.js`、`lib/diagnose.js`）**：
+  - 移除面板中英文文案（`zh.js` 的 `feature.chatWriting.desc`、`draft.hint`、`caliber.hint`、`audit.howto` 与 `en.js` 的 `audit.howto`）及 `lib/diagnose.js` 纯文本报告/清单/建议中残留的字面 `**` Markdown 星号。
+  - 修正英文模式下首页书库统计的单复数语法（单部/单章正确显示 `1 book · 1 chapter`）。
+- **新增第 45 / 46 套自动化回归测试与全链路复验**：
+  - [test/sqlite-storage-test.mjs](test/sqlite-storage-test.mjs)（`12/12` 通过：覆盖 Node `22.12.0` 启动拒绝、SQLite WAL / `readOnly` 不建库、非对齐 `Float32Array` BLOB 解码、坏库自愈、`205` 章改 `1` 章 `9.73 ms` 增量重算、`embedding` 与 `audit_vectors` 持久化、口径选择性重建、归零 `-wal`/`-shm` 不误报及真实双进程 `20×2=40` 次 `withFileTx` 并发累加）；
+  - [test/creation-profile-unify-test.mjs](test/creation-profile-unify-test.mjs)（`8/8` 通过：覆盖按书局部持久化、`readSettings`/`writeSettings` 隔离保留、双书库同名书籍隔离、继承回退/清理、`novel_outline` 与 `novel_chapter_brief` 端到端消费、回收站恢复与 `purgeBookCache` 联动）；
+  - 通过全量 **46 套**自动化测试、`5/5` 变异测试、`ui-audit`（0 违规 / 0 提示）、`check-release`（`Version 8.0.0` / `ALL_TOOLS = 22` / 24 页面一致）及隔离临时书库下的无头浏览器实机复验（零控制台/页面报错与布局溢出）。
 
 ---
 

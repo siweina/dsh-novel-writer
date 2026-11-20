@@ -97,6 +97,7 @@ const LOG = await import("../lib/log.js");
 const BOOKDELETE = await import("../lib/bookdelete.js");
 const TRASH = await import("../lib/trash.js");
 const EMB = await import("../lib/embedding.js");
+const DB = await import("../lib/db.js");
 
 let libSeq = 0;
 function freshLib(tag) {
@@ -458,7 +459,7 @@ test("B1 (#9): locateBlocks / detectSemanticLoop 在单换行折行与 # 标题�
   assert.ok(pureRes.loops[0].lineFrom >= 18, `纯单换行排版后段循环 lineFrom 不得塌缩到第 1 行，实际 ${pureRes.loops[0].lineFrom}`);
 });
 
-test("B2 (#11): novel_style_report 语义关闭时连续命中不重写 <book>-full.json", async () => {
+test("B2 (#11): novel_style_report 语义关闭时连续命中不重写 SQLite analysis_cache book_full 行", async () => {
   const root = freshLib("style-report-cache");
   const book = "不重写缓存书";
   const dir = join(root, "novels", book);
@@ -469,14 +470,16 @@ test("B2 (#11): novel_style_report 语义关闭时连续命中不重写 <book>-f
   resetStateFile();
   const { defs, exec } = createHarness(root);
   await defs.novel_style_report.execute({ book, root }, exec);
-  const fullFile = join(CORE.novelDataDir(root), "analysis", `${book}-full.json`);
-  assert.ok(existsSync(fullFile), "首次应生成 <book>-full.json");
-  const mtime1 = statSync(fullFile).mtimeMs;
+  const cacheKey = `book_full:${CORE.sanitizeSegment(book, "book")}`;
+  const row1 = DB.readAnalysisCache(root, cacheKey, { kind: "book_full", readOnly: true });
+  assert.ok(row1 && row1.payload && row1.payload.analysis, "首次应写入 SQLite analysis_cache book_full 行");
+  const updatedAt1 = row1.updated_at;
 
   await delay(40);
   await defs.novel_style_report.execute({ book, root }, exec);
-  const mtime2 = statSync(fullFile).mtimeMs;
-  assert.equal(mtime2, mtime1, "语义关闭时命中缓存不得重写 <book>-full.json");
+  const row2 = DB.readAnalysisCache(root, cacheKey, { kind: "book_full", readOnly: true });
+  assert.ok(row2, "二次命中时 book_full 行应仍存在");
+  assert.equal(row2.updated_at, updatedAt1, "语义关闭时命中缓存不得重写 SQLite analysis_cache book_full 行");
 });
 
 test("B3 (#12): novel_sentence_analysis 缓存按 semanticImplicit 开关隔离", async () => {

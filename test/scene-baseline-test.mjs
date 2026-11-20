@@ -20,6 +20,7 @@ import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 
 // ===========================================================================
@@ -68,6 +69,7 @@ test.after(restoreEnvAndCleanup);
 let PLUGIN;
 let METRICS;
 let CORE;
+let DB;
 
 try {
   mkdirSync(DSH_HOME_DIR, { recursive: true });
@@ -93,6 +95,7 @@ try {
   PLUGIN = await import("../lib/index.js");
   METRICS = await import("../lib/style-metrics.js");
   CORE = await import("../lib/core.js");
+  DB = await import("../lib/db.js");
 } catch (err) {
   restoreEnvAndCleanup();
   throw err;
@@ -559,26 +562,81 @@ test("4a. novel_style_check：动作带命中 vs 日常叙事识别并回退全�
   assert.ok(narRendered.includes("场景带识别"), "回退场景 render 也应包含「场景带识别」");
   assert.ok(narRendered.includes("全书其他章基线"), "回退场景 render 应标明「全书其他章基线」");
 
-  // 3) 旧缓存回归：手写去掉 *-chapters-metrics.json 中每条 .scene，再调用第 1 章（对话章）
-  // 第 2/3/4 章 complexity > 1.7：若不走 enrichPerChapterScenes，纯指标启发式会误判为 narrative 导致回退！
-  const cacheFile = join(root, ".novel-writer", "analysis", `${book}-chapters-metrics.json`);
-  assert.ok(existsSync(cacheFile), "前置条件：应已落盘 *-chapters-metrics.json");
-  const cacheObj = JSON.parse(readFileSync(cacheFile, "utf8"));
-  assert.ok(Array.isArray(cacheObj.perChapter) && cacheObj.perChapter.every((pc) => pc.scene), "首次缓存应含 .scene");
-  for (const pc of cacheObj.perChapter) delete pc.scene;
-  const fallbackCh2 = METRICS.classifyChapterScene({ metrics: cacheObj.perChapter[1].metrics });
+  // 3a) SQLite chapter_metrics 剥掉 scene_json 后：只读路径（readOnly: true）在内存中现场补算 scene 且不重写 SQLite；
+  //     同时 novel_style_check 靠正文补齐 scene，第 1 章仍按 dialogue 带命中。
+  // 第 2/3/4 章 complexity > 1.7：若不走正文场景分类 / enrichPerChapterScenes，纯指标启发式会误判为 narrative 导致回退！
+  const dbPath = DB.libraryDbPath(root);
+  assert.ok(existsSync(dbPath), "前置条件：应已落盘 cache.sqlite");
+  const initialRows = DB.readChapterMetrics(root, book, { readOnly: true }).rows;
+  assert.equal(initialRows.length, rawFiles.length, "首次缓存应含全部章节行");
+  assert.ok(initialRows.every((r) => typeof r.scene_json === "string" && r.scene_json !== ""), "首次 SQLite 缓存应含 scene_json");
+
+  const db = new DatabaseSync(dbPath);
+  try {
+    db.prepare("UPDATE chapter_metrics SET scene_json = NULL WHERE book = ?").run(book);
+  } finally {
+    db.close();
+  }
+  const strippedRows = DB.readChapterMetrics(root, book, { readOnly: true }).rows;
+  assert.ok(strippedRows.every((r) => r.scene_json === null), "前置条件：chapter_metrics.scene_json 应已置为 NULL");
+  const ch2Row = strippedRows.find((r) => r.chapter.startsWith("第02章"));
+  const fallbackCh2 = METRICS.classifyChapterScene({ metrics: JSON.parse(ch2Row.metrics_json) });
   assert.equal(fallbackCh2.confidence, "low");
-  assert.notEqual(fallbackCh2.band, "dialogue", "前置条件：纯指标启发式不得把第 2 章归为 dialogue，才能证明 enrichPerChapterScenes 起了作用");
-  writeFileSync(cacheFile, JSON.stringify(cacheObj, null, 2), "utf8");
+  assert.notEqual(fallbackCh2.band, "dialogue", "前置条件：纯指标启发式不得把第 2 章归为 dialogue，才能证明现场正文场景分组起了作用");
+
+  const roPerChapter = await CORE.metricChaptersCached(
+    root,
+    book,
+    rawFiles.map((f) => ({ file: f.file, text: f.text + "\n" })),
+    { readOnly: true }
+  );
+  assert.equal(roPerChapter.length, rawFiles.length);
+  const roCh2 = roPerChapter.find((pc) => pc.file.startsWith("第02章"));
+  assert.equal(roCh2?.scene?.band, "dialogue", "只读读取 scene_json=NULL 的 SQLite 行必须在内存中补全 dialogue 场景");
+
+  const afterRoRows = DB.readChapterMetrics(root, book, { readOnly: true }).rows;
+  assert.ok(afterRoRows.every((r) => r.scene_json === null), "只读内存中补算不得重写 SQLite chapter_metrics.scene_json");
+  assert.deepEqual(
+    afterRoRows.map((r) => [r.chapter, r.updated_at]),
+    strippedRows.map((r) => [r.chapter, r.updated_at]),
+    "只读内存中补算不得改写 SQLite chapter_metrics 的 updated_at"
+  );
 
   const dlgRes = await defs.novel_style_check.execute({ book, chapter: "1", root }, exec);
-  assertOutputSchema(defs.novel_style_check, dlgRes, "novel_style_check(legacy-cache-dialogue)");
+  assertOutputSchema(defs.novel_style_check, dlgRes, "novel_style_check(sqlite-null-scene-dialogue)");
   assert.equal(dlgRes.metric.sceneBand.band, "dialogue");
-  assert.equal(dlgRes.metric.sceneBand.usedSceneBand, true, "剥掉 .scene 的旧缓存必须靠 enrichPerChapterScenes 按正文分组为 dialogue");
+  assert.equal(dlgRes.metric.sceneBand.usedSceneBand, true, "scene_json=NULL 时必须按正文分组为 dialogue");
   assert.equal(dlgRes.metric.sceneBand.peerCount, 3);
+  });
 
-  const afterCache = JSON.parse(readFileSync(cacheFile, "utf8"));
-  assert.ok(afterCache.perChapter.every((pc) => pc.scene === void 0), "应命中旧缓存而非重写缓存");
+  // 3b) 旧版 JSON 缓存兼容回归：预置去掉 .scene 的 <book>-chapters-metrics.json（无 cache.sqlite）仍可正常兜底并完成分析
+  await withLib("style-check-legacy-json", async (legacyRoot) => {
+  const legacyBook = "旧缓存场景书";
+  const legacyRaw = seedMixedBook(legacyRoot, legacyBook);
+  const legacyHarness = createHarness(legacyRoot);
+  const legacyChapters = legacyRaw.map((f) => ({ file: f.file, text: f.text + "\n" }));
+  const th = createHash("sha1")
+    .update(legacyChapters.slice().sort((a, b) => String(a.file).localeCompare(String(b.file))).map((c) => `${c.file}\u0000${c.text}`).join("\u0001"))
+    .digest("hex")
+    .slice(0, 16);
+  const strippedPerChapter = METRICS.computeBaseline(legacyChapters).perChapter.map(({ file, metrics }) => ({ file, metrics }));
+  const legacyFallbackCh2 = METRICS.classifyChapterScene({ metrics: strippedPerChapter[1].metrics });
+  assert.equal(legacyFallbackCh2.confidence, "low");
+  assert.notEqual(legacyFallbackCh2.band, "dialogue");
+
+  const cacheFile = join(legacyRoot, ".novel-writer", "analysis", `${legacyBook}-chapters-metrics.json`);
+  mkdirSync(dirname(cacheFile), { recursive: true });
+  writeFileSync(cacheFile, JSON.stringify({ th, perChapter: strippedPerChapter, ver: CORE.CACHE_VERSION }, null, 2), "utf8");
+  assert.equal(existsSync(DB.libraryDbPath(legacyRoot)), false, "前置条件：旧缓存兜底测试起点不得存在 cache.sqlite");
+
+  const legacyRes = await legacyHarness.defs.novel_style_check.execute({ book: legacyBook, chapter: "1", root: legacyRoot }, legacyHarness.exec);
+  assertOutputSchema(legacyHarness.defs.novel_style_check, legacyRes, "novel_style_check(legacy-json-fallback)");
+  assert.equal(legacyRes.metric.sceneBand.band, "dialogue");
+  assert.equal(legacyRes.metric.sceneBand.usedSceneBand, true, "剥掉 .scene 的旧 JSON 缓存必须回退补算并分组为 dialogue");
+  assert.equal(legacyRes.metric.sceneBand.peerCount, 3);
+
+  const afterLegacy = JSON.parse(readFileSync(cacheFile, "utf8"));
+  assert.ok(afterLegacy.perChapter.every((pc) => pc.scene === void 0), "应读取旧 JSON 缓存而非重写该 JSON 文件");
   });
 });
 
