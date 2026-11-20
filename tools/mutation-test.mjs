@@ -52,7 +52,7 @@ const MUTATIONS = [
   },
   {
     name: 'M-E 审计侧把词表截到 20（与开写包分叉）',
-    file: 'lib/index.js',
+    file: 'lib/tools/continuity.js',
     from: 'function collectStyleCandidates(styleRule, chapterTexts, singleChapter) {',
     to: 'function collectStyleCandidates(styleRule, chapterTexts, singleChapter) {\n  styleRule = { ...styleRule, bannedWords: styleRule.bannedWords.slice(0, 20) };',
     expectFail: ['章节审计报出'],

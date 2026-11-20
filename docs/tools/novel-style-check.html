@@ -18,7 +18,7 @@
 <meta name="twitter:title" content="novel_style_check — 风格自检｜dsh-novel-writer 技术文档">
 <meta name="twitter:description" content="novel_style_check 的实现细节：风格指纹 13 维向量的构造与余弦相似度分级，偏差清单的阈值，六维文笔基线「排除本章后现算」的口径与基线范围（按全书 / 按部分），原著锚段的选取与语义风格相似度的降级文案。">
 <script type="application/ld+json">{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"主页","item":"https://siweina.github.io/dsh-novel-writer/"},{"@type":"ListItem","position":2,"name":"技术文档","item":"https://siweina.github.io/dsh-novel-writer/tools/"},{"@type":"ListItem","position":3,"name":"novel_style_check","item":"https://siweina.github.io/dsh-novel-writer/tools/novel-style-check.html"}]}</script>
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_style_check — 风格自检｜dsh-novel-writer 技术文档","description":"novel_style_check 的实现细节：风格指纹 13 维向量的构造与余弦相似度分级，偏差清单的阈值，六维文笔基线「排除本章后现算」的口径与基线范围（按全书 / 按部分），原著锚段的选取与语义风格相似度的降级文案。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-style-check.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.4.2","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_style_check, dsh-novel-writer, MCP 工具文档"}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"TechArticle","headline":"novel_style_check — 风格自检｜dsh-novel-writer 技术文档","description":"novel_style_check 的实现细节：风格指纹 13 维向量的构造与余弦相似度分级，偏差清单的阈值，六维文笔基线「排除本章后现算」的口径与基线范围（按全书 / 按部分），原著锚段的选取与语义风格相似度的降级文案。","url":"https://siweina.github.io/dsh-novel-writer/tools/novel-style-check.html","inLanguage":"zh-CN","proficiencyLevel":"Expert","about":{"@type":"SoftwareApplication","name":"dsh-novel-writer","softwareVersion":"7.5.0","url":"https://siweina.github.io/dsh-novel-writer/"},"isPartOf":{"@type":"WebSite","name":"dsh-novel-writer 技术文档","url":"https://siweina.github.io/dsh-novel-writer/tools/"},"author":{"@type":"Person","name":"siweina","url":"https://github.com/siweina"},"keywords":"novel_style_check, dsh-novel-writer, MCP 工具文档"}</script>
 </head>
 <body class="docs">
 
@@ -33,6 +33,7 @@
   <main class="docs__main">
     <article class="doc">
       <h1>novel_style_check</h1>
+      <div class="note"><b>v7.5.0：</b>六维基线校验优先按<strong>场景分带</strong>对照——先用 <code>measureDialogueRatio</code> 与独立冲突信号 <code>measureConflictSignals</code>（冲突/打斗词密度与短句快节奏，与日常动词解耦）将目标章与基线章分为「对话文戏（<code>dialogue</code>）/ 动作冲突（<code>action</code>）/ 叙事过渡（<code>narrative</code>）」三类场景带；同带基线章达到 <strong>3 章</strong>（<code>MIN_SCENE_BAND_CHAPTERS</code>）时优先对照同带均值，不足 3 章自动回退全基线。结果挂在 <code>metric.sceneBand</code> 并在渲染输出标出。</div>
       <div class="note"><b>v6.5.5：</b>基线不再固定为全书——面板「风格基线」新增<strong>基线范围</strong>（<strong>按全书</strong> 默认，＝旧行为；<strong>按部分</strong> 只用勾选的章，<strong>按书存储</strong>）。<code>baselineScope</code> 的文案随选择变化，判定与容差规则不变；完整语义、小样本容差与回退披露见下文「3 · 基线范围与「排除本章」口径」。</div>
       <div class="note"><b>v6.1.0：</b>章节参数先精确匹配完整文件名，再匹配省略扩展名的文件名；同名多扩展名时必须提供完整文件名，明确指定却不存在的扩展名不会改读另一格式。</div>
       <p class="doc__lead">
@@ -64,14 +65,14 @@
           <tr><th><code>baselineFingerprint</code></th><td>string</td><td>基线指纹串，同格式，可直接肉眼对照</td></tr>
           <tr><th><code>baselineMode</code></th><td>string</td><td>基线范围档位（v6.5.5）：<code>all</code> = 按全书（默认） / <code>custom</code> = 按面板选中的部分章。<strong>回退发生后取值是 <code>all</code></strong>——要区分「本来就是按全书」与「回退」，读 <code>baselineScope</code> 文案里的后缀（按原因两种：「（自定义选择已失效，已回退全书）」/「（选中的章只有本章自身，不能作为自己的基线，已回退全书）」）</td></tr>
           <tr><th><code>semantic</code></th><td>object</td><td>必返对象。<code>enabled:true</code> 时含 <code>similarity</code> 与 <code>note</code>；不可用时仅 <code>enabled:false</code> 与说明文案</td></tr>
-          <tr><th><code>metric</code></th><td>object</td><td>六维对照。<code>enabled:true</code> 时含 <code>baseline</code> / <code>metrics</code> / <code>verdicts</code> / <code>outCount</code> / <code>skippedDims</code> / <code>summary</code>；不可用时仅 <code>enabled:false</code> 与 <code>note</code></td></tr>
+          <tr><th><code>metric</code></th><td>object</td><td>六维对照。<code>enabled:true</code> 时含 <code>baseline</code> / <code>metrics</code> / <code>verdicts</code> / <code>outCount</code> / <code>skippedDims</code> / <code>summary</code> 与 <code>sceneBand</code>（v7.5.0：<code>&#123; band, label, dialogueRatio, conflictDensity, usedSceneBand, peerCount, chapterCount, note &#125;</code>）；不可用时仅 <code>enabled:false</code> 与 <code>note</code></td></tr>
           <tr><th><code>fixAnchors</code></th><td>array</td><td>原著锚段，元素为 <code>{label, text}</code>，最多 3 条；锚包构建失败时缺省</td></tr>
           <tr><th><code>explicitness</code></th><td>object</td><td><strong>v6.9.0，仅非净化模式（<code>features.rawWriting</code>）开启时出现</strong>：<code>&#123; chapter:&#123;chars,total,per1000,dialogueRatio&#125;, baseline:&#123;…&#125;, ratio, verdict, items:[&#123;id,label,count,samples[]&#125;], note &#125;</code>。<code>per1000</code> = 「把场面绕过去」的写法密度（处/千字：省略号整段 / 明示跳过 / 时间跳 / 代称替代 / 跳出场景的评论 / 英文淡化），<strong>纯规则、零 token、启发式</strong>；<code>verdict</code> ∈ <code>clean</code>（无淡化写法）/ <code>new</code>（基线为 0，本章新增）/ <code>similar</code> / <code>softer</code> / <code>much-softer</code> / <code>more-explicit</code>；<code>ratio</code> 在基线为 0 时为 <code>null</code>（不编造比值）。它衡量的是「有没有被绕过去」，<strong>不是质量评分</strong>；开关关闭时该键不存在</td></tr>
           <tr><th><code>slop</code></th><td>object</td><td><strong>v7.0.0，仅当命中数 &gt; 0 时出现</strong>（<code>total = 0</code> 时整键省略，与其它「有就返回」的键同一约定）：<code>&#123; total, densityPer1000, topCategories, byCategory &#125;</code>。<code>total</code> = 同一行内重叠命中合并后的<strong>处数</strong>；<code>densityPer1000</code> = 处数 / 千字（分母为本章 <code>text.length</code>，保留 1 位小数）；<code>topCategories</code> = 命中最多的<strong>前 3 个类别英文键</strong>（取值见 <code>SLOP_CATEGORIES</code>，如 <code>stat_numeric</code>；同频按类别展示顺序，<strong>不含命中原文</strong>）；<code>byCategory</code> = 8 个类别的计数（值为 0 的类别也在）。<strong>它只是一句摘要</strong>：不参与 <code>verdict</code> / <code>similarity</code> / <code>diffs</code>，也不产出待办；读设定表或扫描抛错时整键省略，主流程照常返回</td></tr>
           <tr><th><code>advice</code></th><td>string</td><td>面向生成端的建议文本，已与六维判定统一口径。<strong>v5.1.0 起不再要求「逐句对比修正」</strong>：改为「<strong>先判断这是不是有意为之</strong>（章节类型不同本来就会偏离全书均值）；确实跑偏时才对照 <code>fixAnchors</code> 只调整那几处，<strong>不要整章重写，也不要为对齐数字改文</strong>」</td></tr>
         </tbody>
       </table>
-      <p>渲染层（<code>render</code>）依次输出：检查章节、对比基线、风格相似度百分比与中文分级、偏差清单（无偏差时写「偏差: 无明显偏差」）、语义对比备注、原著锚段（<strong>抬头已改为条件式</strong>：「若确实跑偏（偏离明显或读起来别扭），可对照这几段原著的写法只调整那几处，不要整章重写」）、本章指纹与基线指纹、文笔六维逐维「本章 v vs 基线 μ（±%，marks）」、<code>advice</code>。六维行的状态符号为 <code>⚠ 出带</code> / <code>△ 提醒</code> / <code>✓ 在带</code>；<code>metric.enabled === false</code> 时该段只打印 <code>note</code>。</p>
+      <p>渲染层（<code>render</code>）依次输出：检查章节、对比基线、风格相似度百分比与中文分级、偏差清单（无偏差时写「偏差: 无明显偏差」）、语义对比备注、原著锚段（<strong>抬头已改为条件式</strong>：「若确实跑偏（偏离明显或读起来别扭），可对照这几段原著的写法只调整那几处，不要整章重写」）、本章指纹与基线指纹、文笔六维（v7.5.0 起标题按 <code>metric.sceneBand.usedSceneBand</code> 写明「μ=同类场景带基线」或「μ=全书其他章基线」，并在存在 <code>metric.sceneBand</code> 时单起一行标出「<code>场景带识别：&lt;label&gt;（&lt;note&gt;）</code>」；随后逐维输出「本章 v vs 基线 μ（±%，marks）」）、<code>advice</code>。六维行的状态符号为 <code>⚠ 出带</code> / <code>△ 提醒</code> / <code>✓ 在带</code>；<code>metric.enabled === false</code> 时该段只打印 <code>note</code>。</p>
       <div class="note">
         <b>v7.0.0：<code>slop</code> 与改稿台的「AI套话」同源、不同级。</b>两处用的是同一张表（<span class="src">lib/lexicons/slop.js</span> 的 <code>SLOP_RULES</code> / <code>SLOP_CATEGORIES</code>，8 类结构片段）与同一个豁免入口 <code>buildSlopExemptions</code>，参照集也同为<strong>基线章文本</strong>（按面板「基线范围」筛出、已排除目标章的那些章），故同一章在两处的类别口径一致。级别不同：本工具只在渲染文本里多一行（位置在六维对照 / 直白度对照之后、<code>【建议】</code>之前）「陈词套话扫描：命中 N 处（D 处/千字，主要为：&lt;类别中文名&gt;）——如需逐行定位可运行 novel_fix_plan」，<strong>不改判定、不进 <code>verdict</code>、不产出待办</strong>；要行号区间与改写方向，用 <a href="novel-fix-plan.html">novel_fix_plan</a>。
         <br><b>豁免口径与数字可比性。</b>题材静音取<strong>设定表 <code>worldview</code> 条目的 <code>name</code> / <code>description</code> / <code>basis</code> / <code>notes</code></strong>，命中 <code>SYSTEM_GENRE_RE</code>（<code>系统|无限|网游|数据面板|属性面板|游戏异界|数据流|面板流</code>）时整类静音 <code>stat_numeric</code>；参照集里「≥ 0.5 处/千字且 ≥ 2 次」的 pattern 视为本书习惯写法并逐条豁免（豁免细节与边界修复见<a href="novel-fix-plan.html">改稿台</a>页的对应说明）。<strong>豁免只会让 <code>total</code> 变小</strong>：与豁免前（或旧版本）的数字<strong>不可直接比</strong>，也不要把「数字变小」读成「套话变少了」——要比较就用同一版本重扫两章。
@@ -124,12 +125,23 @@ reported  = resolveBaselineScope(perCh, 目标章)     ← 第二次（v6.5.5，
           这样风格自检与改稿台报的是同一个数字；perCh 为空时保留第一次的章池口径）
 
 excluding   = scoped.items（已排除目标章）；正文 &lt; 40 字的章不参与测量
-b           = computeBaselineFromPerChapter(excluding)     ← 判定用基线（μ±σ）
-tol         = buildTolerance(b, excluding.length, null, styleTolerance)
+enriched    = enrichPerChapterScenes(excluding, textByFile) ← v7.5.0：补齐缺 .scene 的老缓存
+scenePick   = selectSceneBaseline(&#123; text: 目标章, metrics: 目标章指标 &#125;, enriched)
+        · 场景分类（classifyChapterScene）：
+          - dialogue（对话文戏）：dialogueRatio ≥ 0.34，或 (dialogueRatio ≥ 0.25 且 conflictDensity &lt; 15)
+          - action  （动作冲突）：conflictDensity ≥ 40，或 (conflictDensity ≥ 20 且 fastPaced)
+          - narrative（叙事过渡）：其余情形（老缓存仅传 metrics 无正文时走低干扰启发式：actionDensity ≥ 210 才推定 action）
+        · 同带样本 ≥ 3 章（MIN_SCENE_BAND_CHAPTERS）→ usedSceneBand = true，按同带基线对照
+        · 同带样本 &lt; 3 章 → usedSceneBand = false，自动回退全基线（enriched 全部章）
+        门槛口径：这里的「同带样本」<b>不含本章</b>——本章不能当自己的基线，所以同带恰好 3 章的书不会启用分带，
+        需要同带 ≥ 4 章（本章 + 3 章对照）；命中与回退的 <code>note</code> 都会写明「对照样本 / 不含本章」。
+b           = scenePick.baseline                             ← 判定用基线（μ±σ）
+tol         = buildTolerance(b, scenePick.items.length, null, styleTolerance)
         ← recTol 取自 b 自己（= 作者自身章节波动的 1.5σ）
-        ← excluding.length &lt; 3 时每维下限抬到 25%（小样本）
+        ← scenePick.items.length &lt; 3 时每维下限抬到 25%（小样本）
         ← 用户自定义 styleTolerance[k] 的 low/high（均为 number）→ 该维改用自定义值
 judge = judgeAgainstBaseline(measureStyleMetrics(目标章).metrics, b, tol)</div>
+      <p><strong>场景分带基准（v7.5.0）</strong>：纯对话交锋章与高密度打斗章的句法、修饰与动作密度天然不同，拿全书平均去卡单章容易把正常的场景切换误报为偏离。<code>measureDialogueRatio</code> 单遍线性扫描成对中文/英文引号（<code>“…”</code> / <code>「…」</code> / <code>『…』</code> / <code>"…"</code>）内的非空白字符占比；<code>measureConflictSignals</code> 使用与日常动词完全解耦的高强度冲突/打斗词表及短句快节奏（<code>fastPaced</code>）指标，避免把含大量日常动作（站/看/坐/走）的平淡叙事章误归入动作带。据此将目标章与基线章划入「对话文戏 / 动作冲突 / 叙事过渡」三带之一；只有在同带至少有 <strong>3 章</strong>（<code>MIN_SCENE_BAND_CHAPTERS = 3</code>）可用基线时才启用同带基线，否则自动回退到排除目标章后的全基线，并将选中带、是否生效（<code>usedSceneBand</code>）、同带章数（<code>peerCount</code>）、总基线章数（<code>chapterCount</code>）、冲突词密度（<code>conflictDensity</code>）与说明（<code>note</code>）统一挂在 <code>metric.sceneBand</code> 返回及渲染。</p>
       <p><code>buildTolerance</code> 是<strong>全插件唯一实现</strong>（本工具与 <a href="novel-fix-plan.html">novel_fix_plan</a>、<a href="novel-chapter-brief.html">novel_chapter_brief</a> 共用）——若两条路径口径不同，同一章会出现「改稿台说有问题、开写包说没问题」这种互相矛盾的结论，<strong>比单条结论错更伤信任</strong>。用户自定义容差只覆盖显式给出的维度，未设置的维度继续沿用该基线自己的推荐值；<code>recTol</code> 缺失或非有限值时回退 15。<strong>文档更正：</strong>本页旧版此处写的是「容差取<strong>含</strong>目标章的全书推荐值」，而实现自 v6.2.0 起已统一走 <code>buildTolerance(排除本章后的基线)</code>（随后再由基线范围决定候选语料），旧描述不再成立。六维的定义、μ±σ 公式与 out / warn / ok 判据与 <code>novel_style_report</code> 完全同源，见<a href="novel-style-report.html">该页</a>「六个维度的定义与公式」与「基线带 μ±σ 的计算」两节。</p>
       <div class="note">
         <b>v6.5.5：基线范围（按全书 / 按部分）——「以哪些章为基准」由作者定。</b>缘起是一个真实诉求（<a href="https://github.com/siweina/dsh-novel-writer/issues/1">issue #1「风格漂移」</a>）：模型续写每章只参考上一章，于是<strong>从第 2 章续写起它参考的就是自己的产物</strong>；而基线原本从<strong>全书</strong>取样（含 AI 写的章），<strong>锚点自己也在漂</strong>——书越长 AI 占比越高，它既测不出对原著的偏移（全书是一起漂的），锚段也逐代变成 AI 自己的文风。本工具<strong>不判定「你是否漂移了」</strong>（文风本就允许演变，那不可判定），只回答<strong>「相对你指定的标杆，这一章偏了多少」</strong>。<br>
@@ -194,12 +206,13 @@ similarity = round(semSim × 1000) / 1000</div>
 
       <h2>源码位置</h2>
       <ul>
-        <li><span class="src">lib/index.js</span> —— 工具注册与执行（<code>registerNovelStyleCheck</code>，第 899 行起；<code>execute</code> 自第 989 行）、渲染（第 947 行）、语义门控 <code>semanticGate</code>（第 109 行）</li>
-        <li><span class="src">lib/analysis.js</span> —— <code>buildFingerprint</code>（第 1600 行）、<code>fingerprintSimilarity</code>（第 1607 行）、<code>styleDiffs</code>（第 1634 行）、<code>analyzeText</code>（第 1174 行）</li>
-        <li><span class="src">lib/style-metrics.js</span> —— <code>measureStyleMetrics</code>（第 242 行）、<code>computeBaselineFromPerChapter</code>（第 399 行）、<code>judgeAgainstBaseline</code>（第 460 行）、<code>METRIC_ORDER</code>（第 394 行）</li>
-        <li><span class="src">lib/core.js</span> —— <code>metricChaptersCached</code>（第 1864 行）、<code>bookAnalysisCached</code>（第 1881 行）、<code>buildStyleAnchorPackage</code>（第 2071 行）、<code>cleanOutput</code>（第 2308 行）、<code>resolveBaselineScope</code>（v6.5.5 新增，基线范围的<strong>唯一裁决点</strong>，配套 <code>readBaselineScope</code> / <code>writeBaselineScope</code> / <code>normalizeBaselineScope</code> 与 <code>buildTolerance</code>；行号随版本变动，请按函数名检索）</li>
-        <li><span class="src">lib/embedding.js</span> —— <code>chunkText</code>（第 520 行）、<code>buildIndexIncremental</code>（第 463 行）、<code>loadIndexMeta</code>（第 440 行）、<code>saveIndex</code>（第 408 行）、<code>fingerprint</code>（第 338 行）、<code>cosine</code>（第 179 行）</li>
-        <li><span class="src">mcp/server.mjs</span> —— MCP 形态下的 <code>--root</code> 越界拒绝与回退（<code>resolveLibraryRoot</code> 第 130 行、参数补全与校验第 259~281 行）</li>
+        <li><span class="src">lib/tools/style.js</span> —— 工具注册、执行与渲染（<code>registerNovelStyleCheck</code>）</li>
+        <li><span class="src">lib/index.js</span> —— 插件入口与语义门控 <code>semanticGate</code> 等装配</li>
+        <li><span class="src">lib/analysis.js</span> —— <code>buildFingerprint</code>、<code>fingerprintSimilarity</code>、<code>styleDiffs</code>、<code>analyzeText</code></li>
+        <li><span class="src">lib/style-metrics.js</span> —— <code>measureStyleMetrics</code>、<code>measureDialogueRatio</code>、<code>measureConflictSignals</code>、<code>classifyChapterScene</code>、<code>enrichPerChapterScenes</code>、<code>selectSceneBaseline</code>、<code>computeBaselineFromPerChapter</code>、<code>judgeAgainstBaseline</code>、<code>SCENE_BANDS</code> / <code>MIN_SCENE_BAND_CHAPTERS</code> / <code>METRIC_ORDER</code></li>
+        <li><span class="src">lib/core.js</span> / <span class="src">lib/core/domain.js</span> —— <code>metricChaptersCached</code>、<code>bookAnalysisCached</code>、<code>buildStyleAnchorPackage</code>、<code>cleanOutput</code>、<code>resolveBaselineScope</code>（v6.5.5 新增，基线范围的<strong>唯一裁决点</strong>，配套 <code>readBaselineScope</code> / <code>writeBaselineScope</code> / <code>normalizeBaselineScope</code> 与 <code>buildTolerance</code>）</li>
+        <li><span class="src">lib/embedding.js</span> —— <code>chunkText</code>、<code>buildIndexIncremental</code>、<code>loadIndexMeta</code>、<code>saveIndex</code>、<code>fingerprint</code>、<code>cosine</code></li>
+        <li><span class="src">mcp/server.mjs</span> —— MCP 形态下的 <code>--root</code> 越界拒绝与回退（<code>resolveLibraryRoot</code>、参数补全与校验）</li>
       </ul>
     </article>
 

@@ -1,0 +1,25 @@
+{
+  "id": "mystery-thriller",
+  "name": "悬疑推理",
+  "description": "悬疑/推理/克苏鲁/规则怪谈题材基准：允许理性分析与调查取证语汇，兼容现代与哥特调查场景",
+  "baseCulture": "modern",
+  "aliases": ["mystery", "thriller", "悬疑", "推理", "克苏鲁", "规则怪谈", "刑侦"],
+  "bannedWords": [],
+  "recommended": {},
+  "allowWords": [
+    "调查", "线索", "现场", "嫌疑", "证词", "尸检", "侦探",
+    "教堂", "古堡", "修道院", "庄园", "礼拜", "修士"
+  ],
+  "speechStyle": {
+    "titleGuideline": "悬疑/推理/调查语境：可用警衔与专业称谓（警官/法医/侦探/调查员/博士/先生/女士）；允许理性与调查语汇",
+    "honorBad": ["奴家", "草民", "微臣", "本座", "本尊"],
+    "honorGood": {
+      "草民": "我",
+      "本座": "我"
+    },
+    "ritualBadPatterns": [],
+    "ritualGoodNote": "允许理性推演、刑侦调查取证、心理侧写及克苏鲁/规则怪谈仪式描写，不误伤调查类词汇",
+    "toneGuideline": "冷静、克制、重细节观察与逻辑推演；保留理性调查表达"
+  },
+  "slopMuteCategories": []
+}

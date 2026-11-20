@@ -1498,30 +1498,38 @@ await (async function v500PostAuditFixes() {
   console.log("【#53】summary 无章号兜底排序 ✓");
 }
 
-// 【#71】lib/index.js 头部的 6 个死导入必须清掉（只删 import，不删定义——其它模块/测试仍在用）
+// 【#71】lib/index.js 与 lib/tools/*.js 头部的 6 个死导入必须清掉（只删 import，不删定义——其它模块/测试仍在用）
+const readEntryImportText = () => {
+  const toolDir = new URL("../lib/tools/", import.meta.url);
+  const files = ["../lib/index.js", ...readdirSync(toolDir).filter((n) => n.endsWith(".js")).sort().map((n) => "../lib/tools/" + n)];
+  return files.map((rel) => {
+    const raw = readFileSync(new URL(rel, import.meta.url), "utf8");
+    const noComments = raw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
+    const stmts = noComments.match(/^\s*import\s+[\s\S]*?\bfrom\s+["'][^"']+["']\s*;?|^\s*import\s+["'][^"']+["']\s*;?/gm) ?? [];
+    return stmts.join("\n");
+  }).join("\n");
+};
 {
-  const src = readFileSync(new URL("../lib/index.js", import.meta.url), "utf8");
-  // 只看 import 语句（注释里会保留"删了哪几个"的说明，不能把说明文字当成导入）
-  const importLines = src.split("\n").filter((line) => /^\s*import\b/.test(line)).join("\n");
+  const importLines = readEntryImportText();
   for (const dead of ["readBaselineScope", "writeBaselineScope", "normalizeBaselineScope", "BASELINE_SCOPE_MODES", "readLogEvents", "logStats"]) {
-    if (new RegExp("\\b" + dead + "\\b").test(importLines)) throw new Error("lib/index.js 头部仍导入零引用死符号: " + dead);
+    if (new RegExp("\\b" + dead + "\\b").test(importLines)) throw new Error("lib/index.js 或 lib/tools/*.js 头部仍导入零引用死符号: " + dead);
   }
-  console.log("【#71】index.js 6 个死导入已清 ✓");
+  console.log("【#71】index.js 与 tools/*.js 6 个死导入已清 ✓");
 }
 
 // v7.3.4（④-① / #22）：两处"曾经真的在用、后来变成死代码"的收口——都做静态断言，
 // 因为它们的危害恰恰是"没人再引用却还留着"，只有对着源码才能钉住。
 {
-  const idxSrc = readFileSync(new URL("../lib/index.js", import.meta.url), "utf8");
-  const idxImports = idxSrc.split("\n").filter((line) => /^\s*import\b/.test(line)).join("\n");
+  const idxImports = readEntryImportText();
   if (/\bBODY_TOO_LARGE\b/.test(idxImports)) {
-    throw new Error("④-① lib/index.js 仍导入 BODY_TOO_LARGE（7.3.3 删掉路由包装后它已无任何引用）");
+    throw new Error("④-① lib/index.js 或 lib/tools/*.js 仍导入 BODY_TOO_LARGE（7.3.3 删掉路由包装后它已无任何引用）");
   }
   const coreSrc = readFileSync(new URL("../lib/core.js", import.meta.url), "utf8");
-  if (/export\s+const\s+BODY_TOO_LARGE\b/.test(coreSrc)) {
-    throw new Error("④-① lib/core.js 不应再 export BODY_TOO_LARGE（无外部消费者；文件内部仍可用）");
+  const httpSrc = readFileSync(new URL("../lib/core/http.js", import.meta.url), "utf8");
+  if (/export\s+const\s+BODY_TOO_LARGE\b/.test(coreSrc) || /export\s+const\s+BODY_TOO_LARGE\b/.test(httpSrc)) {
+    throw new Error("④-① lib/core.js 与 lib/core/http.js 不应再 export BODY_TOO_LARGE（无外部消费者；文件内部仍可用）");
   }
-  if (!/\bconst\s+BODY_TOO_LARGE\b/.test(coreSrc)) {
+  if (!/\bconst\s+BODY_TOO_LARGE\b/.test(httpSrc)) {
     throw new Error("④-① BODY_TOO_LARGE 的实现不能被删（readRequestBody 与两条路由内部仍在用）");
   }
   const mcpSrc = readFileSync(new URL("../mcp/server.mjs", import.meta.url), "utf8");

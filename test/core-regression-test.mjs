@@ -493,7 +493,7 @@ test("implicit 三比率之和恒 ≤ 1（与 analysis.js 同一派生口径）"
   // 具体现场：旧版这里就是 1.01（4/6、1/6、1/6 各自取整）
   assert.equal(round2(round2(4 / 6) + round2(1 / 6) + Math.max(0, round2(1 - round2(4 / 6) - round2(1 / 6)))), 1);
   // 源码级核对：派生式必须还在（防回退成三项独立取整）
-  const src = await readFile(new URL("../lib/core.js", import.meta.url), "utf8");
+  const src = await readFile(new URL("../lib/core/domain.js", import.meta.url), "utf8");
   assert.match(src, /ambiguousRatio = Math\.max\(0, Math\.round\(\(1 - negative - positive\)/);
   assert.match(src, /positive = Math\.max\(0, Math\.round\(\(1 - negative\)/);
 });

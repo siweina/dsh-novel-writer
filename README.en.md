@@ -21,9 +21,9 @@ Built for **DeepSeek Harness (DSH)** (with a unified sidebar & main-column UI pa
 ## Core Capabilities
 
 - **Pre-writing context assembly (`novel_chapter_brief` & creation files)**: gathers 16 inputs in one read-only call — previous-chapter hand-off, hook, chapter outline direction, relevant character cards, open plot threads with chapter spans, worldview wording/banned-word rules, required lexicon, six-metric style baseline, reference passages, and writing checklist — reporting anything missing in `degraded`. Paired with `novel_outline`, five settings tables (`novel_settings`), and the book + global required lexicon (`novel_lexicon`).
-- **Quantified style anti-drift (6-metric baseline & style portrait)**: tracks syntactic complexity, modifier density, abstraction, action density, hedging, and gap index (`μ±σ`), alongside 9 sentence patterns, emotion quantification, and a 12-axis vibe spectrum. Supports per-book yardstick chapter selection (e.g. only chapters you wrote yourself) so AI continuations cannot drag the baseline, using per-metric tolerances plus absolute-magnitude gates.
+- **Quantified style anti-drift (6-metric baseline & scene-band comparison)**: tracks syntactic complexity, modifier density, abstraction, action density, hedging, and gap index (`μ±σ`), alongside 9 sentence patterns, emotion quantification, and a 12-axis vibe spectrum. Supports **scene-band baseline comparison** (`dialogue` / `action` / `narrative` bands classified via quote ratio plus dedicated conflict/pacing signals decoupled from everyday verbs, comparing against same-band peers when ≥ 3 chapters exist and automatically falling back to the full baseline otherwise) plus per-book yardstick chapter selection so AI continuations cannot drag the baseline.
 - **Prioritised revision (`novel_fix_plan` & strict reconciliation)**: converts diagnostics into to-dos sorted by severity → effort → line (capped at 12 by default), with line-anchored quotes, current vs. target band, rewrite direction, and original reference anchors (direction only, never ghostwrites prose), plus `plan` / `verify` / `mark` re-checking.
-- **Cross-chapter health (`novel_plot` graph, 3 sentinels & local semantic search)**: maps plot-thread spans, consecutive character absences, largest thread gaps, timeline order, and outline drift; `novel_continuity_check` adds bridge, character OOC, and outline-drift sentinels; `novel_semantic_search` searches semantically related passages locally offline.
+- **External JSON genre packs & cross-chapter health (5 built-in + hot-reload / graph / semantic search)**: ships 5 built-in JSON genre packs (`western-fantasy`, `eastern-xianxia`, `modern-urban`, `mystery-thriller`, `scifi-cyberpunk`) and hot-reloads custom packs from `<library-root>/.novel-writer/packs/*.json` (up to 2-level `extends`, ReDoS validation, and symlink escape guards), inspectable via `novel_settings` (`action: "packs"` / `worldview.pack`) to coordinate banned words and slop exemptions. `novel_plot { action: "graph" }`, `novel_continuity_check`, and `novel_semantic_search` cover cross-chapter structure, 3 sentinels, and offline passage search.
 - **Unified UI panel & safe maintenance (draft mirror / book cleanup / redacted diagnostics)**: the DSH panel centralises global/tool/feature toggles, tolerances, baseline scopes, scene-scoped prompts (`general` / `writing` / `revising` / `auditing` / `setup` + lean workflow), and report history; includes threshold-paced live-chat draft mirroring (`novel_draft`), unpurified `rawWriting` mode, 13-location per-book cleanup with recycle-bin restore (`novel_delete_book`, prefix-boundary matched), and share-safe redacted diagnostics (`novel_diagnose`).
 
 > **Scope note for non-Chinese users**: lexicons, pragmatics rules, sentence-pattern heuristics, report text, and the bundled semantic model are tuned specifically for Chinese fiction; non-Chinese prose is not supported.
@@ -86,16 +86,16 @@ Place chapter files inside `novels/<book>/` (e.g. `01.md`, `02.md`) and prompt i
 | | `novel_new_chapter` | Create a new chapter file with an attached baseline summary |
 | | `novel_import` | Batch scan, group by book/chapter, and import manuscripts |
 | | `novel_draft` | Append-only draft mirror for *Live chat writing* paced by a char threshold |
-| **Brief & revision** | `novel_chapter_brief` | Read-only chapter brief gathering 16 inputs before writing |
-| | `novel_fix_plan` | Priority-ordered revision to-do list with line anchors & 3-state verification |
+| **Brief & revision** | `novel_chapter_brief` | Read-only chapter brief gathering 16 inputs before writing (with scene reference bands & genre-pack linkage) |
+| | `novel_fix_plan` | Priority-ordered revision to-do list using scene-band baselines & genre-pack slop exemptions (`plan` / `verify` / `mark`) |
 | | `novel_outline` | Maintain the five creation markdown files (bible / characters / outline / hooks / status) |
 | | `novel_summary` | Read and write per-chapter summaries for long-form continuity |
-| **Style & semantics** | `novel_style_report` | Six-metric baseline, lexicon, genre, emotion quantification & 12-axis vibe spectrum |
-| | `novel_style_check` | Compare a chapter against the selected baseline (rule + semantic + fix anchors) |
+| **Style & semantics** | `novel_style_report` | Six-metric baseline, per-scene reference bands, lexicon, genre, emotion quantification & 12-axis vibe spectrum |
+| | `novel_style_check` | Compare a chapter against scene-band or selected baseline (rule + semantic + fix anchors) |
 | | `novel_sentence_analysis` | 9 sentence patterns, purified emotion curve, rhythm fingerprint & guidance |
 | | `novel_keywords` | Extract high-frequency bigrams, trigrams, name candidates & English terms |
 | | `novel_semantic_search` | Natural-language passage search using local ONNX embeddings |
-| **Settings & continuity** | `novel_settings` | Manage character / location / item / timeline / worldview tables & culture detection |
+| **Settings & continuity** | `novel_settings` | Manage 5 settings tables, culture detection, and `packs` / `worldview.pack` genre packs |
 | | `novel_lexicon` | Book + global required lexicon registry, brief injection & draft wording audit |
 | | `novel_plot` | Track foreshadowing threads and render the cross-chapter structure graph |
 | | `novel_continuity_check` | Continuity audit with bridge, character OOC & outline-drift sentinels |

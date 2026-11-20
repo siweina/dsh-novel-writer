@@ -57,10 +57,12 @@ for (const name of ['package.json', 'server.json', 'package-lock.json']) {
 }
 
 // 工具数守卫：用户可见文案（README / MCP 元数据 / 面板副标题）里的数字此前无人核对，
-// 于是 ALL_TOOLS 已是 20、文案却长期停在 18。这里以 lib/core.js 的 ALL_TOOLS 为单一事实源
-// 做一致性校验，新增工具时改一处即可，文案漂移会被挡在这里。
+// 于是 ALL_TOOLS 已是 20、文案却长期停在 18。这里同时核对 lib/core.js 的 ALL_TOOLS 与
+// lib/manifest.js 的声明式清单，确保运行入口与清单单一事实源永不漂移。
+const { ALL_TOOLS: MANIFEST_TOOLS } = await import(new URL('../lib/manifest.js', import.meta.url).href);
 const { ALL_TOOLS } = await import(new URL('../lib/core.js', import.meta.url).href);
 assert.equal(ALL_TOOLS.length, 22, `ALL_TOOLS 数量（lib/core.js 声明 ${ALL_TOOLS.length} 个；用户可见文案写的是 22 个）`);
+assert.deepEqual([...ALL_TOOLS], [...MANIFEST_TOOLS], 'lib/core.js 的 ALL_TOOLS 与 lib/manifest.js 的声明式清单不一致');
 
 const pkg = JSON.parse(read('package.json'));
 const lock = JSON.parse(read('package-lock.json'));

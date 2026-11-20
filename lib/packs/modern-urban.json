@@ -1,0 +1,24 @@
+{
+  "id": "modern-urban",
+  "name": "现代都市",
+  "description": "现代/都市日常题材基准：清零古风与西幻错位假警报，高错位古风/市井禁词可按需在 worldview.bannedWords 自定义",
+  "baseCulture": "modern",
+  "aliases": ["modern", "urban", "现代", "都市", "现代都市", "都市日常"],
+  "bannedWords": [],
+  "recommended": {},
+  "allowWords": [],
+  "speechStyle": {
+    "titleGuideline": "现代日常称谓：按关系或职业称先生/女士/老师/同学/总/全名；不使用古代官制或西幻贵族称谓",
+    "honorBad": ["奴家", "草民", "微臣", "本座", "本尊", "下官"],
+    "honorGood": {
+      "草民": "我",
+      "微臣": "我",
+      "本座": "我",
+      "下官": "我"
+    },
+    "ritualBadPatterns": [],
+    "ritualGoodNote": "现代都市基准已清零古风/西幻错位假警报；若需拦截现代市井或跨题材高错位禁词（如客栈/衙门/骑士/银两），可按需在 worldview.bannedWords 自定义",
+    "toneGuideline": "现代自然口语或书面表达；避免脱离语境的文言客套或欧式中世纪骑士腔"
+  },
+  "slopMuteCategories": []
+}

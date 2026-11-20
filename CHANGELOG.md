@@ -14,6 +14,7 @@
 
 | 版本 | 日期 | 摘要 |
 | --- | --- | --- |
+| 7.5.0 | 2026-11-19 | 完成宿主底座模块化重构与「场景分带基线 + 外置题材包」两项写作能力升级：新增零依赖清单单一事实源 `lib/manifest.js`，将 `lib/core.js` 拆分为 DAG 四层子模块并通过 barrel 透传，将 `lib/index.js` 工具实现拆至 `lib/tools/*` 七模块（`lib/client.js` 与 22 工具总数不变）；新增对话/动作/叙事三类场景分带基线对照，并上线 5 套内置 + `.novel-writer/packs/*.json` 热加载外置 JSON 题材规则包及 `novel_settings` `packs` 操作；同步技术文档与第 40/41 套回归测试 |
 | 7.4.2 | 2026-11-19 | 补齐宿主侧与 MCP 侧按需工具隐藏与预设过滤：DSH 宿主通过 `register(def, { when })` 在模型步动态省略已关闭工具、系统提示追加防悬空固定提醒，侧栏面板对纯工具开关加入 `350ms` 静默防抖合并与卸载自动 flush；MCP 服务器支持 `tools/list` 按 `state.json` 动态过滤及五档 `--preset` 预设；同步补齐 `novel_sentence_config` 全链路防死锁与第 39 套回归测试 |
 | 7.4.1 | 2026-11-19 | 提示词与工具契约全局瘦身＋指令冲突清理：清除系统提示词跨题材欧式禁词例句与骨架/量化矛盾指令、`SKILL.md`（17,977→4,367 字）与 22 工具 schema/描述（21,940→14,933 字）减负，同步精简重构中英文 `README` 并补齐防回退测试守卫 |
 | 7.4.0 | 2026-11-18 | 按 78 条独立核验源码审计清单全仓整修：回收站畸形清单保底与删书防越界/Windows 大小写对齐、短章基线回退全书、站桩感知词剥离、单换行向量行号、ReDoS 正则拦截/放行与 MCP/Web 面板竞态清理；工具数仍 22，新增第 38 套回归测试 |
@@ -83,6 +84,129 @@
 | 0.2.0 | 2026-08-16 | 章节库管理：列出作品、查看章节、按章阅读，全程在对话里完成 |
 
 ---
+
+## [7.5.0] - 2026-11-19（2026-11-20 修订，含 7.4.1 / 7.4.2 累计变更）
+
+从 `7.4.1` 到 `7.5.0` 的三次连续迭代围绕三条主线展开：**先做静态提示词与 Schema 减负（`7.4.1`），再补齐运行时按需工具隐藏与防抖缓存（`7.4.2`），最后完成后端底座模块化拆分并落地「场景分带基线」与「外置 JSON 题材规则包」（`7.5.0`）**。三次升级全程保持 `22` 个工具数量不变，存量书库与外部调用契约均向后兼容，可零迁移平滑升级。
+
+### 版本演进总览
+
+| 版本 | 日期 | 核心定位 | 主要变化 | 测试与兼容 |
+| --- | --- | --- | --- | --- |
+| **v7.4.1** | 2026-11-19 | 提示词与契约静态瘦身 | 消除系统提示词跨题材污染与打架指令；`SKILL.md` 由 `17,977` 字压至 `4,367` 字；22 工具 Schema 序列化由 `21,940` 字符压至 `14,933` 字符（`-31.94%`）；重构精简中英文 `README`；新增 `D4` 防回退守卫 | 38 套测试全部通过；22 个工具功能与测量口径零变化 |
+| **v7.4.2** | 2026-11-19 | 运行时按需隐藏与预设过滤 | DSH 宿主端按模型步挂 `{ when }` 省略已关闭工具（含只读回退、fail-open 快照缓存、`novel_sentence_config` 防死锁与系统提示防悬空）；侧栏面板纯工具开关 `350ms` 防抖合并与卸载自动 flush；MCP 服务器 `tools/list` 动态裁剪并支持五档 `--preset` 预设 | 新增第 39 套回归测试 `tool-visibility-test.mjs`（18 项断言）与 `client-test.mjs` 防抖用例；39 套测试全部通过 |
+| **v7.5.0** | 2026-11-19（2026-11-20 修订） | 底座模块化重构 + 场景分带 + 外置题材包 | 新增单源清单 `lib/manifest.js`，`lib/core.js` 拆分为 DAG 四层子模块、`lib/index.js` 工具实现拆为 `lib/tools/*` 七模块（`lib/client.js` 不变）；新增对话/动作/叙事三类场景分带基线（独立冲突信号 `measureConflictSignals` 与短句节奏判定，同带 `MIN_SCENE_BAND_CHAPTERS = 3` 章门槛）；上线 5 套内置 + `.novel-writer/packs/*.json` 热加载题材包及 `rejectedPatterns`/`warnings`/`novel_diagnose` 告警披露 | 新增第 40 / 41 套回归测试 `scene-baseline-test.mjs` 与 `genre-packs-test.mjs`；全量 41 套测试与 5/5 变异测试全部通过 |
+
+---
+
+### v7.4.1 - 2026-11-19
+
+围绕「卸载无效上下文税、清理互相打架的历史指令」对系统提示词、技能手册、开写包清单、22 工具 Schema 描述与中英文 README 完成全局瘦身重构；22 个工具功能与分析/测量口径保持不变，测试套件为 38 套，无需迁移步骤。
+
+#### 提示词体系与技能手册瘦身（消除指令冲突与跨题材污染）
+
+- **系统提示词去重并清理跨题材/矛盾指令（`lib/prompts.js`）**：
+  - 修复 `WORKFLOW_TEXT`（`full + general`）长期与 `SCENE_WRITING` / `LEAN_TEXT` / `novel_chapter_brief` 打架的规则，明确统一为「`anchors` 仅用来校准语感，不要照 `skeletons` 造句或套句式模板；数字基线只做事后校验，不翻译成写作规则」。
+  - 删除全局 `SCENE_WRITING` 与 `SCENE_REVISING` 中写死的欧式中世纪五路禁词例句（`Miss+名 / 掌柜 / 客栈 / 衙门 / 银子 / 干粮 / 火折子 / 点蜡烛 / 烧香`），改为题材中立的按书指针（按 `novel_chapter_brief` 返回的 `worldview` 与 `lexicon` 执行），消除对现代/古风题材的「粉红大象效应」与语域污染。
+  - 删除历史版本徽标、重复叙事与模板套话，各档位提示词字符数全面缩减：`WORKFLOW_TEXT`（`3470 → 1216`）、`SCENE_WRITING`（`1445 → 611`）、`SCENE_REVISING`（`983 → 365`）、`SCENE_AUDITING`（`543 → 370`）、`SCENE_SETUP`（`842 → 406`）、`LEAN_TEXT`（`474 → 328`）、`BRIEF_TEXT`（`253 → 164`）、`RAW_WRITING_PROMPT`（`317 → 198`）、`CHAT_WRITING_PROMPT`（`702 → 432`）；对外导出面与各模式硬约束标记原样保留。
+- **技能手册大规模瘦身并与 `skillProvider` 同步（`skills/novel-writing/SKILL.md` & `lib/index.js`）**：
+  - 将 `SKILL.md` 由 `17,977` 字压至 **`4,367` 字**（**`-75.7%`**），剔除写给维护者的契约备忘（「`对外契约字段`」「`不是死代码`」「`零读即删`」）、英文奇幻参考书单、历史版本考古标号与重复参数说明。
+  - 修复原 `L214` 与系统提示词矛盾的「把这些数字直接转化为写作指令（如 `C=0.7 → 这段要矛盾螺旋`）」表述，统一口径为测量数值与情感量化仅作审视/复盘信号，优先保证自然叙事表达。
+  - 将精简后的 YAML frontmatter（`description` / `whenToUse`）与 `lib/index.js` 中的 `skillProvider` 常量逐字对齐。
+
+#### 开写包清单与工具契约描述减负
+
+- **收紧 `novel_chapter_brief` `plan.checklist` 噪音（`lib/brief.js`）**：压缩 `anchors` / 钩子 / 方向 / 禁用词 / 必用词 / 伏笔三态提示的冗余括号说明，删除与系统提示词重复的后置自检/收尾催办，保留全部硬约束条款（含 `语用规范`、`必用词优先`、`RAW_MODE_CHECKLIST`、`CHAT_MODE_CHECKLIST`、`ENDING_GATE_TEXT` 与伏笔三态字段语义）。
+- **压缩 22 工具 Schema 与参数描述（`lib/index.js`）**：保持全部工具名、参数字段、`type`、`enum`、`required`、`additionalProperties`、`oneOf`、`output.schema` 与功能约束关键字 100% 不变，仅精简工具主 `description` 与 `parameters.properties.*.description`，将 22 个工具序列化 `{ name, description, parameters }` JSON 总量从 `21,940` 字符压至 **`14,933` 字符**（**`-7,007` 字符 / `-31.94%`**，每轮对话固定少交三成以上 Schema 上下文税）。
+
+#### 文档重构、防回退守卫与质量验证
+
+- **精简重构中英文 README（`README.md` & `README.en.md`）**：合并多处重复的工作流、功能长文与隐私段落，按 5 大功能组整理 22 工具总表并保留代表输出折叠预览：`README.md` 由 `318` 行 / `18,228` 字收拢至 **`157` 行 / `7,582` 字**（字节减约 `64%`）；`README.en.md` 由 `323` 行对称精简至 **`158` 行**，清除了混杂中文片段（仅保留第 3 行语言切换链接）并补齐 `drafts` 与 `rawWriting` 说明。
+- **技术文档同步与回归防线（`docs/tools/novel-sentence-config.html`、`test/v740-audit-fixes-test.mjs`）**：更新 `novel-sentence-config.html` 的 `LEAN_TEXT` 字符口径（`380 → 328` 字符）及系统提示去跨题材禁词说明；在 `v740-audit-fixes-test.mjs` 新增 **`D4 (v7.4.1)`** 护栏测试，锁定所有系统提示词、无跨题材禁词、`SKILL.md` 体量与元数据一致、22 工具 Schema 字符上限（`<= 15,500`）全部不回退。
+
+---
+
+### v7.4.2 - 2026-11-19
+
+在 7.4.1 压缩静态提示词和工具 Schema 体积的基础上，补齐了工具列表的运行时按需可见性：在侧栏或配置里关掉暂时不用的工具后，DSH 宿主和外部 MCP 客户端都不会再把它的 Schema 和描述塞给模型，进一步减少每轮对话的无关工具占位。全部 22 个工具的功能与分析口径保持不变，无需迁移配置。
+
+#### DSH 宿主侧：按模型步动态控制工具可见性
+
+- **注册期统一挂载 `when` 条件并透传第 2 参数 `options`（`lib/index.js`）**：
+  - 修复 `installToolAudit` 此前仅转发 `original.call(this, def)` 而丢弃第 2 参数 `options` 的问题，并在注册层统一通过 `attachToolVisibilityOptions` 为全部 22 个 `ALL_TOOLS` 挂载同步判定函数 `when(activationCtx)`。
+  - 若宿主将 `ctx.tools.register` 设为只读（审计包裹自动降级），`apply()` 通过轻量的 `regCtx` 回退包装继续挂载 `{ when }`，既保留审计降级行为，也不丢失按需可见能力；外部非 `ALL_TOOLS` 注册保持原参数透传不注入。
+- **进程内 fail-open 快照缓存与写盘即刻同步（`lib/core.js`）**：
+  - 新增 `isToolVisibleSync(name, opts)`、`ALWAYS_VISIBLE_TOOLS`（含 `novel_sentence_config`）与 `resetToolVisibilityCache()`。热路径直接读取进程内存快照，通过 `300ms` 节流间隔配合 `statSync` 的 `mtimeMs` / `size` 以及 `DSH_NOVEL_WRITER_STATE` 路径变化按需重读，避免每步重复同步读盘。
+  - `writeSentenceState` 在原子落盘后立即同步刷新该缓存，同进程内通过面板（`POST /api/dsh-novel-writer/state`）或 `novel_sentence_config` 关闭/重开工具时下一轮模型步即刻生效。
+  - 外层与内部 `try/catch` 严格 fail-open 返回 `true`（文件缺失或损坏时均不抛错），避免触发宿主 `TOOL_ACTIVATION_FAILED`；同时可见性与句式分析总开关 `state.enabled` 完全隔离——关掉句式分析只会停掉 `novel_sentence_analysis` 与 `novel_style_check`，不会误隐藏其余工具。
+- **补齐 `novel_sentence_config` 全链路防死锁（`lib/core.js`）**：
+  - 将 `ALWAYS_VISIBLE_TOOLS` 豁免下沉到 `toolEnabled(state, name)` 入口。即便磁盘 `state.json` 中被手工写入 `tools.novel_sentence_config: false`，`isToolVisibleSync`、`toolEnabled` 与 `assertToolEnabled` 均统一放行，确保该开关工具始终「既看得见，也调得动」。
+- **系统提示防悬空补白（`lib/index.js`）**：
+  - 在 `novel-writing` 动态 section 装配时，当系统提示词档位不为 `off` 且至少有一个工具处于关闭状态时，自动在末尾追加一行固定提示，明确告知模型未在当前工具列表中提供的工具不要调用，需开启时引导用户使用 `novel_sentence_config` 或侧栏面板；工具全开或设为 `off` 档时零额外注入。
+- **侧栏面板纯工具开关静默防抖合并（`lib/client.js`）**：
+  - 连续点选多个纯 `tools` 开关时，界面仍即时乐观更新，底层以 `350ms` 防抖窗口合并成单次 `POST /api/dsh-novel-writer/state` 落盘，并在防抖窗口内持有 `beginWrite()` 防止并发刷新覆写，减少连续写盘与模型请求前缀缓存抖动；遇到非 `tools` 修改或 `ctx.effect` 卸载清理时会立即把排队变更一并 flush，不丢最后一次点击也不留悬空定时器。
+
+#### MCP 服务器侧：动态 `tools/list` 过滤与五档预设
+
+- **按 `state.json` 动态裁剪 `tools/list`（`mcp/server.mjs`）**：
+  - 每次响应 `tools/list` 时实时刷新并对齐 `state.json` 的 `tools` 开关（始终保留 `novel_sentence_config`；损坏时 fail-open；同时维持启动期全量 22 个注册表校验、未知工具 `-32602` 与 `capabilities.tools: {}` 协议行为不变，不向客户端推送未请求的游离通知）。
+- **新增 `--preset` 启动参数与 `DSH_NOVEL_WRITER_PRESET` 环境变量（`mcp/server.mjs`、`mcp/README.md`）**：
+  - 支持 `all`（默认，22 个）、`writing`（9 个：读写 + 开写包/建章/草稿镜像/自检/词表/开关）、`revising`（8 个：读写 + 改稿台/自检/连贯性审计/词表/开关）、`auditing`（10 个：读写 + 画像/自检/句式/连贯/伏笔/语义检索/开关）与 `setup`（10 个：读写 + 导入/大纲/设定/伏笔/摘要/词表/开关）五档，CLI 参数优先于环境变量。
+  - `tools/list` 输出「激活预设 ∩ `state.json` 启用项」的交集；直接 `tools/call` 预设外工具时返回清晰的 `isError: true` 提示；缺值或未知预设名时在 `stderr` 打警告并安全回退 `all`。
+
+#### 文档与回归测试
+
+- **同步使用文档与技术参考（`mcp/README.md`、`docs/tools/novel-sentence-config.html`）**：补充 `--preset` 用法、预设清单、动态 `tools/list` 行为、宿主 `when` 机制、系统提示防悬空、面板防抖、fail-open 策略及防死锁口径说明。
+- **新增第 39 套自动化回归测试与客户端防抖用例（`test/tool-visibility-test.mjs`、`test/client-test.mjs`）**：`tool-visibility-test.mjs` 共 18 项断言，覆盖可写/只读 `tools.register` 的 `{ when }` 注入、非插件探针透传、`writeSentenceState` 零等待生效、手工置 `novel_sentence_config: false` 防死锁、与 `state.enabled === false` 隔离、损坏 JSON fail-open、`DSH_NOVEL_WRITER_STATE` 路径切换即刻刷新、系统提示防悬空补白，以及真实 stdio `mcp/server.mjs` 子进程的 `tools/list` 动态过滤、预设交集、预设外拒绝、未知预设回退与 `stdout` 纯净性验证；`client-test.mjs` 同步新增连续纯 `tools` 连点 350ms 合并、混入非 `tools` 即刻打包与 `ctx.effect` 卸载自动 flush 断言。
+
+---
+
+### v7.5.0 - 2026-11-19（2026-11-20 修订）
+
+完成插件后端底座的模块化重构与单一事实源收敛，并落地「场景分带基线」与「外置 JSON 题材规则包」两项写作能力升级：前者解决对话章与动作章共用全书均值造成的误报（并在复核后将动作冲突识别与日常动词彻底解耦、成组门槛提至 3 章），后者将题材用语与套话豁免沉淀为可热加载、可继承的外置规则包并打通被拒正则告警出口。升级过程中，`lib/client.js` 与 22 个 MCP 工具的总数及外部调用契约保持不变，存量书库可零迁移平滑升级。
+
+#### 架构重构与单一事实源
+
+- **零依赖声明式清单单一事实源（`lib/manifest.js`）**：
+  - 统一声明 `ALL_TOOLS`（22 项）、`TOOL_LABELS`、`ALWAYS_VISIBLE_TOOLS`、`BOOK_DATA_SUBDIRS`（9 项平铺按书子目录）、`BOOK_DATA_SUBDIR_LABELS`、`LIBRARY_DATA_SUBDIRS`（`["packs"]`）与 `DIAGNOSE_DATA_SUBDIRS`（11 项，含 `drafts` 与 `packs`）。
+  - `lib/core/state.js`、`lib/bookdelete.js`（`DELETE_DATA_SUBDIRS`）、`lib/diagnose.js`（`DATA_SUBDIRS`）与 `tools/check-release.mjs` 均改为直接从 `lib/manifest.js` 消费并互校，消除多处手写清单漂移隐患。
+- **`lib/core.js` 严格 DAG 四层拆分与 barrel 透传**：
+  - 将原单文件拆分为严禁逆向依赖的四层模块：`lib/core/state.js`（Layer 1：版本、参数校验、路径/根解析、开关与事务锁）、`lib/core/text.js`（Layer 2：编码解码、章节扫描与解析、关键词、草稿镜像、正则安全校验 `validatePattern` 与格式化）、`lib/core/domain.js`（Layer 3：语义裁决、文化/题材/语用规则、基线与锚包、伏笔/设定/词表/摘要/大纲）及 `lib/core/http.js`（Layer 4：本地状态路由与请求体安全读取）。
+  - `lib/core.js` 收敛为 18 行 barrel 入口，100% 透传上述四层及 `lib/packs.js` 全部导出符号，外部调用方零破坏变更。
+- **`lib/index.js` 工具领域拆分为七模块（`lib/tools/*`）**：
+  - 按领域拆分至 `lib/tools/library.js`、`lib/tools/writing.js`、`lib/tools/style.js`、`lib/tools/story.js`、`lib/tools/continuity.js`、`lib/tools/system.js` 与共用辅助 `lib/tools/shared.js`；`lib/index.js` 仅保留插件协议导出（`apply`/`inject`/`name`）、工具调用审计包装、`when` 按需可见性挂载、`llm/stream` 非净化兜底与 22 工具装配。
+- **同步变异测试与源码断言测试**：
+  - 同步更新 `tools/mutation-test.mjs` 的 `M-E` 变异目标路径至 `lib/tools/continuity.js`，并同步两处源码级回归断言（`test/core-regression-test.mjs` 读取 `lib/core/domain.js`，`test/e2e-test.mjs` 的 `#71` 与 `④-①` 同步校验 `lib/index.js` + `lib/tools/*.js` 与 `lib/core/http.js`）。
+
+#### 场景分带基线
+
+- **独立冲突词与短句节奏判定，同带门槛提至 3 章（`lib/style-metrics.js`）**：
+  - 新增 `measureDialogueRatio`（单遍线性扫描成对中文/英文引号 `“...”` / `「...」` / `『...』` / `"..."` 字符占比）与 `measureConflictSignals`（使用独立高强度冲突/打斗/追逃/枪战词表并屏蔽「打算/刺激/炸鸡/斩钉截铁」等日常搭配，结合平均句长、短小句占比与感叹号密度算出 `conflictDensity` 与 `fastPaced`，彻底与广义 `actionDensity` 解耦，避免「站/看/坐/走」等日常叙事动词把平淡叙事章误归入 `action` 带）。
+  - `classifyChapterScene` 将章节分为 `dialogue`「对话文戏」/ `action`「动作冲突」/ `narrative`「叙事过渡」三带（保留并新增返回 `conflictDensity`；仅传旧缓存 `{ metrics }` 无正文时仅在 `actionDensity >= 210` 才推定为 `action`，其余正常叙事安全归为 `narrative`）。
+  - `computeBaseline` 为每章记录 `.scene`；新增 `enrichPerChapterScenes` 为缺少 `.scene` 的历史逐章缓存现场补算场景分类；新增 `computeSceneBaselines` 与 `selectSceneBaseline`，并将成组门槛 `MIN_SCENE_BAND_CHAPTERS` 设为 **`3`**（总体标准差 `÷n` 下样本 ≥ 3 章才启用同带对照，不足 3 章自动回退全基线，减少 2 章小样本容差抖动）。**门槛口径澄清**：这里的「同带样本」只统计**除本章外**的同带章（本章不能当自己的基线），因此同带恰好 3 章的书不会启用分带，需要同带 **≥ 4 章**（本章 + 3 章对照）；命中与回退的 `note` 均写明「对照样本 / 不含本章」，`novel-style-check.html` 同步补注该口径。
+- **四个核心工具接入场景分带**：
+  - `novel_style_check`（`lib/tools/style.js`）：改用 `enrichPerChapterScenes` + `selectSceneBaseline` 选择基线并构造容差，结果挂在 `metric.sceneBand`（含 `conflictDensity`），渲染层切换「μ=同类场景带基线 / 全书其他章基线」并单行标出 `场景带识别：<label>（<note>）`。
+  - `novel_style_report`（`lib/tools/style.js`）：完整报告路径返回 `sceneBaselines`（兼容缺 `.scene` 的老缓存现场补算），存在至少 2 个有效场景带（每带 ≥ 3 章）时在报告文本第七节追加「分场景参考带」对照。
+  - `novel_fix_plan`（`lib/fixplan.js`、`lib/tools/style.js`）：与 `novel_style_check` 共用 `selectSceneBaseline` 同源场景带判定，`plan` 与 `verifyFixPlan` 均透传 `sceneBand`（含 `conflictDensity`）并在 `summary` 中写入场景带说明。
+  - `novel_chapter_brief`（`lib/brief.js`、`lib/tools/writing.js`）：多场景混合书（有效场景带 ≥ 2 个且每带 ≥ 3 章）时 `buildChapterBrief` 返回 `sceneBaselines`，并在 `render` 附「场景参考带」摘要。
+
+#### 外置 JSON 题材规则包
+
+- **5 套内置题材包与热加载继承引擎（`lib/packs.js`、`lib/packs/*.json`）**：
+  - 内置 `western-fantasy`（欧式奇幻）、`eastern-xianxia`（东方仙侠古风）、`modern-urban`（现代都市）、`mystery-thriller`（悬疑推理）与 `scifi-cyberpunk`（科幻赛博）5 套 JSON 题材包。
+  - 支持从 `<root>/.novel-writer/packs/*.json` 自动热加载自定义题材包（文件级缓存按 `mtimeMs`/`size`/`ctimeMs` 失效 + 目录快照缓存），支持 `id` 与大小写不敏感 `aliases` 查找（别名命中时自定义优先）、自定义包同 `id` 覆盖内置包、`worldview` 未显式绑定时自动激活 `<book>.json` 自定义包，以及最多 2 层 `extends` 继承（`PACK_MAX_EXTENDS_DEPTH = 2`，含循环继承打断与超深截断，不继承父包别名以防劫持）。
+- **安全门禁、防逃逸校验与被拒正则显式披露**：
+  - `isValidPackId` 严格限定 ID 字符集（1~64 位字母、数字、下划线、连字符或中文，禁止 `/`、`\`、`..` 与控制字符）；目录扫描基于 `realpathSync` 与 `isInsideDir` 拒绝悬空符号链接与跨目录符号链接逃逸；拒绝 0 字节及超过 `256 KB`（`PACK_MAX_BYTES`）的文件；清洗 `__proto__` 等原型污染键，且 JSON 解析失败绝不透传正文片段。
+  - 题材包 `speechStyle.ritualBadPatterns` 及 `novel_settings` `add`/`update` 写入的 `ritualBadPatterns` 均强制通过 `validatePattern` 防 ReDoS 校验；包加载剔除非法/危险正则时不仅记入 `warnings` 与日志，同时在含剔除项的包对象上附带 `rejectedPatterns`（`[{ pattern, code, reason }]`，干净包不出现该字段），并在 `novel_settings action="packs"` 返回及渲染中显式透出 `warnings` 与剔除计数，消除包作者侧静默丢弃盲区。
+- **多工具联动与诊断体检**：
+  - `core.resolveStyleRule(settings, chapterTexts, { root, book })` 统一解析激活题材包并合并 `bannedWords`、`recommended`、`allowWords`、`speechStyle` 与 `baseCulture`；`lib/lexicons/slop.js`（`buildSlopExemptions`）新增 `extraMuteCategories` / `pack.slopMuteCategories` 白名单静音支持（如 `scifi-cyberpunk` 豁免 `stat_numeric`）。
+  - `novel_settings`（`lib/tools/story.js`）新增 `action: "packs"` 与 `worldview` 的 `pack` 字段（及 `output.schema` 的 `packs` / `activePack` / `warnings`）；`novel_chapter_brief` 支持 `worldview.pack`（在 `【世界观用语】` 标注 `题材包:<name>(<id>)`）并联动 `slopMuteCategories`；`novel_fix_plan` 接入 `resolveStyleRule({ root, book })` 与 `slopMuteCategories` 并披露生效题材包；`novel_continuity_check`（`lib/tools/continuity.js`）透传 `{ root, book }` 并返回/渲染激活 `pack`。
+  - `lib/diagnose.js` 将 `packs` 纳入 11 个数据子目录健康体检，识别并归类越界符号链接、悬空符号链接、超 256 KB 文件、非法 JSON 结构与非法包 ID，并对自定义题材包中未通过 `validatePattern` 的 `ritualBadPatterns` 产出匿名化 `packWarningTotal` / `packWarnings` 告警（仅报文件名、条数与错误码，不泄漏原始正则文本）。
+
+#### 文档与回归测试
+
+- **同步技术文档与中英文说明**：更新 `docs/tools/` 下受影响工具文档（`novel-style-check.html`、`novel-style-report.html`、`novel-settings.html`、`novel-fix-plan.html`、`novel-chapter-brief.html`、`novel-diagnose.html`）以及 `README.md`、`README.en.md` 中的核心能力与工具总表说明。
+- **新增第 40 / 41 套自动化回归测试（`test/scene-baseline-test.mjs`、`test/genre-packs-test.mjs`）**：分别覆盖三类场景带判定（含真实日常叙事不被误判为动作带、日常搭配不误触发冲突词）、老缓存补算、3 章门槛与回退以及 4 个工具的 `sceneBand`/`sceneBaselines` 联动，和 5 套内置包、热加载、2 层 `extends` 继承、符号链接防逃逸、ReDoS 拦截与 `rejectedPatterns`/`warnings`/`novel_diagnose` 告警披露及多工具 `pack`/`slopMuteCategories` 联动。
 
 ## [7.4.2] - 2026-11-19
 
