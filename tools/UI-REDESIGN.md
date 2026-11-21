@@ -3,16 +3,16 @@
 > 设计负责人：Claude（总设计 / 合并 / 终审）。实现可由子代理分工完成。
 > 用户反馈三条，本次改版只解决这三条：**① 不好看 ② 太杂、功能难找 ③ 描述看得半懂不懂**。
 > 不改：后端路由、`lib/core.js` / `lib/index.js`、controller 的数据加载与写入语义、任何功能行为。
-> 只改：`tools/client-src/*` 下的客户端模块化源码（原 `lib/client.js` 的渲染层、CSS、`i18n/`、`controller/`、`host/` 等全部源模块现均位于 `tools/client-src/*`，`lib/client.js` 为 `node tools/build-client.mjs` 的构建产物，切勿直接手改），以及必要时相应测试断言。
+> 只改：`client/*` 下的客户端模块化源码（原 `lib/client.js` 的渲染层、CSS、`i18n/`、`controller/`、`host/` 等全部源模块现均位于 `client/*`，`lib/client.js` 为 `node tools/build-client.mjs` 的构建产物，切勿直接手改），以及必要时相应测试断言。
 
 ---
 
 ## 0. 工作纪律（每个实现者必读）
 
-1. **先读** `WebUI` 相关规则：`tools/ui-audit-README.md`、`tools/client-src/README.md`、`tools/visual/README.md`。
+1. **先读** `WebUI` 相关规则：`tools/ui-audit-README.md`、`client/README.md`、`tools/visual/README.md`。
 2. **门禁**（每次提交前全绿）：
    ```bash
-   node tools/build-client.mjs          # 改过 tools/client-src/* 后必须先跑
+   node tools/build-client.mjs          # 改过 client/* 后必须先跑
    node tools/build-client.mjs --check
    node tools/ui-audit.mjs lib/client.js   # 必须 PASS
    node test/client-test.mjs
@@ -72,7 +72,7 @@
 
 ### 2.5 图标与 emoji
 
-- 界面里的**标题、按钮、分组名不再使用彩色 emoji**（📊 🎨 🎯 📕 💾 📢 🔞 ✍ 🌐 📋 🎬 等）。统一用现有线性图标集（`nwIconEls` / ICONS，在 `tools/client-src/V6-icons-*.js`）。缺图标就在图标源里补一个（同风格：24 网格、1.5 线宽、currentColor），然后 build。
+- 界面里的**标题、按钮、分组名不再使用彩色 emoji**（📊 🎨 🎯 📕 💾 📢 🔞 ✍ 🌐 📋 🎬 等）。统一用现有线性图标集（`nwIconEls` / ICONS，在 `client/icons/*.js`）。缺图标就在图标源里补一个（同风格：24 网格、1.5 线宽、currentColor），然后 build。
 - 每个工具行要有**有意义**的图标（或者整组不放图标）；不要全部是同一个文件夹图标。
 - 用户自己填的内容（书名等）前面不加 emoji。
 
@@ -145,4 +145,4 @@
   - B：必用词表 / 原创设定 / 编辑设定
   - C：风格基线 / 报告历史 / 诊断报告
 - 并行期约定：**只改自己视图的渲染分支**和自己前缀的 i18n key；共享组件（PreferenceRow / GroupCard / StorageDisclosure / SectionTitle / 图标）**不改接口**，确有需要在提交信息里提出，由设计负责人合并时统一处理。
-  新 CSS 写进 `tools/client-src/V6-components.css` 里属于自己的锚点注释段（Foundation 会预置三个锚点：`v7-A`、`v7-B`、`v7-C`），然后 build。
+  新 CSS 写进 `client/styles/components.css` 里属于自己的锚点注释段（Foundation 会预置三个锚点：`v7-A`、`v7-B`、`v7-C`），然后 build。

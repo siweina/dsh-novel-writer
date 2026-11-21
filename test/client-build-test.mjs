@@ -2,11 +2,11 @@
  * test/client-build-test.mjs —— 客户端模块化源码与构建流水线回归套件（第 44 个测试套件）
  *
  * 覆盖范围：
- *   1. tools/client-src/ 下全部 .js 模块均可独立通过 vm.Script 语法解析
+ *   1. client/ 下全部 39 个 .js 模块与 3 个 .css 文件无 V6- 前缀，且 .js 均可独立通过 vm.Script 语法解析
  *   2. 无孤儿 .js / .css 文件（node tools/build-client.mjs --check 退出码为 0）
- *   3. tools/client-src/i18n/zh.js 与 en.js 键集合完全一致且所有值为非空字符串
+ *   3. client/i18n/zh.js 与 en.js 键集合完全一致且所有值为非空字符串
  *   4. 所有非词典 .js 模块保持干净拆分（< 600 行）
- *   5. 组装产物 lib/client.js 保留全部 4 组 V6 标记区、Hook 调用点/安全/CSS 颜色不变量，
+ *   5. 组装产物 lib/client.js 首行带 AUTO-GENERATED 声明，保留全部 3 组 client 标记区、Hook 调用点/安全/CSS 颜色不变量，
  *      并通过 window.__ModuleLoader__.load 存根导出 apply / inject / __internals.NW_UI
  *
  * 运行：node test/client-build-test.mjs
@@ -15,14 +15,14 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { readFileSync, readdirSync, statSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { basename, dirname, join, relative, resolve } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, "..");
-const SRC_DIR = join(REPO, "tools", "client-src");
+const SRC_DIR = join(REPO, "client");
 const BUILD_SCRIPT = join(REPO, "tools", "build-client.mjs");
 const CLIENT_FILE = join(REPO, "lib", "client.js");
 
@@ -37,10 +37,16 @@ function walkFiles(dir, acc = []) {
 
 const ALL_SRC_FILES = walkFiles(SRC_DIR);
 const JS_SRC_FILES = ALL_SRC_FILES.filter((p) => p.endsWith(".js"));
+const CSS_SRC_FILES = ALL_SRC_FILES.filter((p) => p.endsWith(".css"));
 const DICTIONARY_FILES = new Set(["i18n/zh.js", "i18n/en.js"]);
 
-test("1. tools/client-src 下每个 .js 模块均可独立通过 new vm.Script 解析", () => {
-  assert.ok(JS_SRC_FILES.length >= 30, `预期至少 30 个模块化 .js 文件，实测 ${JS_SRC_FILES.length}`);
+test("1. client/ 下无 V6- 前缀文件，且 39 个 .js 模块与 3 个 .css 文件分布清晰、.js 均可独立通过 new vm.Script 解析", () => {
+  const v6Prefixed = ALL_SRC_FILES
+    .filter((p) => basename(p).startsWith("V6-"))
+    .map((p) => relative(SRC_DIR, p).replace(/\\/g, "/"));
+  assert.deepEqual(v6Prefixed, [], `client/ 下不应保留 V6- 前缀文件：${v6Prefixed.join(", ")}`);
+  assert.equal(JS_SRC_FILES.length, 39, `预期 39 个模块化 .js 文件，实测 ${JS_SRC_FILES.length}`);
+  assert.equal(CSS_SRC_FILES.length, 3, `预期 3 个模块化 .css 文件，实测 ${CSS_SRC_FILES.length}`);
   for (const filePath of JS_SRC_FILES) {
     const rel = relative(SRC_DIR, filePath).replace(/\\/g, "/");
     const code = readFileSync(filePath, "utf8").replace(/\r\n/g, "\n");
@@ -95,13 +101,22 @@ test("4. 所有非词典 .js 模块行数保持 < 600 行", () => {
   assert.deepEqual(oversized, [], `存在超过 600 行的非词典模块：${oversized.join(", ")}`);
 });
 
-test("5. 组装产物 lib/client.js 保留全部 V6 标记、全文不变量及模块导出契约", () => {
+test("5. 组装产物 lib/client.js 首行带 AUTO-GENERATED 声明，保留全部 client 标记、全文不变量及模块导出契约", () => {
   const clientSrc = readFileSync(CLIENT_FILE, "utf8").replace(/\r\n/g, "\n");
+  const firstLine = clientSrc.split("\n", 1)[0];
+  assert.ok(
+    firstLine.replace(/^\/\*+\s*/, "").startsWith("AUTO-GENERATED"),
+    `lib/client.js 首行应以 AUTO-GENERATED 声明开头，实测：${firstLine}`
+  );
+  assert.ok(
+    firstLine.includes("client/") && firstLine.includes("tools/build-client.mjs"),
+    `lib/client.js 首行应提及 client/ 与 tools/build-client.mjs，实测：${firstLine}`
+  );
   assert.doesNotThrow(() => {
     new vm.Script(clientSrc, { filename: "lib/client.js" });
   }, "lib/client.js 应可完整解析");
 
-  for (const marker of ["V6:icons", "V6:uikit", "V6:slider", "V6:css"]) {
+  for (const marker of ["client:icons", "client:uikit", "client:css"]) {
     const begin = `/* ===== ${marker} ===== */`;
     const end = `/* ===== /${marker} ===== */`;
     const i1 = clientSrc.indexOf(begin);

@@ -2,7 +2,7 @@
  * bump-version.mjs —— v6.5.0 版本号原子提升（协调方专用，不属于发布物）
  *
  * 为什么需要它：tools/check-release.mjs 强制要求下列位置的版本号**完全一致**：
- *   package.json / package-lock.json(2 处) / server.json(2 处) / CHANGELOG.md 章节 / docs 全部页面 softwareVersion
+ *   package.json / package-lock.json(2 处) / server.json(2 处) / antigravity/plugin.json / CHANGELOG.md 章节 / docs 全部页面 softwareVersion
  * 手工改 21 个 HTML 极易漏改。本脚本一次改全，并用 check-release 复验。
  *
  * 用法：
@@ -75,6 +75,19 @@ if (existsSync(srvPath)) {
       const after = out.replace(/\d+\.\d+\.\d+/g, '<V>');
       if (before !== after) { console.error('✗ server.json 除版本号外还有改动，已中止（请人工检查）'); process.exit(1); }
       writeFileSync(srvPath, out, 'utf8');
+    }
+  }
+}
+
+// 3b) antigravity/plugin.json（version，保持 2 空格 JSON 缩进）
+const agPluginPath = join(REPO, 'antigravity', 'plugin.json');
+if (existsSync(agPluginPath)) {
+  const agPlugin = JSON.parse(readFileSync(agPluginPath, 'utf8'));
+  if (agPlugin.version !== NEW) {
+    changes.push(`antigravity/plugin.json: version ${agPlugin.version} → ${NEW}`);
+    if (APPLY) {
+      agPlugin.version = NEW;
+      writeFileSync(agPluginPath, JSON.stringify(agPlugin, null, 2) + '\n', 'utf8');
     }
   }
 }

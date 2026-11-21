@@ -24,7 +24,7 @@
  *   DEBUG=1 环境变量：stderr 额外打印完整错误堆栈（默认只打一行摘要，避免绝对路径/书名泄漏）。
  */
 
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, readlinkSync, realpathSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -56,6 +56,8 @@ const MAX_WRITE_TIMEOUTS = 3;
 const MAX_OUTPUT_FRAME_BYTES = 8 * 1024 * 1024;
 // DEBUG=1 时 stderr 才输出完整错误堆栈（默认只输出一行摘要，见 logError）
 const DEBUG = process.env.DEBUG === "1";
+const WIN32 = process.platform === "win32";
+let REDACT_ROOTS = [];
 
 // ---------------------------------------------------------------------------
 // v6.3.0 修复（旧清单第 71 条）：进程级异常处理器与 console 改道必须注册在**任何 await 之前**。
@@ -149,8 +151,6 @@ function escapeRegExp(text) {
   return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-const WIN32 = process.platform === "win32";
-let REDACT_ROOTS = [];
 function redactRoots(text) {
   let out = text;
   const allForms = new Set();
@@ -557,27 +557,89 @@ function invalidParamsError(message) {
   return error;
 }
 
+const MAX_SYMLINK_DEPTH = 16;
+
+function normalizeLinkTarget(linkTarget) {
+  if (!WIN32 || typeof linkTarget !== "string") return linkTarget;
+  if (linkTarget.startsWith("\\\\?\\UNC\\")) return "\\\\" + linkTarget.slice(8);
+  if (linkTarget.startsWith("\\\\?\\")) return linkTarget.slice(4);
+  return linkTarget;
+}
+
 /**
- * 解析已存在的最近祖先，连尚未创建的子路径也按真实目录校验。
+ * 解析已存在的最近祖先，连尚未创建的子路径与悬空符号链接也按真实目录校验。
  *
  * v7.0.1（审查 #6）：无法解析时**不再抛裸 Error**（会被 handleLine 兜底成 -32603
  * Internal error）。改为带 `code=INVALID_PARAMS` 的错误，由 handleToolCall 转成 -32602——
  * 客户端传 `Z:\novels` 这种不存在的盘符属于参数错误，不是服务器内部故障。
  */
-function canonicalPath(target) {
+function canonicalPath(target, depth = 0) {
+  if (depth > MAX_SYMLINK_DEPTH) {
+    throw invalidParamsError("路径符号链接嵌套层数过多（可能存在循环链接）：" + target);
+  }
   let current = resolve(target);
   const missing = [];
-  while (!existsSync(current)) {
-    const parent = dirname(current);
-    if (parent === current) throw invalidParamsError("无法解析路径的真实祖先（路径或所在磁盘不存在）：" + current);
-    missing.unshift(basename(current));
-    current = parent;
+  while (true) {
+    let lst;
+    try {
+      lst = lstatSync(current);
+    } catch (error) {
+      if (error?.code === "ENOENT" || error?.code === "ENOTDIR") {
+        const parent = dirname(current);
+        if (parent === current) {
+          throw invalidParamsError("无法解析路径的真实祖先（路径或所在磁盘不存在）：" + current);
+        }
+        missing.unshift(basename(current));
+        current = parent;
+        continue;
+      }
+      throw invalidParamsError("无法解析路径的真实位置：" + current + "（" + (error?.code || error?.message || "unknown") + "）");
+    }
+    if (lst.isSymbolicLink()) {
+      let rawLink;
+      try {
+        rawLink = readlinkSync(current);
+      } catch (error) {
+        throw invalidParamsError("无法读取符号链接目标：" + current + "（" + (error?.code || error?.message || "unknown") + "）");
+      }
+      let realParent;
+      try {
+        realParent = realpathSync.native(dirname(current));
+      } catch (error) {
+        throw invalidParamsError("无法解析符号链接父目录：" + current + "（" + (error?.code || error?.message || "unknown") + "）");
+      }
+      const linkTarget = normalizeLinkTarget(rawLink);
+      const resolvedLink = isAbsolute(linkTarget) ? linkTarget : resolve(realParent, linkTarget);
+      const nextTarget = missing.length > 0 ? resolve(resolvedLink, ...missing) : resolve(resolvedLink);
+      return canonicalPath(nextTarget, depth + 1);
+    }
+    try {
+      return resolve(realpathSync.native(current), ...missing);
+    } catch (error) {
+      throw invalidParamsError("无法解析路径的真实位置：" + current + "（" + (error?.code || error?.message || "unknown") + "）");
+    }
   }
-  try {
-    return resolve(realpathSync.native(current), ...missing);
-  } catch (error) {
-    throw invalidParamsError("无法解析路径的真实位置：" + current + "（" + (error?.code || error?.message || "unknown") + "）");
-  }
+}
+
+/** 与 lib/core/state.js sanitizeSegment 同口径的本地净化（保持 server.mjs 单文件可独立运行）。 */
+function sanitizeBookSegment(value) {
+  let cleaned = String(value ?? "")
+    .replace(/[\\/:*?"<>|]/g, "")
+    .replace(/[.\s]+$/g, "")
+    .replace(/^[.\s]+/g, "")
+    .replace(/\.{2,}/g, "_");
+  if (/^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i.test(cleaned)) cleaned = "_" + cleaned;
+  return cleaned;
+}
+
+function isInsideDir(baseDir, target) {
+  const rel = relative(canonicalPath(baseDir), canonicalPath(target));
+  return rel === "" || (rel !== ".." && !rel.startsWith(".." + sep) && !isAbsolute(rel));
+}
+
+function isStrictlyInsideDir(baseDir, target) {
+  const rel = relative(canonicalPath(baseDir), canonicalPath(target));
+  return rel !== "" && rel !== ".." && !rel.startsWith(".." + sep) && !isAbsolute(rel);
 }
 
 /**
@@ -586,8 +648,7 @@ function canonicalPath(target) {
  * 不该被"越界 → 回退默认根"这条正常分支吞掉。
  */
 function isInsideRoot(target) {
-  const rel = relative(canonicalPath(LIBRARY_ROOT), canonicalPath(target));
-  return rel === "" || (rel !== ".." && !rel.startsWith(".." + sep) && !isAbsolute(rel));
+  return isInsideDir(LIBRARY_ROOT, target);
 }
 
 function buildArgs(name, raw) {
@@ -599,7 +660,7 @@ function buildArgs(name, raw) {
     // v4.3.0 安全修正（P1-6）：旧版把调用方给的 root 原样放行——"只读写书库根目录"的承诺等于交给
     // 调用方决定（配合 novel_import{src,move:true} 就能复制/删除盘上任意 .md/.txt）。
     // 现限定：调用方给的 root 必须落在启动参数 --root 指定的书库根内（含根本身），越界则回退并记日志。
-    const requested = resolve(args.root.trim());
+    const requested = resolve(LIBRARY_ROOT, args.root.trim());
     if (isInsideRoot(requested)) {
       args.root = canonicalPath(requested);
     } else {
@@ -609,7 +670,7 @@ function buildArgs(name, raw) {
   }
   // v4.3.0：novel_import 的 src 默认限制在书库根内；确需导入外部稿件时用 --allow-external-src 放开
   if (name === "novel_import" && typeof args.src === "string" && args.src.trim() !== "") {
-    const src = resolve(args.src.trim());
+    const src = resolve(LIBRARY_ROOT, args.src.trim());
     if (!ALLOW_EXTERNAL_SRC && !isInsideRoot(src)) args[SRC_OUT_OF_ROOT] = src;
     else if (!ALLOW_EXTERNAL_SRC) args.src = canonicalPath(src);
   }
@@ -619,17 +680,41 @@ function buildArgs(name, raw) {
 /** Guard paths derived inside the plugin from root/book before handing them over. */
 function derivedPathViolation(args) {
   const root = args && typeof args.root === "string" ? args.root : LIBRARY_ROOT;
+  const novelsRoot = join(root, "novels");
+  const dataRoot = join(root, ".novel-writer");
+  const creationRoot = join(novelsRoot, "创作资料");
+  const draftsRoot = join(dataRoot, "drafts");
   const derivedRoots = [
-    ["novels", join(root, "novels")],
-    [".novel-writer", join(root, ".novel-writer")],
-    ["novels/创作资料", join(root, "novels", "创作资料")]
+    ["novels", novelsRoot],
+    [".novel-writer", dataRoot],
+    ["novels/创作资料", creationRoot],
+    [".novel-writer/drafts", draftsRoot]
   ];
   for (const [label, target] of derivedRoots) {
     if (!isInsideRoot(target)) return `${label} 必须位于书库根内`;
   }
   if (typeof args?.book === "string" && args.book.trim() !== "") {
-    const bookPath = join(root, "novels", args.book.trim());
-    if (!isInsideRoot(bookPath)) return "book 必须解析到书库根内的 novels 子目录";
+    const rawBook = args.book.trim();
+    const rawBookPath = join(novelsRoot, rawBook);
+    if (!isInsideRoot(rawBookPath) || !isStrictlyInsideDir(novelsRoot, rawBookPath)) {
+      return "book 必须解析到书库根内的 novels 子目录";
+    }
+    const safeBook = sanitizeBookSegment(rawBook);
+    if (safeBook === "") {
+      return "book 清洗后无有效字符，无法解析到书库根内的 novels 子目录";
+    }
+    const safeBookPath = join(novelsRoot, safeBook);
+    if (!isInsideRoot(safeBookPath) || !isStrictlyInsideDir(novelsRoot, safeBookPath)) {
+      return "book 必须解析到书库根内的 novels 子目录";
+    }
+    const bookCreationPath = join(creationRoot, safeBook);
+    if (!isInsideRoot(bookCreationPath) || !isStrictlyInsideDir(creationRoot, bookCreationPath)) {
+      return "book 的创作资料目录必须位于书库根内的 novels/创作资料 子目录";
+    }
+    const bookDraftsPath = join(draftsRoot, safeBook);
+    if (!isInsideRoot(bookDraftsPath) || !isStrictlyInsideDir(draftsRoot, bookDraftsPath)) {
+      return "book 的草稿目录必须位于书库根内的 .novel-writer/drafts 子目录";
+    }
   }
   return null;
 }
@@ -812,15 +897,18 @@ async function handleToolCall(id, params) {
 // v4.3.0：批量请求按**协商版本**决定是否接受——MCP 2025-06-18 起移除了 JSON-RPC batching，
 // 协商到该版本（或更新）时一律按无效请求拒绝；协商到 2024-11-05 / 2025-03-26 时保留实现（兼容旧客户端）。
 // ---------------------------------------------------------------------------
-async function handleMessage(message) {
+async function handleMessage(message, inBatch = false) {
   if (Array.isArray(message)) {
+    if (inBatch) {
+      return rpcError(null, -32600, "无效请求：不支持嵌套批量数组");
+    }
     if (negotiatedVersion >= BATCHING_REMOVED_SINCE) {
       return rpcError(null, -32600, `无效请求：协议版本 ${negotiatedVersion} 不支持批量请求（JSON-RPC batching 自 MCP 2025-06-18 起移除）`);
     }
     if (message.length === 0) return rpcError(null, -32600, "无效请求：空批次");
     const responses = [];
     for (const item of message) {
-      const response = await handleMessage(item);
+      const response = await handleMessage(item, true);
       if (response !== null) responses.push(response);
     }
     return responses.length > 0 ? responses : null;

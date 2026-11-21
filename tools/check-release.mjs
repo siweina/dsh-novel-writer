@@ -47,7 +47,7 @@ const topLevelKeys = text => {
   }
   return keys;
 };
-for (const name of ['package.json', 'server.json', 'package-lock.json']) {
+for (const name of ['package.json', 'server.json', 'package-lock.json', 'antigravity/plugin.json']) {
   const topKeys = topLevelKeys(read(name));
   assert.ok(topKeys.length > 0, `${name}: 找不到顶层键（文件结构异常）`);
   const duplicates = topKeys.filter((key, index) => topKeys.indexOf(key) !== index);
@@ -67,6 +67,7 @@ assert.deepEqual([...ALL_TOOLS], [...MANIFEST_TOOLS], 'lib/core.js 的 ALL_TOOLS
 const pkg = JSON.parse(read('package.json'));
 const lock = JSON.parse(read('package-lock.json'));
 const server = JSON.parse(read('server.json'));
+const agPlugin = JSON.parse(read('antigravity/plugin.json'));
 // MCP Registry 的 server.schema.json 限制 description ≤ 100 字符，超长会被 422 拒绝。
 // v6.8.0 实测踩到：server.json 描述写到 136 字符 → npm 与 GitHub Release 都成功，
 // 只有 mcp-registry 那一步 422 失败（发布链路最后一段静默漏掉）。这里提前挡住。
@@ -79,6 +80,7 @@ assert.equal(lock.version, pkg.version, 'lockfile version');
 assert.equal(lock.packages[''].version, pkg.version, 'lockfile root version');
 assert.equal(server.version, pkg.version, 'MCP server version');
 for (const item of server.packages.filter(item => item.registryType === 'npm')) assert.equal(item.version, pkg.version, 'MCP npm package version');
+assert.equal(agPlugin.version, pkg.version, 'antigravity/plugin.json version');
 assert.ok(read('CHANGELOG.md').includes(`## [${pkg.version}]`), 'current changelog section');
 let pages = [];
 // 安装用 ZIP 不带站点，仓库和 CI 则必须检查站点版本。
@@ -113,4 +115,4 @@ for (const v of pinned) {
     `请改为从 package.json 读取（默认写法即是），不要手写版本号。`);
 }
 
-console.log(`Version ${pkg.version}: package, lockfile, MCP, changelog and ${pages.length} pages agree; ALL_TOOLS = ${ALL_TOOLS.length}；Dockerfile 无写死版本；JSON 顶层键无重复。`);
+console.log(`Version ${pkg.version}: package, lockfile, MCP, antigravity plugin, changelog and ${pages.length} pages agree; ALL_TOOLS = ${ALL_TOOLS.length}；Dockerfile 无写死版本；JSON 顶层键无重复。`);

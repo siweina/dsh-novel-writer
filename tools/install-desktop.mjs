@@ -54,12 +54,14 @@ log('✓ 目标是 desktop 端；web 端共享根不会被触碰');
 
 // ---------- 1) 源产物自检 ----------
 console.log('\n=== 1) 源产物自检 ===');
-const clientHash = sha16(join(REPO, 'lib', 'client.js'));
-log(`lib/client.js sha256(16) = ${clientHash}`);
-const MANIFEST = join(REPO, 'tools', 'client-src', 'manifest.json');
-if (existsSync(MANIFEST)) {
-  const mf = JSON.parse(readFileSync(MANIFEST, 'utf8'));
-  log(`构建清单：${mf.blocks.length} 块（启用 ${mf.blocks.filter((b) => b.enabled !== false).length}）+ 退役 ${(mf.retired || []).length} 组`);
+const srcClientPath = join(REPO, 'lib', 'client.js');
+let clientHash = '';
+if (!existsSync(srcClientPath)) {
+  log('✗ 缺少构建产物 lib/client.js（请先跑 npm run build）');
+  problems.push('缺少构建产物 lib/client.js（先跑 npm run build）');
+} else {
+  clientHash = sha16(srcClientPath);
+  log(`lib/client.js sha256(16) = ${clientHash}`);
 }
 let gate = 0;
 try { execFileSync(process.execPath, ['tools/build-client.mjs', '--check'], { cwd: REPO, stdio: ['ignore', 'pipe', 'pipe'] }); }
@@ -131,17 +133,15 @@ console.log('\n=== 5) 更新 profile 依赖并安装 ===');
 const bak = profPkgPath + '.bak-' + new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0, 14);
 copyFileSync(profPkgPath, bak);
 log(`✓ 已备份 profile package.json → ${bak}`);
-const newText = profPkgText.replace(
-  /("dsh-novel-writer"\s*:\s*")[^"]*(")/,
-  (_m, a, b) => a + wantSpec + b
-);
-if (newText === profPkgText) {
-  // ⚠️ 不要在这里中止：重复安装时依赖**已经**指向目标版本，替换后文本自然不变。
-  //    早期版本把这当成"替换失败"并退出 1，导致幂等重跑失败（M8 实测踩到）。
-  if (curSpec === wantSpec) log('✓ 依赖指向已是目标值（幂等重跑，无需改写）');
-  else { console.error('✗ 未能替换依赖指向，中止（profile 未改动）'); process.exit(1); }
+if (curSpec === wantSpec) {
+  log('✓ 依赖指向已是目标值（幂等重跑，无需改写）');
 } else {
-  writeFileSync(profPkgPath, newText, 'utf8');
+  const indentMatch = profPkgText.match(/^[ \t]+(?=")/m);
+  const indent = indentMatch ? indentMatch[0] : 2;
+  const eol = profPkgText.includes('\r\n') ? '\r\n' : '\n';
+  profPkg.dependencies['dsh-novel-writer'] = wantSpec;
+  const serialized = JSON.stringify(profPkg, null, indent).replace(/\n/g, eol) + (profPkgText.endsWith('\n') ? eol : '');
+  writeFileSync(profPkgPath, serialized, 'utf8');
   log('✓ 依赖指向已更新');
 }
 

@@ -14,6 +14,7 @@
 
 | 版本 | 日期 | 摘要 |
 | --- | --- | --- |
+| 8.2.0（含 8.1.0） | 2026-11-21 |工程整备 + 深度加固：8.1.0 架构地图 / `client/` 目录整理 / `domain.js` 六模块拆分（72/72 导出零变化）；8.2.0 覆盖宿主/Sidecar 安全与稳定性（Antigravity `global.fetch` 重入栈溢出、`cwd` 钉死覆盖 `lastRoot`、`allowLanState` 与 `Host` 头绕过、MCP 沙箱/悬空链接/嵌套批量、规则包悬空链接与 ReDoS 漏检/误杀）、存储并发与数据安全（`writeSentenceState` 跨进程锁、删书 `manifest.json` 原子顺序与回收站并发防碰撞、`readPlots`/设定损坏防回滚与 `cache.sqlite` 坏库清理）、引擎精度与写作闭环（单线程 WASM ONNX 推理串行队列、引号/情绪/大纲/文化基准/词表/开写包/改稿台/诊断与工具层精度对齐）、前端界面与 React 18 兼容性（无 Hook `PrimitiveBoundary` 原语隔离、`chatWriting` 开关反转、回收站弹窗、题材包导入竞态、`load()`/`flushSave()` `rev` 竞态与发布门禁同步 `antigravity/plugin.json`）；全部 22 工具、13 条 HTTP 路由、12 个 React Hook 与纯文本书库格式零兼容破坏 |
 | 8.0.0 | 2026-11-20 | 升级运行环境要求与书库存储底座：外部 MCP / 独立 CLI 最低要求 Node.js `>=22.13.0`（启用内置 `node:sqlite`，`mcp/server.mjs` 启动前校验并仅写 `stderr` 退出；DSH 桌面端内置 Node 24 不受影响）；新增 WAL 模式 `<书库>/.novel-writer/cache.sqlite`（`lib/db.js`）持久化可重算派生缓存与向量 BLOB（`chapter_metrics` / `analysis_cache` / 128 维 `embedding_*` / 512 维 `audit_vectors` LRU），正文、设定与创作文件仍保持纯文本并支持损坏自愈、只读不建库、`/api/dsh-novel-writer/metric-caliber` 与只含元数据的 `sqliteCache` 诊断；`withFileTx`（`lib/core/state.js`）叠加 `<file>.lock` 跨进程原子锁（30s 陈旧回收 / 5s 抖动等待）；按书 `creationProfile` 统一存入 `<书库>/.novel-writer/settings/<book>.json` 并透明兼容/清理旧版 `state.json`；同步去除 Web UI 文案字面 `**` 星号并修正首页英文单复数（`1 book · 1 chapter`） |
 | 7.8.0 | 2026-11-20 | 完成 Web UI 前端单文件模块化重构：将原 8,000+ 行单文件 [lib/client.js](lib/client.js) 拆分为 `tools/client-src/` 下 7 个职责目录（`core/` / `styles/` / `i18n/` / `controller/` / `components/` / `views/` / `host/`，保留既有 `V6-*` 源不变），由升级后的零依赖构建脚本 [tools/build-client.mjs](tools/build-client.mjs)（新增单模块语法、孤立文件、CSS 禁区、`zh/en` 键对称与整包不变量七重构建前检查）确定性装配为单一运行时产物 [lib/client.js](lib/client.js)；界面视觉、工具契约（22 工具 / 13 路由）与运行行为零变化，新增第 44 套回归测试 [test/client-build-test.mjs](test/client-build-test.mjs) |
 | 7.7.0 | 2026-11-20 | 上线「题材规则包工作室」：支持在 Web UI 可视化新建、从内置包派生微调（`extends`）与编辑/删除自定义规则包；新增人类可读的 `[DSH-PACK v1]` 剪贴板分享信封与 `.json` 文件一键导出，以及「粘贴分享文本或选择 `.json` 文件 → 只读安全体检预览（披露进提示词字段 / ReDoS 剔除报告 / 重名与内置 ID 冲突处理）→ 确认落盘」安全导入闭环；后端扩展 `lib/packs.js`（`toSerializablePack` / `formatPackEnvelope` / `parsePackInput` / `saveCustomPack` / `deleteCustomPack` / `getRawPack` / `invalidatePackCache`）并复用 `/api/dsh-novel-writer/packs`（保持 13 条路由与 22 工具不变），新增第 43 套回归测试 [test/packs-studio-test.mjs](test/packs-studio-test.mjs) |
@@ -88,6 +89,64 @@
 | 0.2.0 | 2026-08-16 | 章节库管理：列出作品、查看章节、按章阅读，全程在对话里完成 |
 
 ---
+
+## [8.2.0] - 2026-11-21（含 8.1.0 累计变更）
+
+**工程整备与全仓深度加固双版本发布**：`8.1.0` 完成仓库架构地图、前端源路径与模块边界整理（`domain.js` 无环 DAG 六模块拆分，导出面零变化），`8.2.0` 随即完成围绕安全边界、存储并发一致性、本地分析引擎与 React 18 兼容性的系统性加固。两次升级合计保持全部 22 个 MCP/DSH 工具、13 条 HTTP 路由、12 个 React Hook、UI 视觉表现、纯文本书库格式与 Node `>=22.13.0` 运行环境要求**零兼容破坏**；测试套件由 46 套增至 **48 套**（新增 `architecture-guard-test` 与 8.2.0 加固回归）。
+
+### 版本演进总览
+
+| 版本 | 日期 | 核心定位 | 主要变化 |
+| --- | --- | --- | --- |
+| **v8.1.0** | 2026-11-21 | 工程结构可读性与模块边界 | 新增 `ARCHITECTURE.md` 架构地图；前端源提升至顶层 `client/` 并清除 11 个 `V6-` 历史前缀；`lib/core/domain.js` 拆为无环 DAG 六模块（barrel 透传 72/72 零变化）；`lib/client.js` 加防误改警示头；新增第 47 套 `architecture-guard-test` |
+| **v8.2.0** | 2026-11-21 | 全仓深度审计与系统性加固 | Host 校验/Userinfo-Path 绕过与 LAN 写接口暴露收紧；`writeSentenceState` 跨进程锁与回收站同秒并发碰撞修复；ONNX 单线程 WASM 串行推理队列；`validatePattern` 可空分组重复检测 + 线性分支去误杀；`PrimitiveBoundary` 无 Hook 官方原语隔离等 30+ 项修复 |
+
+### v8.1.0 - 2026-11-21
+
+**工程结构可读性与模块边界升级**：补齐仓库架构地图、清理前端源码路径与历史命名前缀、拆分 `lib/core/domain.js` 为 6 个无环子模块，并新增架构守卫回归测试；全部 22 个 MCP/DSH 工具、13 条 HTTP 路由、12 个 React Hook、UI 视觉表现与 Node `>=22.13.0` 运行环境要求保持**零兼容破坏**。
+
+#### 其他变更
+
+- **新增仓库架构地图 [`ARCHITECTURE.md`](ARCHITECTURE.md)**：一次理清产品代码 / 前端源 / 构建产物 / 安装器 / 开发测试脚手架边界、`lib/` 全部 27 个顶层文件 + `lib/core/` 子域职责与 `diagnose.js` / `chapter-diagnose.js` 辨析，以及跨层数据流；同步在 [README.md](README.md) 与 [README.en.md](README.en.md) 顶部补充 [`ARCHITECTURE.md`](ARCHITECTURE.md) 入口与 `client/` 构建说明。
+- **构建产物防误改警示头**：为构建产物 `lib/client.js` 第 1 行添加醒目 `/* AUTO-GENERATED FILE — DO NOT EDIT DIRECTLY! ... */` 警示头，防止直接手改生成产物。
+- **前端源目录提升至顶层 `client/`**：将前端源目录 `tools/client-src/` 提升至顶层 `client/`（清理 `tools/` 混合边界），移除 11 个 `V6-` 历史前缀及 2 个零代码退役占位文件（图标迁至 `client/icons/*.js`、UIKit 迁至 `client/uikit/*.js`、组件样式迁至 `client/styles/components.css`，构建块标记统一改为 `client:icons` / `client:uikit` / `client:css`，共 `39` JS + `3` CSS，同步更新 `tools/build-client.mjs` 与 `tools/install-desktop.mjs`）。
+- **`lib/core/domain.js` 无环 DAG 六模块拆分**：将 2,763 行次级巨石 `lib/core/domain.js` 按严密无环 DAG 拆分为 6 个语义子模块（Layer 3A：`stores.js` / `lexicon.js` / `rules.js` / `baseline.js`；Layer 3B：`analysis-cache.js` / `creation.js`，每个 `< 620` 行），`lib/core/domain.js` 收敛为 18 行纯兼容透传桶，保证 `domain.js`（72/72）与 `lib/core.js`（180/180）导出零变化。
+- **新增第 47 套自动化回归测试 `test/architecture-guard-test.mjs`**：自动守卫架构地图完整性、`lib/client.js` 生成头、零 `V6-` 残留与 6 模块行数/无环边界。
+- **零兼容破坏**：全部 22 个 MCP/DSH 工具、13 条 HTTP 路由、12 个 React Hook、UI 视觉表现与 Node `>=22.13.0` 运行环境要求保持完全不变。
+
+### v8.2.0 - 2026-11-21
+
+**全仓深度审计与系统性加固**：围绕安全边界、存储并发一致性、本地分析引擎与写作闭环精度、以及 Web UI 前端 React 18 兼容性完成全面整修；全部 22 个 MCP/DSH 工具、13 条 HTTP 路由、12 个 React Hook、UI 视觉风格与纯文本书库格式保持**零兼容破坏**。
+
+#### 核心安全与宿主/Sidecar 稳定性
+
+- **Antigravity Sidecar 与独立 Web UI 修复**：修复 Antigravity Sidecar 拦截 `global.fetch` 时的重入递归栈溢出；修复 Sidecar 与独立 Web UI 默认将 `cwd` 硬钉为 `config.root` 导致忽略 `lastRoot` 且禁用面板修改书库根的问题。
+- **局域网访问与 `Host` 校验加固**：修复 `allowLanState: true` 场景下 `/reveal` 与写接口意外向局域网暴露，以及 `Host` 请求头携带 userinfo/path 绕过校验的安全隐患。
+- **MCP 书库路径沙箱与请求健壮性**：对齐 `sanitizeSegment` 命名边界，结合 `lstatSync`/`readlinkSync` 阻断悬空符号链接逃逸，相对 `src`/`root` 路径统一按书库根解析；拒绝嵌套批量 JSON-RPC 请求并补齐顶层异常 TDZ 防护。
+- **题材规则包路径与 ReDoS 安全**：修复规则包加载依赖 `existsSync` 导致的悬空符号链接绕过，补齐大小写无关的内置包 ID 保护与 Windows 保留文件名拦截；加固 `validatePattern` 对可空分组重复、前导字面与标点采样的 ReDoS 检测，同时消除对线性分支正则（如 `上\d+柱香|点\d+根蜡烛`、`\d+年\d+月`）的误杀。
+
+#### 存储并发与数据安全
+
+- **跨进程写锁与事务队列**：`writeSentenceState` 接入跨进程文件锁 `withFileTx`，并加固锁文件唯一 nonce 校验、非忙等退避重试与进程内队列归一化。
+- **按书删除与回收站原子一致性**：修复 `applyBookDelete` 在 `manifest.json` 写入失败后仍误删 `state.json` 设定条目的顺序缺陷，补齐 `safeBook` 创作资料目录清理与删后复核 `rawBook` 追踪；修复回收站秒级并发碰撞（`createUniqueTrashDir`）、`manifest.json` 载荷冲突与 `purgeTrash` 统计口径。
+- **配置损坏容错防护**：修复 `readPlots` 遇到损坏文件时静默回滚读取旧版文件的问题；修复 `POST /packs` 绑定操作在设定文件损坏时误清空全书设定的隐患。
+- **SQLite 缓存与日志可靠性**：修复 `lib/db.js` 损坏自愈时遗漏 `-journal` 伴生文件、只读连接 `busy_timeout` 及 `readAuditVectors` 脏缓存残留；修复 `POST /baseline` 事务锁保护，以及事件日志按 UTF-8 字节边界安全截断与无效时间戳过滤。
+
+#### 引擎精度与写作闭环一致性
+
+- **本地 ONNX 推理稳定性**：修复单线程 WASM ONNX 并发推理触发 Emscripten 栈破坏崩溃的问题（引入推理串行队列并使 `embedMany` 严格顺序执行）。
+- **句式、引号与情绪计量精度**：修复 `AMBIGUOUS_CARRIERS["奔跑"]` 触发词自命中、嵌套中文引号状态机、ASCII 直引号切句与隐式情绪比例上限出现 `1.01` 的计算误差。
+- **规则、词表与文化基准判定**：修复 `checkOutlineFulfillment` 字面扫描未剥离 Markdown 标题导致绕过审计、`resolveAmbiguousCarriers` 歧义权重减半、`hintCulture` 否定语境反转与现代都市分支识别、内联规则包 `id` 展开顺序、`parseLexiconLine` TSV 空列折叠及 `mergeLexiconEntries` 字段无法复位/清空的问题。
+- **开写包、改稿台与自检闭环对齐**：修复 `brief.js` 接入场景分带 `selectSceneBaseline`、设定损坏时不静默注入默认禁词表及草稿路径对齐；修复 `fixplan.js` 衔接/伏笔/大纲子句跳过状态误核销，改稿台与自检统一接入按书 `readBookCreationProfile`，且只读复测严格不写 `cache.sqlite`。
+- **诊断、连贯性与工具层细节整修**：修复 `chapter-diagnose.js` 末段行号与感官/元指令判定、`obligations.js` 连词切分、`audit.js` 题材包与 `slopMuteCategories` 同步、`graph.js` 占位章号隔离、`rawguard.js` 取消信号与空重试流、`vibe.js`/`vector-audit.js` 跨模型缓存隔离、`explicit.js` 长篇舍入精度、`prompts.js` 缺省精简档、`update-check.js` 预发布/数字前缀解析、`diagnose.js` 不可读目录与大包判定、`continuity.js` OOC `n=5` 样本与复合中文/小数数字口径，以及 `novel_diagnose` 禁用守卫、`novel_settings`/`summary`/`plot` 只读查询免写锁等工具层修复。
+
+#### 前端界面与 React 18 兼容性
+
+- **官方原语无 Hook 隔离**：将 `NW_UI` 官方原语适配层重构为无 Hook 的 `PrimitiveBoundary` 渲染隔离，彻底消除 React Rules of Hooks 违规风险。
+- **状态显示与删除交互修复**：修复 `chatWriting` 前端默认开关状态反转（首页功能计数正确显示 `6/7`）；修复回收站彻底删除确认弹窗双 `{target}` 占位符与空目录可删判定，以及选择性清理后的残留误报。
+- **题材包导入与导出竞态加固**：为题材包导入预检引入独立 `packsImportReqId` 与已体检文本一致性校验，预检期间保留页面全局告警，导出动作不再误读已放弃的草稿内容。
+- **面板生命周期与宿主席位同步**：修复 `load()`/`flushSave()` `rev` 竞态、`waitObserver` 泄漏、官方席位接管误杀 `langObserver`/定时器及 `openPanel` 官方席位切换逻辑。
+- **样式、受控输入与发布门禁同步**：修复 CSS 层叠覆盖、受控输入框 `onChange` 绑定、中英文容差/草稿段头文案，以及安装与发布门禁脚本同步（将 `antigravity/plugin.json` 正式纳入 `bump-version` 与 `check-release` 校验）。
 
 ## [8.0.0] - 2026-11-20（含 7.6.0 / 7.7.0 / 7.8.0 累计变更）
 

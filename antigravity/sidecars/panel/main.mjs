@@ -55,11 +55,9 @@ const pluginDir = resolve(
   || (typeof panelConfig.pluginDir === "string" && panelConfig.pluginDir.trim() !== "" ? panelConfig.pluginDir.trim() : "")
   || resolve(HERE, "../../..")
 );
-const root = resolve(
-  process.env.DSH_NOVEL_WRITER_ROOT?.trim()
-  || (typeof panelConfig.root === "string" && panelConfig.root.trim() !== "" ? panelConfig.root.trim() : "")
-  || process.cwd()
-);
+const rawRoot = process.env.DSH_NOVEL_WRITER_ROOT?.trim()
+  || (typeof panelConfig.root === "string" && panelConfig.root.trim() !== "" ? panelConfig.root.trim() : "");
+const root = rawRoot !== "" ? resolve(rawRoot) : "";
 
 const { createWebUiRequestHandler, invokeRouteInMemory, startWebUiServer } = await import(
   pathToFileURL(join(pluginDir, "lib", "web-ui.js")).href
@@ -73,11 +71,24 @@ if (process.env.ANTIGRAVITY_SIDECAR_WEB_PORT) {
   const handler = createWebUiRequestHandler({ root });
   const routes = buildUiRoutes({ root });
 
-  const toSidecarResponse = (result) => new Response(result.body, {
-    status: result.status,
-    contentType: result.headers?.["content-type"] || "application/octet-stream",
-    headers: result.headers
-  });
+  const toSidecarResponse = (result) => {
+    let contentType = "application/octet-stream";
+    const headers = {};
+    if (result.headers && typeof result.headers === "object") {
+      for (const [k, v] of Object.entries(result.headers)) {
+        if (String(k).toLowerCase() === "content-type") {
+          if (typeof v === "string" && v !== "") contentType = v;
+          continue;
+        }
+        if (v !== undefined) headers[k] = v;
+      }
+    }
+    return new Response(result.body, {
+      status: result.status,
+      contentType,
+      headers
+    });
+  };
 
   const app = new SidecarApp();
 

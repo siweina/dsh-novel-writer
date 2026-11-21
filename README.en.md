@@ -14,7 +14,9 @@ English | [中文](./README.md)
 Ships with a bundled 24 MB Chinese semantic model (`bge-small-zh-v1.5`, local WASM inference) — **zero API cost, manuscripts never leave the machine, measures & guides without ghostwriting**.
 Built for **DeepSeek Harness (DSH)** (with a unified 4-tab sidebar & main-column UI); the engine also runs as a built-in **stdio MCP server** for Claude Desktop / Cursor, or launches the **standalone Web UI (`--ui`) / Antigravity Sidecar Aux Pane plugin** outside DSH.
 
-[Website](https://siweina.github.io/dsh-novel-writer/) · [Technical docs (22 tools)](https://siweina.github.io/dsh-novel-writer/tools/) · [Core capabilities](#core-capabilities) · [Install & quick start](#install--quick-start) · [22 tools](#provided-tools-22) · [MCP server](#mcp-server-outside-dsh) · [Config & security bounds](#configuration-data-layout--security-bounds) · [Changelog](./CHANGELOG.md)
+[Website](https://siweina.github.io/dsh-novel-writer/) · [Technical docs (22 tools)](https://siweina.github.io/dsh-novel-writer/tools/) · [Core capabilities](#core-capabilities) · [Install & quick start](#install--quick-start) · [22 tools](#provided-tools-22) · [MCP server](#mcp-server-outside-dsh) · [Config & security bounds](#configuration-data-layout--security-bounds) · [Architecture](ARCHITECTURE.md) · [Changelog](./CHANGELOG.md)
+
+> **Module map & build boundaries**: see [`ARCHITECTURE.md`](ARCHITECTURE.md) for directory boundaries, module roles, and data flow; `lib/client.js` is built from `client/` (`npm run build`).
 
 ---
 

@@ -1588,7 +1588,7 @@ console.log("v7-A：工具默认值/三组全开全关混合态/单工具 patch/
 {
   const { readFileSync } = await import("node:fs");
   const cssOf = readFileSync(new URL("../lib/client.js", import.meta.url), "utf8");
-  const v6Of = readFileSync(new URL("../tools/client-src/V6-components.css", import.meta.url), "utf8");
+  const v6Of = readFileSync(new URL("../client/styles/components.css", import.meta.url), "utf8");
   const rulesIn = (text, name) => new RegExp("\\." + name + "\\s*[{,]").test(text);
   for (const dead of ["nwHeroDesc", "nwDiagIssues", "nwDiagIssueList", "nwDiagIssue", "nwNoteDanger"]) {
     if (rulesIn(cssOf, dead) || rulesIn(v6Of, dead)) fail("#23 零引用的死类 ." + dead + " 仍留在 CSS 里（源码与测试均零引用）");
@@ -1596,11 +1596,11 @@ console.log("v7-A：工具默认值/三组全开全关混合态/单工具 patch/
   for (const alive of ["nwPlotErr", "nwDiagAttentionList", "nwDiagAttentionItem", "nwNoteWarn", "nwNote"]) {
     if (!rulesIn(cssOf, alive)) fail("#23 清理死类时误删了在用的 ." + alive + "（双向验证：只删死类）");
   }
-  // .nwNoteDanger 原本与在用的 .nwPlotErr 共用一条规则块（V6 源）：删前者时绝不能连带删掉后者
-  if (!rulesIn(v6Of, "nwPlotErr")) fail("#23 V6 源里的 .nwPlotErr 被连带删掉了（它与 .nwNoteDanger 共用规则块）");
+  // .nwNoteDanger 原本与在用的 .nwPlotErr 共用一条规则块（components.css）：删前者时绝不能连带删掉后者
+  if (!rulesIn(v6Of, "nwPlotErr")) fail("#23 components.css 里的 .nwPlotErr 被连带删掉了（它与 .nwNoteDanger 共用规则块）");
   // 两处删除位置各留一行溯源说明（本仓库的改稿纪律：能查到为什么删）
   if (!cssOf.includes("v7.3.3 修（#23）")) fail("#23 手写 CSS 段的删除处缺少 v7.3.3 修（#23）溯源说明");
-  if (!v6Of.includes("v7.3.3 修（#23）")) fail("#23 V6-components.css 的删除处缺少 v7.3.3 修（#23）溯源说明");
+  if (!v6Of.includes("v7.3.3 修（#23）")) fail("#23 client/styles/components.css 的删除处缺少 v7.3.3 修（#23）溯源说明");
   console.log("v7.3.3 #23：5 个死类已从 CSS 清除（含 V6 源）| .nwPlotErr / nwDiagAttention* / nwNote* 仍在 ✓");
 }
 

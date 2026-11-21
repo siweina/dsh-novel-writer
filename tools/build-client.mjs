@@ -2,7 +2,7 @@
 /**
  * tools/build-client.mjs — 零依赖客户端模块化构建器
  *
- * 职责：从 tools/client-src/ 读取全部模块化源码（V6 区块 + core/styles/i18n/controller/components/views/host），
+ * 职责：从 client/ 读取全部模块化源码（core/icons/uikit/styles/i18n/controller/components/views/host），
  * 跑完构建前全量校验与产物不变量断言后，确定性地装配输出 lib/client.js；
  * 任一校验或断言失败 → 报错退出（exit 1），绝不写盘。
  *
@@ -12,7 +12,7 @@
  *
  * 设计铁律：
  *  1. 零第三方依赖，仅使用 Node 内置模块（node:fs / node:path / node:crypto / node:url / node:vm）。
- *  2. 显式模块清单 + 递归孤儿文件检测：tools/client-src/ 下所有 .js 与 .css 文件都必须进入构建清单。
+ *  2. 显式模块清单 + 递归孤儿文件检测：client/ 下所有 .js 与 .css 文件都必须进入构建清单。
  *  3. 单模块 vm.Script 独立语法校验 + i18n zh/en 键全对称校验 + 完整产物 vm.Script 校验。
  *  4. 全文件不变量：Hook 调用点恒为 12（代码态与原文均校验）、零服务等待注入、零直接调用适配组件、
  *     CSS 模板括号配平且零颜色字面量/反引号/插值。
@@ -24,24 +24,23 @@ import { join, relative } from "node:path";
 import vm from "node:vm";
 
 const REPO = fileURLToPath(new URL("../", import.meta.url));
-const SRC = join(REPO, "tools", "client-src");
+const SRC = join(REPO, "client");
 const CLIENT = join(REPO, "lib", "client.js");
 const CHECK_ONLY = process.argv.includes("--check");
 
-/** V6 标记区块表（保留标记名与合并胶水） */
-const V6_BLOCKS = {
-  icons: ["V6-icons-a.js", "V6-icons-b1a.js", "V6-icons-b1b.js", "V6-icons-b2.js", "V6-icons-c.js", "V6-icons-d.js"],
-  uikit: ["V6-uikit-rows.js", "V6-uikit-wrappers.js"],
-  slider: ["V6-slider.js"],
+/** 客户端图标与 UIKit 标记区块表（保留标记名与合并胶水） */
+const CLIENT_BLOCKS = {
+  icons: ["icons/a.js", "icons/b1a.js", "icons/b1b.js", "icons/b2.js", "icons/c.js", "icons/d.js"],
+  uikit: ["uikit/rows.js", "uikit/wrappers.js"],
 };
 
-/** V6 之前模块（运行时基础与官方原语适配层） */
-const PRE_V6_MODULES = [
+/** 前置模块（运行时基础与官方原语适配层） */
+const PRE_UI_MODULES = [
   "core/runtime.js",
   "core/primitives-adapter.js",
 ];
 
-/** V6 图标表之后、样式模板之前的图标挂载胶水 */
+/** 图标表之后、样式模板之前的图标挂载胶水 */
 const ICON_GLUE_MODULES = [
   "core/icons-glue.js",
 ];
@@ -49,8 +48,7 @@ const ICON_GLUE_MODULES = [
 /** CSS 模板片段清单（按注入顺序） */
 const CSS_MANIFEST = {
   base: "styles/base.css",
-  v6Components: "V6-components.css",
-  v6Slider: "V6-slider-css.txt",
+  components: "styles/components.css",
   overrides: "styles/overrides.css",
 };
 
@@ -87,24 +85,23 @@ const POST_CSS_MODULES = [
 ];
 
 const JS_MANIFEST = [
-  ...PRE_V6_MODULES,
-  ...V6_BLOCKS.icons,
-  ...V6_BLOCKS.uikit,
-  ...V6_BLOCKS.slider,
+  ...PRE_UI_MODULES,
+  ...CLIENT_BLOCKS.icons,
+  ...CLIENT_BLOCKS.uikit,
   ...ICON_GLUE_MODULES,
   ...POST_CSS_MODULES,
 ];
 
 const CSS_FILES = [
   CSS_MANIFEST.base,
-  CSS_MANIFEST.v6Components,
-  CSS_MANIFEST.v6Slider,
+  CSS_MANIFEST.components,
   CSS_MANIFEST.overrides,
 ];
 
 const MANIFEST_SET = new Set([...JS_MANIFEST, ...CSS_FILES]);
 
-const FILE_HEADER = `/**
+const FILE_HEADER = `/* AUTO-GENERATED FILE — DO NOT EDIT DIRECTLY! Built from client/ via node tools/build-client.mjs (npm run build / npm run build:check) */
+/**
  * dsh-novel-writer — 浏览器端（client half, v4.0.0）
  *
  * 在 Web GUI 侧边栏挂载「句式分析」入口，点击后在会话区打开开关面板：
@@ -116,7 +113,7 @@ const FILE_HEADER = `/**
  * 本文件遵循 DSH client 插件格式：window.__ModuleLoader__.load({ id, factory })，
  * factory 返回 { apply, inject }。仅依赖 react / react-dom（Web GUI 内置）。
  *
- * Built by tools/build-client.mjs from tools/client-src/
+ * Built by tools/build-client.mjs from client/
  */`;
 
 const NW_ICONS_MERGER = `/* --- 构建链注入：图标表合并 --- */
@@ -231,33 +228,31 @@ function validateI18nParity(zhCode, enCode) {
   if (missingInZh.length) problems.push(`i18n/zh.js 缺失键（${missingInZh.length}）：${missingInZh.slice(0, 10).join(", ")}`);
 }
 
-function formatV6Block(name, files, sources) {
+function formatClientBlock(name, files, sources) {
   const chunks = files.map((f) => `/* --- ${f} --- */\n${sources.get(f)}`);
   let body = chunks.join("\n\n");
   if (name === "icons") body += `\n\n${NW_ICONS_MERGER}`;
-  return `    /* ===== V6:${name} ===== */\n${body}\n/* ===== /V6:${name} ===== */`;
+  return `    /* ===== client:${name} ===== */\n${body}\n/* ===== /client:${name} ===== */`;
 }
 
 function formatCssBlock(sources) {
   const baseCss = sources.get(CSS_MANIFEST.base);
-  const v6CompCss = sources.get(CSS_MANIFEST.v6Components);
-  const v6SliderCss = sources.get(CSS_MANIFEST.v6Slider);
+  const componentsCss = sources.get(CSS_MANIFEST.components);
   const overridesCss = sources.get(CSS_MANIFEST.overrides);
-  const v6CssSection = [
-    "  /* ===== V6:css ===== */",
-    `/* --- ${CSS_MANIFEST.v6Components} --- */\n${v6CompCss}`,
-    `/* --- ${CSS_MANIFEST.v6Slider} --- */\n${v6SliderCss}`,
-  ].join("\n\n") + "\n/* ===== /V6:css ===== */";
-  return `    // ---- 样式 ----\nvar css = \`\n${baseCss}\n${v6CssSection}\n${overridesCss}\n\`;`;
+  const componentsSection = [
+    "  /* ===== client:css ===== */",
+    `/* --- ${CSS_MANIFEST.components} --- */\n${componentsCss}`,
+  ].join("\n\n") + "\n/* ===== /client:css ===== */";
+  return `    // ---- 样式 ----\nvar css = \`\n${baseCss}\n${componentsSection}\n${overridesCss}\n\`;`;
 }
 
 function assembleClient(sources) {
   const sections = [];
-  for (const rel of PRE_V6_MODULES) {
+  for (const rel of PRE_UI_MODULES) {
     sections.push(`    /* === module: ${rel} === */\n${sources.get(rel)}`);
   }
-  for (const [name, files] of Object.entries(V6_BLOCKS)) {
-    sections.push(formatV6Block(name, files, sources));
+  for (const [name, files] of Object.entries(CLIENT_BLOCKS)) {
+    sections.push(formatClientBlock(name, files, sources));
   }
   for (const rel of ICON_GLUE_MODULES) {
     sections.push(`    /* === module: ${rel} === */\n${sources.get(rel)}`);
@@ -397,14 +392,14 @@ function assertInvariants(text) {
     return;
   }
 
-  for (const name of ["icons", "uikit", "slider", "css"]) {
-    const begin = `/* ===== V6:${name} ===== */`;
-    const end = `/* ===== /V6:${name} ===== */`;
+  for (const name of ["icons", "uikit", "css"]) {
+    const begin = `/* ===== client:${name} ===== */`;
+    const end = `/* ===== /client:${name} ===== */`;
     const i1 = text.indexOf(begin);
     const i2 = text.indexOf(end);
-    if (i1 < 0 || i2 < 0) problems.push(`标记缺失：V6:${name}`);
-    else if (text.indexOf(begin, i1 + 1) >= 0 || text.indexOf(end, i2 + 1) >= 0) problems.push(`标记重复：V6:${name}`);
-    else if (i2 < i1) problems.push(`标记逆序：V6:${name}`);
+    if (i1 < 0 || i2 < 0) problems.push(`标记缺失：client:${name}`);
+    else if (text.indexOf(begin, i1 + 1) >= 0 || text.indexOf(end, i2 + 1) >= 0) problems.push(`标记重复：client:${name}`);
+    else if (i2 < i1) problems.push(`标记逆序：client:${name}`);
   }
 
   const codeOnly = stripCommentsAndStrings(text);

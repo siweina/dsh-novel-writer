@@ -12,7 +12,7 @@
  */
 
 import { existsSync } from "node:fs";
-import { copyFile, mkdir, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -81,6 +81,17 @@ function printHelp() {
   ].join("\n"));
 }
 
+async function readExistingPanelConfig(configPath) {
+  if (!existsSync(configPath)) return {};
+  try {
+    const raw = (await readFile(configPath, "utf8")).replace(/^\uFEFF/, "");
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 async function main() {
   const { apply, help, root } = parseArgs(process.argv.slice(2));
   if (help) {
@@ -97,7 +108,9 @@ async function main() {
 
   const destDir = resolvePluginDestDir();
   const panelConfigPath = join(destDir, "sidecars", "panel", "config.json");
+  const existingConfig = await readExistingPanelConfig(panelConfigPath);
   const panelConfig = {
+    ...existingConfig,
     pluginDir: REPO,
     ...(root ? { root } : {})
   };
@@ -126,8 +139,9 @@ async function main() {
   await mkdir(dirname(panelConfigPath), { recursive: true });
   await writeFile(panelConfigPath, JSON.stringify(panelConfig, null, 2) + "\n", "utf8");
 
+  const effectiveRoot = typeof panelConfig.root === "string" && panelConfig.root.trim() !== "" ? panelConfig.root.trim() : "";
   console.log(`Installed Antigravity Sidecar UI bundle to: ${destDir}`);
-  console.log(`Recorded pluginDir=${REPO}${root ? `, root=${root}` : " (runtime root via DSH_NOVEL_WRITER_ROOT or cwd)"}`);
+  console.log(`Recorded pluginDir=${REPO}${effectiveRoot ? `, root=${effectiveRoot}` : " (runtime root via DSH_NOVEL_WRITER_ROOT or state.lastRoot)"}`);
   console.log("");
   console.log("Next steps:");
   console.log("  1. Open Antigravity Customizations and enable [Novel Writer Studio](customization://dsh-novel-writer-ui).");

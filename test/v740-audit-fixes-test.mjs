@@ -1274,8 +1274,8 @@ test("D3 (#60, #76, #77, #78): client.js 词典英中键全对称、9 组死键�
   }
 
   // #77 NW_ICONS / NW_ICONS_C 不含死图标
-  const iconsStart = clientSrc.indexOf("/* ===== V6:icons ===== */");
-  const iconsEnd = clientSrc.indexOf("/* ===== /V6:icons ===== */");
+  const iconsStart = clientSrc.indexOf("/* ===== client:icons ===== */");
+  const iconsEnd = clientSrc.indexOf("/* ===== /client:icons ===== */");
   assert.ok(iconsStart > 0 && iconsEnd > iconsStart);
   const iconSandbox = {};
   vm.runInNewContext(clientSrc.slice(iconsStart, iconsEnd), iconSandbox);
@@ -1284,8 +1284,8 @@ test("D3 (#60, #76, #77, #78): client.js 词典英中键全对称、9 组死键�
     assert.equal(Object.hasOwn(iconSandbox.NW_ICONS_C, deadIcon), false, "NW_ICONS_C 不得含死图标：" + deadIcon);
   }
 
-  // #78 V6-components.css 已清理同权自覆盖死声明，注释口径一致
-  const v6Css = readFileSync(join(REPO_ROOT, "tools", "client-src", "V6-components.css"), "utf8");
+  // #78 client/styles/components.css 已清理同权自覆盖死声明，注释口径一致
+  const v6Css = readFileSync(join(REPO_ROOT, "client", "styles", "components.css"), "utf8");
   assert.equal(/\.nwPrefGlyph\{[^}]*color:var\(--dsw-alias-state-business-primary\)/.test(v6Css), false, "应移除被同权覆盖的 .nwPrefGlyph color 声明");
   assert.equal(/\.nwPref\.nwPrefDanger\{[^}]*background:color-mix/.test(v6Css), false, "应移除被同权覆盖的 .nwPref.nwPrefDanger background 声明");
   assert.ok(v6Css.includes(".nwPrefGlyph{color:inherit}"));

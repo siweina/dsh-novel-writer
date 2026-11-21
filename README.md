@@ -14,7 +14,9 @@
 随包附带 24 MB 中文语义模型（`bge-small-zh-v1.5`，WASM 本地推理）——**零 API 费用、正文不出本机、只测算与引导而不代写**。
 为 **DeepSeek Harness（DSH）** 打造（四标签侧栏与主栏统一 UI）；亦支持通过内置 **stdio MCP 服务器**接入 Claude Desktop / Cursor，或通过 **`--ui` 独立 Web UI / Antigravity 侧边辅栏插件**脱离 DSH 使用完整工作台。
 
-[官网](https://siweina.github.io/dsh-novel-writer/) · [技术文档（22 个工具）](https://siweina.github.io/dsh-novel-writer/tools/) · [核心能力](#核心能力) · [安装与快速上手](#安装与快速上手) · [22 个工具](#提供的工具22-个) · [MCP 服务器](#mcp-服务器非-dsh-用户) · [配置与安全边界](#配置数据目录与安全边界) · [更新日志](./CHANGELOG.md)
+[官网](https://siweina.github.io/dsh-novel-writer/) · [技术文档（22 个工具）](https://siweina.github.io/dsh-novel-writer/tools/) · [核心能力](#核心能力) · [安装与快速上手](#安装与快速上手) · [22 个工具](#提供的工具22-个) · [MCP 服务器](#mcp-服务器非-dsh-用户) · [配置与安全边界](#配置数据目录与安全边界) · [架构地图](ARCHITECTURE.md) · [更新日志](./CHANGELOG.md)
+
+> **模块地图与构建边界**：仓库模块划分与构建边界见 [`ARCHITECTURE.md`](ARCHITECTURE.md)；前端产物 `lib/client.js` 由 `client/` 源码构建生成（`npm run build`）。
 
 ---
 

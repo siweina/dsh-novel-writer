@@ -1,4 +1,0 @@
-/* V6-slider-css.txt (M5) — 已退役（v7.3.1 修（#75））。
-   TolRangeRow 与 .nwRange / .nwRangeVal 均为死代码，已一并删除；本文件保留为占位，
-   构建链 BLOCKS 表仍要求它存在，内容为零规则注释（注意：本文件内联在 CSS 模板里，
-   注释中不得出现反引号与花括号）。 */
