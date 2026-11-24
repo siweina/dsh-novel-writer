@@ -42,7 +42,7 @@ const hitsOf = (result, category) => result.hits.filter((h) => h.category === ca
 // ① 正则安全
 // ---------------------------------------------------------------------------
 
-test("① 正则安全：73 条 pattern 全部通过 validatePattern，且规模/hint/形状合规", () => {
+test(`① 正则安全：${SLOP_RULES.length} 条 pattern 全部通过 validatePattern，且规模/hint/形状合规`, () => {
   // 先证明校验器**不是摆设**：它必须能拒掉本仓库实测过的危险形态，否则下面"全部通过"毫无意义
   assert.equal(validatePattern("(上*)*香").level, "reject", "validatePattern 漏放嵌套量词——本测试的绿是假绿");
   assert.equal(validatePattern("上.*香").level, "reject", "validatePattern 漏放无界通配——本测试的绿是假绿");
@@ -94,7 +94,24 @@ const POSITIVE = {
   filler_transition: ["就在此时，门开了。", "与此同时，远处的钟声响了。", "不知为何，他停下了脚步。"],
   abstract_tell: ["他心中一沉。", "他感到一阵疲惫。", "一种说不出的滋味涌上来。", "他脸上露出不易察觉的失望。"],
   ending_preach: ["但他不知道，这一夜之后一切都变了。", "命运的齿轮开始转动。", "而这一切，才刚刚开始。"],
-  ai_ese: ["毫无疑问，这是他最坏的打算。", "对于他而言，这不过是一场交易。", "事实上，他早就知道了。"],
+  ai_ese: [
+    "毫无疑问，这是他最坏的打算。",
+    "对于他而言，这不过是一场交易。",
+    "事实上，他早就知道了。",
+    "对于这座孤城来说，冬天的雪来得太早了。",
+    "就眼下的局势而言，退一步反倒更稳妥。",
+    "他追的不是真相，而是当年欠下的旧账。",
+    "这并非一时冲动，而是蓄谋已久的试探。",
+    "问题不在于力气大小，而在于出刀的时机。",
+    "与其说他在等消息，不如说他在等一个借口。",
+    "茶楼里看似平静，实则处处藏着耳目。",
+    "表面上答应得爽快，实际上早留了后手。",
+    "当他推开那扇木门时，屋里只剩一盏残灯。",
+    "当暮色彻底沉下来的时候，巷口响起了梆子声。",
+    "当钟声第三次敲响之时，城门缓缓合拢。",
+    "一个满身泥泞的疲惫的旅人推开了客栈门。",
+    "那座被风雨剥蚀的孤零零的石桥横在雾里。"
+  ],
   stat_numeric: ["力量提升了三成，他终于推开了那扇门。", "他的战斗力达到了三千点。", "速度暴涨了整整三倍。"]
 };
 
@@ -164,7 +181,21 @@ test("③ 负样本：正常描写必须 0 命中（宁可漏报，不许误杀�
     "他不知为何物，只当是块石头。",        // 缺逗号 → 不是灌水的"不知为何，"
     "这瓶酒有五十三度。",                  // 只有数字、没有倍/% → 不是数值播报
     "他使了个眼色，示意众人退下。",        // "使" 不是 "使得"
-    "他知道，这话说出去就收不回来了。"      // "知道" 不是 "不知道"（预告句）
+    "他知道，这话说出去就收不回来了。",      // "知道" 不是 "不知道"（预告句）
+    // v8.3.0 ai_ese 新增/放宽规则的近失手负样本：
+    "这不是他的刀。",                        // 否定句无「而是/而在于」对举
+    "他不是不愿去，只是天太晚了。",            // 「不是…只是」正常转折，非翻案腔
+    "对他来说，这把旧刀够用了。",              // 「对他来说」口语表达，非「对于…来说」话题壳
+    "这把刀看似沉重，握在手里倒挺趁手。",       // 只有「看似」没有「实则/实际上」
+    "当时，檐下的灯笼已经灭了。",              // 零间距「当时，」非「当…时，」翻译腔
+    "当天夜里下雨时，院门还没闩上。",          // 词化「当天」须被前瞻豁免
+    "他当夜赶到渡口时，船已经开了。",          // 词化「当夜」须被前瞻豁免
+    "他应当在午时，先去渡口候着。",            // 词化「应当」须被后瞻豁免
+    "他理所当然，按时交了差。",                // 词化「当然」+ 跨逗号不误杀
+    "门外站着一个穿灰布衫的老人。",            // 单层「的」定语正常描写
+    "那是一个晴朗的、没有风的早晨。",          // 顿号并列定语不误杀
+    "桌上摆着西域的酒、江南的茶、北地的干粮。", // 顿号并列多项「的」不误杀
+    "他看着水面，什么也没说。"                 // 正常短句叙事
   ];
   for (const sentence of CLEAN) {
     const result = scanSlop(sentence);
@@ -189,6 +220,23 @@ test("③-b 引号内台词：只静音 ai_ese / abstract_tell，其余类别照
     1,
     "skipQuoted:false 时台词内的 ai_ese 仍未命中"
   );
+
+  // v8.3.0 新增 ai_ese 模式在台词内同样默认静音，关掉 skipQuoted 后可检出
+  for (const newQuoted of [
+    "「这不是你的错，而是他的算计。」他低声道。",
+    "「当他推开门时，屋里早已没人了。」她说。"
+  ]) {
+    assert.equal(
+      hitsOf(scanSlop(newQuoted), "ai_ese").length,
+      0,
+      "引号内新增 ai_ese 台词被误杀：" + newQuoted + " → " + JSON.stringify(scanSlop(newQuoted).hits)
+    );
+    assert.equal(
+      hitsOf(scanSlop(newQuoted, { skipQuoted: false }), "ai_ese").length,
+      1,
+      "skipQuoted:false 时引号内新增 ai_ese 未检出：" + newQuoted
+    );
+  }
 
   // abstract_tell 同样被静音（第二类）
   const innerThought = '"他心中一沉。"他低声说。';
@@ -337,6 +385,9 @@ test("⑧ 题材豁免（系统流静音 stat_numeric）+ 参照集高频习惯�
   // 3) 动态套话处方：按命中类别返回对应模式描述，且不含具体套话原文
   const fillerPrescription = describeSlopPrescription(["filler_transition", "shock_crowd"]);
   assert.ok(fillerPrescription.includes("时间副词") && fillerPrescription.includes("群体烘托"));
+  const aiPrescription = describeSlopPrescription(["ai_ese"]);
+  assert.ok(aiPrescription.includes("先否后立对举") && aiPrescription.includes("翻译腔长定语"));
+  assert.equal(scanSlop(aiPrescription).total, 0, "ai_ese 处方文案不得包含具体套话词面");
   assert.equal(Object.keys(SLOP_CATEGORY_PRESCRIPTIONS).length, CATEGORY_KEYS.length);
 
   // 4) 单换行整章（>4 行内容且带 # 标题 + 空行）：第 1 行内容里的「但他不知道」不得被判成章末升华

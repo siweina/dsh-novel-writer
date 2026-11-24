@@ -11,7 +11,7 @@
 | 构建产物 | `lib/client.js` | **自动构建产物，严禁直接手改**；由 `node tools/build-client.mjs` 从 `client/` 确定性装配 |
 | 终端安装器 | `tools/install-desktop.mjs`、`tools/install-antigravity-ui.mjs` | 本地安装脚本（DSH Desktop profile / Antigravity Sidecar UI，默认 dry-run） |
 | 开发与发布脚本 | `tools/build-client.mjs`、`tools/ui-audit.mjs`、`tools/check-release.mjs`、`tools/bump-version.mjs`、`tools/mutation-test.mjs`、`tools/package-release.mjs`、`tools/release-notes.mjs`、`tools/visual/` | 客户端构建与一致性检查、UI 规则审计、发布门禁、版本同步、变异测试、发布打包、Release 摘要、视觉回归 |
-| 文档与测试 | `docs/`、`test/`（47 套测试） | `docs/` 为 GitHub Pages 文档站（不随插件打包）；`test/` 为 `node:test` 全量回归与架构守护测试 |
+| 文档与测试 | `docs/`、`test/`（49 套测试） | `docs/` 为 GitHub Pages 文档站（不随插件打包）；`test/` 为 `node:test` 全量回归与架构守护测试 |
 
 ## ② 跨层主干数据流
 
@@ -62,8 +62,8 @@ lib/index.js（22 工具注册 + 审计 + { when } 可见性 + 流兜底）
 | `lib/vector-audit.js` | 本地 512 维向量审计（原地打转与大纲漏写，仅在 `novel_fix_plan` 触发） |
 | `lib/brief.js` | 开写包引擎（单次聚合上章/大纲/人物/伏笔/规范/基线，纯本地可降级） |
 | `lib/obligations.js` | 大纲子句义务切分（子句切分、动词元类别判定与填空格式约束） |
-| `lib/chapter-diagnose.js` | 单章文风症状诊断与大纲履行检查单一裁决点（无参照分位只报结构症状） |
-| `lib/fixplan.js` | 改稿台：把诊断数据转为优先级待办清单、定位排序与复测核销 |
+| `lib/chapter-diagnose.js` | 单章文风症状诊断、句式单调与密集并列扫描及大纲履行检查单一裁决点（无参照分位只报结构症状） |
+| `lib/fixplan.js` | 改稿台：把诊断与节奏检查转为优先级待办清单、定位排序、基线豁免与复测核销 |
 | `lib/audit.js` | 对抗性审计：可机器判定契约检查、独立 AI 任务书与证据链复核 |
 | `lib/graph.js` | 跨章只读结构视图（伏笔周期、人物出场矩阵、剧情线空档、时间线与大纲对照） |
 | `lib/diagnose.js` | 系统健康体检与 `novel_diagnose` 报告聚合（汇总脱敏事件日志与环境状态） |
@@ -99,4 +99,4 @@ lib/index.js（22 工具注册 + 审计 + { when } 可见性 + 流兜底）
   - `npm run build:check` — 校验 `lib/client.js` 与 `client/` 源码构建一致性（不写盘）
   - `node tools/ui-audit.mjs lib/client.js` — 前端产物 11 条 UI 规则审计
   - `node tools/check-release.mjs` — 校验版本号一致与发布边界约束
-  - `npm test` / `npm run check` — 运行全部 47 套测试，或串联执行 `build:check && check-release && test`
+  - `npm test` / `npm run check` — 运行全部 49 套测试，或串联执行 `build:check && check-release && test`

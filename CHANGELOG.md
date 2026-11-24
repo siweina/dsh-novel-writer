@@ -14,6 +14,7 @@
 
 | 版本 | 日期 | 摘要 |
 | --- | --- | --- |
+| 8.3.0 | 2026-11-24 | 去 AI 味高价值能力融入既有诊断与改稿链路（0 新增工具，保持 22 工具与 13 路由不变）：套话词表 `ai_ese` 补强（10→14 条，总计 73→77 条，新增翻案腔否定对举、评述对举、欧化前置时间从句、欧化多层「的」嵌套长前置定语并温和扩展前置话题壳，天然享受引号静音、原著高频词自豁免与 `validatePattern` 正则门禁，四链路自动同步生效）；新增纯规则零依赖 `scanCadenceMonotony(text)` 识别连续三句高度同构与单分句顿号密集并列，以保守优先级接入 `novel_fix_plan` `cadence` 检查域并支持稳定 `issueIdentity` 复测核销与按书基线自豁免（不破 `diagnoseChapterSymptoms` 既有 7 键契约）；在 `lib/prompts.js`、`skills/novel-writing/SKILL.md`、`lib/tools/style.js` 补齐「最小改动 + 信息守恒」改稿护栏；扩充 `test/slop-regex-safety-test.mjs` 并新增第 49 套回归测试 `test/v830-anti-ai-tone-test.mjs` |
 | 8.2.0（含 8.1.0） | 2026-11-21 |工程整备 + 深度加固：8.1.0 架构地图 / `client/` 目录整理 / `domain.js` 六模块拆分（72/72 导出零变化）；8.2.0 覆盖宿主/Sidecar 安全与稳定性（Antigravity `global.fetch` 重入栈溢出、`cwd` 钉死覆盖 `lastRoot`、`allowLanState` 与 `Host` 头绕过、MCP 沙箱/悬空链接/嵌套批量、规则包悬空链接与 ReDoS 漏检/误杀）、存储并发与数据安全（`writeSentenceState` 跨进程锁、删书 `manifest.json` 原子顺序与回收站并发防碰撞、`readPlots`/设定损坏防回滚与 `cache.sqlite` 坏库清理）、引擎精度与写作闭环（单线程 WASM ONNX 推理串行队列、引号/情绪/大纲/文化基准/词表/开写包/改稿台/诊断与工具层精度对齐）、前端界面与 React 18 兼容性（无 Hook `PrimitiveBoundary` 原语隔离、`chatWriting` 开关反转、回收站弹窗、题材包导入竞态、`load()`/`flushSave()` `rev` 竞态与发布门禁同步 `antigravity/plugin.json`）；全部 22 工具、13 条 HTTP 路由、12 个 React Hook 与纯文本书库格式零兼容破坏 |
 | 8.0.0 | 2026-11-20 | 升级运行环境要求与书库存储底座：外部 MCP / 独立 CLI 最低要求 Node.js `>=22.13.0`（启用内置 `node:sqlite`，`mcp/server.mjs` 启动前校验并仅写 `stderr` 退出；DSH 桌面端内置 Node 24 不受影响）；新增 WAL 模式 `<书库>/.novel-writer/cache.sqlite`（`lib/db.js`）持久化可重算派生缓存与向量 BLOB（`chapter_metrics` / `analysis_cache` / 128 维 `embedding_*` / 512 维 `audit_vectors` LRU），正文、设定与创作文件仍保持纯文本并支持损坏自愈、只读不建库、`/api/dsh-novel-writer/metric-caliber` 与只含元数据的 `sqliteCache` 诊断；`withFileTx`（`lib/core/state.js`）叠加 `<file>.lock` 跨进程原子锁（30s 陈旧回收 / 5s 抖动等待）；按书 `creationProfile` 统一存入 `<书库>/.novel-writer/settings/<book>.json` 并透明兼容/清理旧版 `state.json`；同步去除 Web UI 文案字面 `**` 星号并修正首页英文单复数（`1 book · 1 chapter`） |
 | 7.8.0 | 2026-11-20 | 完成 Web UI 前端单文件模块化重构：将原 8,000+ 行单文件 [lib/client.js](lib/client.js) 拆分为 `tools/client-src/` 下 7 个职责目录（`core/` / `styles/` / `i18n/` / `controller/` / `components/` / `views/` / `host/`，保留既有 `V6-*` 源不变），由升级后的零依赖构建脚本 [tools/build-client.mjs](tools/build-client.mjs)（新增单模块语法、孤立文件、CSS 禁区、`zh/en` 键对称与整包不变量七重构建前检查）确定性装配为单一运行时产物 [lib/client.js](lib/client.js)；界面视觉、工具契约（22 工具 / 13 路由）与运行行为零变化，新增第 44 套回归测试 [test/client-build-test.mjs](test/client-build-test.mjs) |
@@ -89,6 +90,23 @@
 | 0.2.0 | 2026-08-16 | 章节库管理：列出作品、查看章节、按章阅读，全程在对话里完成 |
 
 ---
+
+## [8.3.0] - 2026-11-24
+
+**0 新增工具（保持 22 工具与 13 路由不变）**，将去 AI 味高价值能力直接融入既有诊断与改稿链路：同步增强中文翻译腔/套话词表覆盖、补齐轻量句式单调与顿号密集并列识别，并在改稿链路明确「最小改动 + 信息守恒」护栏；全部 22 个 MCP/DSH 工具、13 条 HTTP 路由、12 个 React Hook、`diagnoseChapterSymptoms` 7 键契约与纯文本书库格式保持**零兼容破坏**。
+
+### 新增功能
+
+- **套话词表 `ai_ese` 补强（`lib/lexicons/slop.js`，10→14 条，总计 73→77 条）**：新增翻案腔否定对举（`不是/并非/不在于…而是/而在于`）、评述对举（`与其说…不如说` / `看似/表面上…实则/实际上`）、欧化前置时间从句（`当…时，`，带「当然/当天/应当」等构词守卫）、欧化多层「的」嵌套长前置定语（排除 `、` 并列防误杀），并温和扩展前置话题壳（`对于…而言/来说`、`就…而言`，保持「对他来说」0 误杀）；全部归入 `ai_ese`，天然享受引号内台词静音、原著高频词自豁免与 `validatePattern` 正则安全门禁，写盘体检、开写防污染处方、改稿台与对抗审计四条链路自动同步生效。
+- **轻量句式单调与密集并列检测（`lib/chapter-diagnose.js` + `lib/fixplan.js`）**：新增纯规则零依赖 `scanCadenceMonotony(text)`，识别连续三句高度同构（同主语 / 三连问句 / 多分句等长骨架，跳过短白描与引号内台词）与单分句顿号密集并列（≥4 项且整章 ≥2 处才提示，避免误伤单次正常列举）；以保守优先级（`severity 2–3`、`effort 2`）接入 `novel_fix_plan` 的 `cadence` 检查域，支持稳定 `issueIdentity` 复测核销与按书基线自动豁免（原作者自身高频使用不误报），不破坏 `diagnoseChapterSymptoms` 既有 7 键契约。
+
+### 体验优化
+
+- **「最小改动 + 信息守恒」改稿护栏（`lib/prompts.js`、`skills/novel-writing/SKILL.md`、`lib/tools/style.js`）**：明确改稿只动命中处、不顺手润色相邻句、保留原文事实/设定/人物动作与限定词（不篡改判断强度）、不为造参差硬拆顺畅句子，全量维持既有提示词与 `SKILL.md` 体积上限。
+
+### 技术与测试
+
+- **测试与发布门禁**：扩充 `test/slop-regex-safety-test.mjs` 正负样本与引号静音用例，新增第 49 套测试 `test/v830-anti-ai-tone-test.mjs`（含真实 `~/.dsh` 与 `~/.gemini` SHA-256 隔离守卫）；同步更新 `ARCHITECTURE.md` 架构地图测试套件计数与模块职责说明。
 
 ## [8.2.0] - 2026-11-21（含 8.1.0 累计变更）
 
